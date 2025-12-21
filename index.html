@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Fitness Tracker</title>
+    <style>
+        body { font-family: Arial; max-width: 600px; margin: 50px auto; padding: 20px; }
+        .form-group { margin: 10px 0; }
+        input, button { padding: 8px; margin: 5px; }
+        .workout-item { background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>💪 Fitness Tracker</h1>
+    
+    <div id="app">
+        <h2>Log Workout</h2>
+        <form id="workoutForm">
+            <div class="form-group">
+                <input type="text" id="exercise" placeholder="Exercise name" required>
+            </div>
+            <div class="form-group">
+                <input type="number" id="sets" placeholder="Sets" required>
+                <input type="number" id="reps" placeholder="Reps" required>
+                <input type="number" id="weight" placeholder="Weight (kg)" required>
+            </div>
+            <button type="submit">Save Workout</button>
+        </form>
+
+        <h2>Workout History</h2>
+        <div id="history"></div>
+    </div>
+
+    <script>
+        // Simple API calls
+        const API_BASE = '/api';
+        const userEmail = 'user@example.com'; // Mock user
+
+        // Load history on page load
+        async function loadHistory() {
+            const response = await fetch(`${API_BASE}/workouts?user=${userEmail}`);
+            const data = await response.json();
+            
+            const historyDiv = document.getElementById('history');
+            historyDiv.innerHTML = data.map(workout => `
+                <div class="workout-item">
+                    <strong>${workout.exercise}</strong><br>
+                    ${workout.sets} sets × ${workout.reps} reps<br>
+                    ${workout.weight} kg
+                </div>
+            `).join('');
+        }
+
+        // Handle form submission
+        document.getElementById('workoutForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const workout = {
+                user_email: userEmail,
+                exercise: document.getElementById('exercise').value,
+                sets: parseInt(document.getElementById('sets').value),
+                reps: parseInt(document.getElementById('reps').value),
+                weight: parseInt(document.getElementById('weight').value)
+            };
+
+            const response = await fetch(`${API_BASE}/workouts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(workout)
+            });
+
+            if (response.ok) {
+                alert('Workout saved!');
+                e.target.reset();
+                loadHistory(); // Refresh the list
+            } else {
+                alert('Error saving workout');
+            }
+        });
+
+        // Load history when page loads
+        loadHistory();
+    </script>
+</body>
+</html>
