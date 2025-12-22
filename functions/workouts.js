@@ -8,7 +8,7 @@ exports.handler = async (event) => {
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE'
+        'Access-Control-Allow-Methods': 'GET, POST, DELETE'
       },
       body: ''
     };
@@ -22,7 +22,7 @@ exports.handler = async (event) => {
   };
 
   try {
-    // GET - Fetch workouts for a user
+    // GET - Fetch workouts
     if (event.httpMethod === 'GET') {
       const { user } = event.queryStringParameters || {};
       
@@ -47,7 +47,7 @@ exports.handler = async (event) => {
       };
     }
 
-    // POST - Create a new workout
+    // POST - Create workout
     if (event.httpMethod === 'POST') {
       const { userEmail, exercise, sets, reps, weight } = JSON.parse(event.body);
 
@@ -55,7 +55,7 @@ exports.handler = async (event) => {
         return {
           statusCode: 400,
           headers,
-          body: JSON.stringify({ error: 'userEmail and exercise are required' })
+          body: JSON.stringify({ error: 'userEmail and exercise required' })
         };
       }
 
@@ -79,7 +79,7 @@ exports.handler = async (event) => {
     };
 
   } catch (error) {
-    console.error('Workouts function error:', error);
+    console.error('Workouts error:', error);
     return {
       statusCode: 500,
       headers,
