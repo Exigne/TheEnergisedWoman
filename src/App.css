@@ -1,57 +1,259 @@
-/* Previous styles plus these additions */
+/* Previous auth styles remain the same */
 
-.auth-container {
+/* Dashboard Layout */
+.dashboard-container {
   min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: #f7fafc;
+}
+
+.dashboard-header {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
-.auth-card {
+.dashboard-nav {
   background: white;
-  padding: 3rem;
-  border-radius: 20px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  padding: 1rem 2rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  display: flex;
+  gap: 1rem;
+}
+
+.dashboard-nav button {
+  background: none;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.dashboard-nav button.active {
+  background: #667eea;
+  color: white;
+}
+
+.dashboard-content {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* PR Alert */
+.pr-alert {
+  background: linear-gradient(135deg, #f6e05e 0%, #f6ad55 100%);
+  color: #744210;
+  padding: 1rem;
+  border-radius: 12px;
+  margin-bottom: 2rem;
   text-align: center;
-  max-width: 400px;
-  width: 100%;
+  font-weight: 600;
+  animation: slideIn 0.5s ease;
 }
 
-.auth-card h2 {
-  color: #4a5568;
-  margin-bottom: 0.5rem;
+@keyframes slideIn {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
-.auth-card p {
-  color: #718096;
+/* Rest Timer */
+.rest-timer-section {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.timer-display {
+  font-size: 3rem;
+  font-weight: 800;
+  color: #667eea;
+  margin: 1rem 0;
+}
+
+.timer-controls {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.timer-controls button {
+  background: #667eea;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* Stats Cards */
+.quick-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
   margin-bottom: 2rem;
 }
 
-.auth-card form {
+.stat-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.stat-card h3 {
+  color: #4a5568;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.stat-card p {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #667eea;
+  margin: 0;
+}
+
+/* Muscle Group Breakdown */
+.muscle-breakdown {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+}
+
+.breakdown-chart {
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
-.auth-card input {
+.breakdown-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.group-name {
+  min-width: 100px;
+  font-weight: 600;
+  color: #4a5568;
+}
+
+.breakdown-bar {
+  flex: 1;
+  height: 20px;
+  background: #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.breakdown-fill {
+  height: 100%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  transition: width 0.3s ease;
+}
+
+.group-count {
+  min-width: 30px;
+  text-align: right;
+  font-weight: 600;
+  color: #667eea;
+}
+
+/* Consistency Heatmap */
+.consistency-heatmap {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+}
+
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  max-width: 300px;
+  margin: 0 auto;
+}
+
+.heatmap-cell {
+  width: 15px;
+  height: 15px;
+  border-radius: 2px;
+  background: #ebedf0;
+}
+
+.heatmap-cell.intensity-1 { background: #c6e48b; }
+.heatmap-cell.intensity-2 { background: #7bc96f; }
+.heatmap-cell.intensity-3 { background: #239a3b; }
+.heatmap-cell.intensity-4 { background: #196127; }
+
+/* Log Workout Section */
+.log-workout-section {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.workout-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.workout-form select {
   padding: 1rem;
   border: 2px solid #e2e8f0;
   border-radius: 12px;
   font-size: 1rem;
-  transition: border-color 0.3s ease;
 }
 
-.auth-card input:focus {
-  outline: none;
-  border-color: #667eea;
+.stats-inputs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
 }
 
-.auth-card button {
+.stat-input {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-input label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #718096;
+  margin-bottom: 0.5rem;
+}
+
+.stat-input input {
+  padding: 0.8rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 1rem;
+  text-align: center;
+}
+
+.save-button {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
-  padding: 1rem;
+  padding: 1rem 2rem;
   border-radius: 12px;
   font-size: 1.1rem;
   font-weight: 600;
@@ -59,53 +261,180 @@
   transition: transform 0.2s ease;
 }
 
-.auth-card button:hover {
+.save-button:hover {
   transform: translateY(-2px);
 }
 
-.error-message {
-  background: #fed7d7;
-  color: #c53030;
-  padding: 0.75rem;
-  border-radius: 8px;
-  margin-bottom: 1rem;
-}
-
-.auth-switch {
-  margin-top: 1.5rem;
-  color: #718096;
-}
-
-.auth-switch button {
-  background: none;
-  border: none;
-  color: #667eea;
-  cursor: pointer;
-  font-weight: 600;
-  padding: 0;
-}
-
+/* Workout List */
 .recent-workouts {
-  margin-top: 2rem;
+  margin-top: 3rem;
 }
 
 .recent-workouts h3 {
   color: #4a5568;
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
 }
 
 .workout-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 1rem;
 }
 
-.workout-item {
-  background: white;
-  padding: 1rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+.workout-card {
+  background: #f7fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.5rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.workout-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+.workout-info h4 {
+  color: #2d3748;
+  margin-bottom: 0.5rem;
+}
+
+.workout-info p {
+  color: #718096;
+  margin: 0.25rem 0;
+}
+
+.workout-weight {
+  text-align: right;
+}
+
+.weight-number {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #667eea;
+}
+
+.weight-unit {
+  font-size: 1rem;
+  color: #a0aec0;
+  margin-left: 0.25rem;
+}
+
+/* Progress Charts */
+.progress-section {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.chart-container {
+  margin-bottom: 3rem;
+}
+
+.chart-container h4 {
+  color: #4a5568;
+  margin-bottom: 1.5rem;
+}
+
+.volume-chart {
+  display: flex;
+  align-items: end;
+  gap: 1rem;
+  height: 200px;
+  padding: 1rem;
+  background: #f7fafc;
+  border-radius: 8px;
+}
+
+.chart-bar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bar-fill {
+  width: 100%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 4px 4px 0 0;
+  transition: height 0.3s ease;
+}
+
+.bar-label {
+  font-size: 0.8rem;
+  color: #718096;
+}
+
+.bar-value {
+  font-size: 0.7rem;
+  color: #a0aec0;
+}
+
+/* PR Records */
+.pr-section {
+  margin-top: 3rem;
+}
+
+.pr-section h4 {
+  color: #4a5568;
+  margin-bottom: 1.5rem;
+}
+
+.pr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.pr-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: #f7fafc;
+  border-radius: 8px;
+}
+
+.exercise-name {
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.pr-weight {
+  font-weight: 800;
+  color: #667eea;
+}
+
+.pr-date {
+  font-size: 0.9rem;
+  color: #a0aec0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .dashboard-nav {
+    flex-wrap: wrap;
+  }
+  
+  .quick-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .stats-inputs {
+    grid-template-columns: 1fr;
+  }
+  
+  .workout-card {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .workout-weight {
+    margin-top: 1rem;
+  }
 }
