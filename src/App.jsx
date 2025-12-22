@@ -6,6 +6,22 @@ const AuthForm = ({ isLogin, onSuccess, onSwitch }) => {
   const [formData, setFormData] = useState({ email: '', password: '', confirmPassword: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('checking');
+
+  // Test database connection on mount
+  useEffect(() => {
+    testConnection();
+  }, []);
+
+  const testConnection = async () => {
+    try {
+      const result = await databaseAPI.getUser('test@test.com', 'test123');
+      setConnectionStatus(result ? 'connected' : 'connected');
+    } catch (error) {
+      console.log('Database connection test failed, using fallback');
+      setConnectionStatus('fallback');
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -19,21 +35,34 @@ const AuthForm = ({ isLogin, onSuccess, onSwitch }) => {
     }
 
     try {
+      console.log('Attempting authentication...');
+      let user;
+      
       if (isLogin) {
-        // LOGIN - check database
-        const user = await databaseAPI.getUser(formData.email, formData.password);
-        if (user) {
-          onSuccess(user);
-        } else {
+        user = await databaseAPI.getUser(formData.email, formData.password);
+        if (!user) {
           setError('Invalid credentials');
+          setLoading(false);
+          return;
         }
       } else {
-        // REGISTER - create in database
-        const newUser = await databaseAPI.createUser(formData.email, formData.password);
-        onSuccess(newUser);
+        // Check if user exists first
+        const existingUser = await databaseAPI.getUser(formData.email, formData.password);
+        if (existingUser) {
+          setError('Email already exists');
+          setLoading(false);
+          return;
+        }
+        
+        user = await databaseAPI.createUser(formData.email, formData.password);
       }
+      
+      console.log('Authentication successful:', user);
+      onSuccess(user);
+      
     } catch (err) {
-      setError(err.message || 'Authentication failed');
+      console.error('Authentication error:', err);
+      setError(err.message || 'Authentication failed - please try again');
     } finally {
       setLoading(false);
     }
@@ -46,6 +75,12 @@ const AuthForm = ({ isLogin, onSuccess, onSwitch }) => {
                    textAlign: 'center', maxWidth: '400px', width: '100%' }}>
         <h2 style={{ color: '#4a5568', marginBottom: '0.5rem' }}>{isLogin ? 'Login to FitFiddle' : 'Join FitFiddle'}</h2>
         <p style={{ color: '#718096', marginBottom: '2rem' }}>Musical Fitness App</p>
+        
+        {connectionStatus === 'fallback' && (
+          <div style={{ background: '#fff3cd', color: '#856404', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.9rem' }}>
+            ⚠️ Using offline mode - data works across devices but won't persist permanently
+          </div>
+        )}
         
         {error && <div style={{ background: '#fed7d7', color: '#c53030', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem' }}>{error}</div>}
         
@@ -118,6 +153,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
     try {
       setLoading(true);
       const userWorkouts = await databaseAPI.getWorkouts(currentUser.id);
+      console.log('Loaded workouts:', userWorkouts);
       setWorkouts(userWorkouts);
     } catch (error) {
       console.error('Failed to load workouts:', error);
@@ -134,6 +170,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
 
     try {
       const workout = await databaseAPI.addWorkout(currentUser.id, newWorkout);
+      console.log('Added workout:', workout);
       setWorkouts([workout, ...workouts]);
       
       // Reset form
@@ -142,11 +179,6 @@ const Dashboard = ({ currentUser, onLogout }) => {
       console.error('Failed to add workout:', error);
       alert('Failed to save workout');
     }
-  };
-
-  const handleLogout = () => {
-    // No localStorage cleanup needed - we're using database
-    onLogout();
   };
 
   const getWorkoutStats = () => {
@@ -169,7 +201,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
         <h1>FitFiddle Dashboard</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <span>Welcome, {currentUser?.email}</span>
-          <button onClick={handleLogout} style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer' }}>
+          <button onClick={onLogout} style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer' }}>
             Logout
           </button>
         </div>
@@ -285,11 +317,13 @@ function App() {
   }, []);
 
   const handleAuthSuccess = (user) => {
+    console.log('Auth successful:', user);
     setCurrentUser(user);
     setIsAuthenticated(true);
   };
 
   const handleLogout = () => {
+    console.log('Logging out...');
     setCurrentUser(null);
     setIsAuthenticated(false);
   };
