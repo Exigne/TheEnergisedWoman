@@ -46,43 +46,36 @@ const AuthForm = ({ isLogin, onSuccess, onSwitch }) => {
   const [formData, setFormData] = useState({ email: '', password: '', confirmPassword: '' });
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
+// In your AuthForm component, update handleSubmit:
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setError('');
 
-    if (!isLogin && formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
+  if (!isLogin && formData.password !== formData.confirmPassword) {
+    setError('Passwords do not match');
+    return;
+  }
 
-    try {
-      // For now, use localStorage (we'll add real database later)
-      const users = JSON.parse(localStorage.getItem('users') || '[]');
-      
-      if (isLogin) {
-        const user = users.find(u => u.email === formData.email && u.password === formData.password);
-        if (!user) throw new Error('Invalid credentials');
+  try {
+    if (isLogin) {
+      // LOGIN - check database
+      const user = await databaseAPI.getUser(formData.email, formData.password);
+      if (user) {
         localStorage.setItem('currentUser', JSON.stringify({ id: user.id, email: user.email }));
+        onSuccess();
       } else {
-        if (users.find(u => u.email === formData.email)) {
-          throw new Error('Email already exists');
-        }
-        const newUser = {
-          id: Date.now().toString(),
-          email: formData.email,
-          password: formData.password,
-          createdAt: new Date().toISOString()
-        };
-        users.push(newUser);
-        localStorage.setItem('users', JSON.stringify(users));
-        localStorage.setItem('currentUser', JSON.stringify({ id: newUser.id, email: newUser.email }));
+        setError('Invalid credentials');
       }
-      
+    } else {
+      // REGISTER - create in database
+      const newUser = await databaseAPI.createUser(formData.email, formData.password);
+      localStorage.setItem('currentUser', JSON.stringify({ id: newUser.id, email: newUser.email }));
       onSuccess();
-    } catch (err) {
-      setError(err.message);
     }
-  };
+  } catch (err) {
+    setError(err.message || 'Database connection failed');
+  }
+};
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', 
