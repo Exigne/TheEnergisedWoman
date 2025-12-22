@@ -17,8 +17,7 @@
     "chart.js": "^4.4.0",
     "react-chartjs-2": "^5.2.0",
     "date-fns": "^2.30.0",
-    "@netlify/functions": "^2.4.0",
-    "@netlify/neon": "^1.0.0"
+    "@netlify/functions": "^2.4.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.0",
