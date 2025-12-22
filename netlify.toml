@@ -5,10 +5,8 @@
 [build.environment]
   NODE_VERSION = "18"
 
-[[functions]]
-  directory = "netlify/functions"
-
 [functions]
+  directory = "netlify/functions"
   node_bundler = "esbuild"
 
 [[redirects]]
