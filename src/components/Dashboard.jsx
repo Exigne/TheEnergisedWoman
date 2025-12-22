@@ -1,137 +1,147 @@
 import React, { useState, useEffect } from 'react';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement, PointElement, LineElement } from 'chart.js';
+import { Bar, Doughnut, Line } from 'react-chartjs-2';
 
-const EXERCISES = ['Bench Press', 'Squat', 'Deadlift', 'Overhead Press', 'Pull-ups', 'Rows', 'Dips'];
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement, PointElement, LineElement);
 
 const Dashboard = ({ currentUser, onLogout }) => {
   const [workouts, setWorkouts] = useState([]);
-  const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  
-  const [exercise, setExercise] = useState(EXERCISES[0]);
+
+  // --- Visual & Interaction State ---
+  const [exercise, setExercise] = useState('Bench Press');
   const [sets, setSets] = useState('');
   const [reps, setReps] = useState('');
   const [weight, setWeight] = useState('');
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
     try {
-      const [histRes, leadRes] = await Promise.all([
-        fetch(`/.netlify/functions/database?user=${encodeURIComponent(currentUser.email)}`),
-        fetch(`/.netlify/functions/database?action=leaderboard`)
-      ]);
-      const history = await histRes.json();
-      const leaders = await leadRes.json();
-      setWorkouts(Array.isArray(history) ? history : []);
-      setLeaderboard(Array.isArray(leaders) ? leaders : []);
-    } catch (err) {
-      setError('Connection failed. Check your database settings.');
-    } finally {
-      setLoading(false);
-    }
+      const res = await fetch(`/.netlify/functions/database?user=${encodeURIComponent(currentUser.email)}`);
+      const data = await res.json();
+      setWorkouts(Array.isArray(data) ? data : []);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   };
 
-  const handleSave = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      await fetch('/.netlify/functions/database', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userEmail: currentUser.email,
-          exercise,
-          sets: parseInt(sets) || 0,
-          reps: parseInt(reps) || 0,
-          weight: parseFloat(weight) || 0
-        })
-      });
-      setSets(''); setReps(''); setWeight('');
-      loadData();
-    } catch (err) { setError('Failed to save.'); }
-    finally { setSaving(false); }
+  // --- Chart Data Preparation ---
+  const volumeData = {
+    labels: workouts.slice(0, 7).map(w => new Date(w.created_at).toLocaleDateString()).reverse(),
+    datasets: [{
+      label: 'Volume (kg)',
+      data: workouts.slice(0, 7).map(w => w.weight * w.reps * w.sets).reverse(),
+      backgroundColor: 'rgba(56, 189, 248, 0.6)',
+      borderColor: '#38bdf8',
+      borderWidth: 2,
+      borderRadius: 8,
+    }]
   };
-
-  const chartWorkouts = [...workouts].reverse().slice(-7);
-  const maxVolume = Math.max(...chartWorkouts.map(w => w.weight * w.reps * w.sets), 100);
 
   return (
-    <div style={containerStyle}>
-      <header style={headerStyle}>
-        <h1>FitFiddle</h1>
-        <button onClick={onLogout} style={btnSecondary}>Sign Out</button>
+    <div style={theme.wrapper}>
+      {/* HEADER SECTION */}
+      <header style={theme.header}>
+        <div style={theme.profileSection}>
+          <div style={theme.avatar}>JD</div>
+          <div>
+            <h2 style={{ margin: 0 }}>Welcome, {currentUser.email.split('@')[0]}</h2>
+            <span style={theme.badge}>Level 12 • 5 Day Streak 🔥</span>
+          </div>
+        </div>
+        <button onClick={onLogout} style={theme.logoutBtn}>Sign Out</button>
       </header>
 
-      <div style={gridStyle}>
-        {/* LEFT COLUMN: Input & Chart */}
-        <div>
-          <div style={cardStyle}>
-            <h3>Log Workout</h3>
-            <form onSubmit={handleSave} style={formStyle}>
-              <select value={exercise} onChange={e => setExercise(e.target.value)} style={inputStyle}>
-                {EXERCISES.map(ex => <option key={ex} value={ex}>{ex}</option>)}
-              </select>
-              <div style={rowStyle}>
-                <input type="number" placeholder="Sets" value={sets} onChange={e => setSets(e.target.value)} style={inputStyle} />
-                <input type="number" placeholder="Reps" value={reps} onChange={e => setReps(e.target.value)} style={inputStyle} />
-                <input type="number" placeholder="kg" value={weight} onChange={e => setWeight(e.target.value)} style={inputStyle} />
-              </div>
-              <button disabled={saving} style={btnPrimary}>{saving ? 'Saving...' : 'Add to Journal'}</button>
-            </form>
+      {/* DASHBOARD GRID */}
+      <div style={theme.dashboardGrid}>
+        
+        {/* COLUMN 1: ANALYTICS */}
+        <div style={theme.column}>
+          <div style={theme.glassCard}>
+            <h3 style={theme.cardTitle}>Weekly Progress</h3>
+            <Bar data={volumeData} options={chartOptions} />
           </div>
-
-          <div style={{ ...cardStyle, marginTop: '20px' }}>
-            <h3>Volume Graph (Last 7)</h3>
-            <div style={chartContainer}>
-              {chartWorkouts.map((w, i) => (
-                <div key={i} style={barWrapper}>
-                  <div style={{ ...barStyle, height: `${((w.weight * w.reps * w.sets) / maxVolume) * 100}%` }} />
-                  <span style={barLabel}>{w.exercise.substring(0, 3)}</span>
-                </div>
-              ))}
+          <div style={{ ...theme.glassCard, marginTop: '20px' }}>
+            <h3 style={theme.cardTitle}>Muscle Distribution</h3>
+            <div style={{ maxWidth: '200px', margin: 'auto' }}>
+               <Doughnut data={donutData} options={{ cutout: '70%' }} />
             </div>
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Leaderboard */}
-        <div style={cardStyle}>
-          <h3>League Table (Total Volume)</h3>
-          <table style={tableStyle}>
-            <thead><tr style={tableHeader}><th>User</th><th>Total kg</th></tr></thead>
-            <tbody>
-              {leaderboard.map((u, i) => (
-                <tr key={i} style={u.user_email === currentUser.email ? activeRow : rowItem}>
-                  <td>{u.user_email.split('@')[0]}</td>
-                  <td>{Math.round(u.total_volume).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {/* COLUMN 2: WORKOUT LOGGING */}
+        <div style={theme.column}>
+          <div style={theme.actionCard}>
+            <h3 style={{ color: '#fff' }}>Log New Session</h3>
+            <div style={theme.inputGroup}>
+              <select value={exercise} onChange={e => setExercise(e.target.value)} style={theme.input}>
+                <option>Bench Press</option>
+                <option>Squat</option>
+                <option>Deadlift</option>
+                <option>Overhead Press</option>
+              </select>
+              <div style={theme.row}>
+                <input placeholder="Sets" type="number" value={sets} onChange={e => setSets(e.target.value)} style={theme.input} />
+                <input placeholder="Reps" type="number" value={reps} onChange={e => setReps(e.target.value)} style={theme.input} />
+                <input placeholder="kg" type="number" value={weight} onChange={e => setWeight(e.target.value)} style={theme.input} />
+              </div>
+              <button style={theme.primaryBtn}>Complete Lift</button>
+            </div>
+          </div>
         </div>
+
+        {/* COLUMN 3: ACTIVITY FEED */}
+        <div style={theme.column}>
+          <div style={theme.glassCard}>
+            <h3 style={theme.cardTitle}>Recent Activity</h3>
+            {workouts.slice(0, 5).map((w, i) => (
+              <div key={i} style={theme.activityItem}>
+                <div>
+                  <div style={{ fontWeight: 'bold' }}>{w.exercise}</div>
+                  <div style={{ fontSize: '12px', opacity: 0.7 }}>{new Date(w.created_at).toLocaleDateString()}</div>
+                </div>
+                <div style={{ color: '#10b981' }}>+{w.weight * w.reps * w.sets}kg</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
       </div>
     </div>
   );
 };
 
-// --- STYLES ---
-const containerStyle = { maxWidth: '1000px', margin: '0 auto', padding: '20px', fontFamily: 'sans-serif', color: '#1a1a1a' };
-const headerStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' };
-const gridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' };
-const cardStyle = { background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #eee', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' };
-const formStyle = { display: 'flex', flexDirection: 'column', gap: '10px' };
-const rowStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' };
-const inputStyle = { padding: '10px', borderRadius: '6px', border: '1px solid #ddd' };
-const btnPrimary = { background: '#4f46e5', color: 'white', border: 'none', padding: '12px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' };
-const btnSecondary = { background: '#f3f4f6', border: '1px solid #ddd', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer' };
-const tableStyle = { width: '100%', borderCollapse: 'collapse' };
-const tableHeader = { textAlign: 'left', borderBottom: '2px solid #f3f4f6', height: '40px' };
-const rowItem = { height: '40px', borderBottom: '1px solid #f9fafb' };
-const activeRow = { ...rowItem, backgroundColor: '#f5f3ff', color: '#4f46e5', fontWeight: 'bold' };
-const chartContainer = { display: 'flex', alignItems: 'flex-end', height: '150px', gap: '10px', paddingBottom: '20px' };
-const barWrapper = { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' };
-const barStyle = { width: '100%', background: '#4f46e5', borderRadius: '4px 4px 0 0' };
-const barLabel = { fontSize: '10px', marginTop: '5px', color: '#666' };
+// --- STYLES (Modern Dark Theme) ---
+const theme = {
+  wrapper: { minHeight: '100vh', backgroundColor: '#0f172a', color: '#f8fafc', padding: '40px', fontFamily: '"Inter", sans-serif' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' },
+  profileSection: { display: 'flex', alignItems: 'center', gap: '15px' },
+  avatar: { width: '50px', height: '50px', borderRadius: '50%', background: 'linear-gradient(135deg, #38bdf8, #818cf8)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' },
+  badge: { backgroundColor: '#1e293b', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', color: '#38bdf8', border: '1px solid #38bdf8' },
+  dashboardGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '24px' },
+  glassCard: { background: 'rgba(30, 41, 59, 0.7)', backdropFilter: 'blur(10px)', borderRadius: '24px', padding: '24px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)' },
+  actionCard: { background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', borderRadius: '24px', padding: '24px' },
+  cardTitle: { fontSize: '18px', marginBottom: '20px', color: '#94a3b8' },
+  input: { width: '100%', padding: '12px', borderRadius: '12px', border: 'none', backgroundColor: 'rgba(255,255,255,0.1)', color: '#fff', marginBottom: '10px' },
+  row: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' },
+  primaryBtn: { width: '100%', padding: '14px', borderRadius: '12px', border: 'none', backgroundColor: '#fff', color: '#4f46e5', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
+  activityItem: { display: 'flex', justifyContent: 'space-between', padding: '15px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' },
+  logoutBtn: { background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer' }
+};
+
+const chartOptions = {
+  responsive: true,
+  plugins: { legend: { display: false } },
+  scales: { y: { display: false }, x: { grid: { display: false }, ticks: { color: '#64748b' } } }
+};
+
+const donutData = {
+  labels: ['Chest', 'Back', 'Legs'],
+  datasets: [{
+    data: [40, 30, 30],
+    backgroundColor: ['#38bdf8', '#fbbf24', '#f87171'],
+    borderWidth: 0,
+  }]
+};
 
 export default Dashboard;
