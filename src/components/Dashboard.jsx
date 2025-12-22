@@ -115,8 +115,18 @@ const Dashboard = ({ currentUser, onLogout }) => {
           <div style={theme.actionCard}>
             <h3 style={{ color: '#fff', marginTop: 0 }}>Log {currentConfig.group}</h3>
             <form onSubmit={handleSave} style={theme.inputGroup}>
-              <select value={exercise} onChange={e => setExercise(e.target.value)} style={theme.input}>
-                {Object.keys(ACTIVITY_CONFIG).map(name => <option key={name} value={name}>{name}</option>)}
+<select 
+  value={exercise} 
+  onChange={e => setExercise(e.target.value)} 
+  style={theme.input}
+>
+  {/* This line is what generates the list from your config */}
+  {Object.keys(ACTIVITY_CONFIG).map(name => (
+    <option key={name} value={name}>
+      {name}
+    </option>
+  ))}
+</select>
               </select>
               <div style={theme.row}>
                 <div><label style={theme.label}>{currentConfig.label1}</label>
