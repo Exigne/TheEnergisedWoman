@@ -1,76 +1,24 @@
-import { neon } from '@neondatabase/serverless';
+// Inside the POST handler
+if (event.httpMethod === 'POST') {
+  const { userEmail, workoutName, exercises } = body; // 'exercises' is now an array
 
-const sql = neon(process.env.DATABASE_URL);
+  // 1. Create the Workout Header
+  const workout = await sql`
+    INSERT INTO workouts (user_email, workout_name)
+    VALUES (${userEmail}, ${workoutName})
+    RETURNING id
+  `;
+  
+  const workoutId = workout[0].id;
 
-const MUSCLE_MAP = {
-  'Bench Press': 'Chest', 'Incline Press': 'Chest', 'Dips': 'Chest',
-  'Squat': 'Legs', 'Deadlift': 'Back', 'Leg Press': 'Legs',
-  'Pull-ups': 'Back', 'Rows': 'Back',
-  'Yoga (Vinyasa)': 'Flexibility', 'Yoga (Hatha)': 'Flexibility',
-  'Running (Distance)': 'Cardio', 'Sprinting': 'Cardio',
-  'Cycling': 'Cardio', 'Swimming': 'Full Body', 'Pilates': 'Core'
-};
-
-export const handler = async (event) => {
-  const headers = { 
-    'Access-Control-Allow-Origin': '*', 
-    'Content-Type': 'application/json' 
-  };
-
-  try {
-    const { user, action, id } = event.queryStringParameters || {};
-    const body = event.body ? JSON.parse(event.body) : {};
-
-    // --- AUTHENTICATION ---
-    if (event.httpMethod === 'POST' && body.action === 'auth') {
-      const { email, password, isRegistering } = body;
-      if (isRegistering) {
-        const newUser = await sql`
-          INSERT INTO users (email, password) VALUES (${email}, ${password}) 
-          ON CONFLICT (email) DO NOTHING RETURNING email
-        `;
-        if (newUser.length === 0) return { statusCode: 400, headers, body: JSON.stringify({ error: 'User exists' }) };
-        return { statusCode: 201, headers, body: JSON.stringify({ email: newUser[0].email }) };
-      } else {
-        const foundUser = await sql`SELECT email FROM users WHERE email = ${email} AND password = ${password}`;
-        if (foundUser.length === 0) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Invalid login' }) };
-        return { statusCode: 200, headers, body: JSON.stringify({ email: foundUser[0].email }) };
-      }
-    }
-
-    // --- WORKOUT LOGIC ---
-    if (event.httpMethod === 'GET') {
-      if (action === 'leaderboard') {
-        const leaders = await sql`
-          SELECT user_email, SUM(weight * reps * sets) as total_volume
-          FROM workouts GROUP BY user_email ORDER BY total_volume DESC LIMIT 5
-        `;
-        return { statusCode: 200, headers, body: JSON.stringify(leaders) };
-      }
-      
-      const history = await sql`SELECT * FROM workouts WHERE user_email = ${user} ORDER BY created_at DESC`;
-      return { statusCode: 200, headers, body: JSON.stringify(history) };
-    }
-
-    if (event.httpMethod === 'POST') {
-      const { userEmail, exercise, sets, reps, weight } = body;
-      const muscleGroup = MUSCLE_MAP[exercise] || 'Other';
-
-      const result = await sql`
-        INSERT INTO workouts (user_email, exercise, muscle_group, sets, reps, weight)
-        VALUES (${userEmail}, ${exercise}, ${muscleGroup}, ${sets}, ${reps}, ${weight}) 
-        RETURNING *
-      `;
-      return { statusCode: 201, headers, body: JSON.stringify(result[0]) };
-    }
-
-    // --- DELETE LOGIC ---
-    if (event.httpMethod === 'DELETE') {
-      await sql`DELETE FROM workouts WHERE id = ${id} AND user_email = ${user}`;
-      return { statusCode: 200, headers, body: JSON.stringify({ message: 'Deleted' }) };
-    }
-
-  } catch (e) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: e.message }) };
+  // 2. Insert all exercises for this workout in one go
+  for (const ex of exercises) {
+    const muscleGroup = MUSCLE_MAP[ex.name] || 'Other';
+    await sql`
+      INSERT INTO exercise_logs (workout_id, exercise_name, sets, reps, weight, muscle_group)
+      VALUES (${workoutId}, ${ex.name}, ${ex.sets}, ${ex.reps}, ${ex.weight}, ${muscleGroup})
+    `;
   }
-};
+
+  return { statusCode: 201, headers, body: JSON.stringify({ message: "Workout Saved" }) };
+}
