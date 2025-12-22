@@ -10,7 +10,7 @@ import {
   AddCircle, History, BarChart, MusicNote
 } from '@mui/icons-material';
 import { Line, Doughnut } from 'react-chartjs-2';
-import { format, subDays, startOfWeek, endOfWeek } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import './App.css';
 
 // Modern theme
@@ -18,7 +18,6 @@ const theme = createTheme({
   palette: {
     primary: {
       main: '#667eea',
-      gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     },
     secondary: {
       main: '#f50057',
@@ -42,28 +41,22 @@ const theme = createTheme({
   },
 });
 
-// --- MODERN AUTH COMPONENT ---
-const ModernAuthForm = ({ isLogin, onSuccess, onSwitch }) => {
+// Simple auth component
+const AuthForm = ({ isLogin, onSuccess, onSwitch }) => {
   const [formData, setFormData] = useState({ email: '', password: '', confirmPassword: '' });
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
 
     if (!isLogin && formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
-      setLoading(false);
       return;
     }
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // For now, use localStorage (we'll replace with real DB calls)
+      // For now, use localStorage (we'll add real database later)
       const users = JSON.parse(localStorage.getItem('users') || '[]');
       
       if (isLogin) {
@@ -77,11 +70,8 @@ const ModernAuthForm = ({ isLogin, onSuccess, onSwitch }) => {
         const newUser = {
           id: Date.now().toString(),
           email: formData.email,
-          password: formData.password, // In production, hash this!
-          createdAt: new Date().toISOString(),
-          level: 1,
-          experience: 0,
-          streak: 0
+          password: formData.password,
+          createdAt: new Date().toISOString()
         };
         users.push(newUser);
         localStorage.setItem('users', JSON.stringify(users));
@@ -91,99 +81,71 @@ const ModernAuthForm = ({ isLogin, onSuccess, onSwitch }) => {
       onSuccess();
     } catch (err) {
       setError(err.message);
-    } finally {
-      setLoading(false);
     }
   };
 
   return (
-    <Container maxWidth="sm" sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <Paper elevation={10} sx={{ p: 4, width: '100%', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-        <Box sx={{ textAlign: 'center', mb: 3 }}>
-          <FitnessCenter sx={{ fontSize: 60, color: 'white', mb: 2 }} />
-          <Typography variant="h4" sx={{ color: 'white', fontWeight: 700 }}>
-            {isLogin ? 'Welcome Back' : 'Join FitFiddle'}
-          </Typography>
-          <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.8)' }}>
-            Musical Fitness App
-          </Typography>
-        </Box>
-
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-        <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <TextField
-            fullWidth
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <div style={{ background: 'white', padding: '3rem', borderRadius: '20px', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', 
+                   textAlign: 'center', maxWidth: '400px', width: '100%' }}>
+        <h2 style={{ color: '#4a5568', marginBottom: '0.5rem' }}>{isLogin ? 'Login to FitFiddle' : 'Join FitFiddle'}</h2>
+        <p style={{ color: '#718096', marginBottom: '2rem' }}>Musical Fitness App</p>
+        
+        {error && <div style={{ background: '#fed7d7', color: '#c53030', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem' }}>{error}</div>}
+        
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <input
             type="email"
-            label="Email"
-            variant="filled"
+            placeholder="Email"
             value={formData.email}
             onChange={(e) => setFormData({...formData, email: e.target.value})}
             required
-            sx={{ backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 1 }}
+            style={{ padding: '1rem', border: '2px solid #e2e8f0', borderRadius: '12px', fontSize: '1rem' }}
           />
-          <TextField
-            fullWidth
+          <input
             type="password"
-            label="Password"
-            variant="filled"
+            placeholder="Password"
             value={formData.password}
             onChange={(e) => setFormData({...formData, password: e.target.value})}
             required
-            sx={{ backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 1 }}
+            style={{ padding: '1rem', border: '2px solid #e2e8f0', borderRadius: '12px', fontSize: '1rem' }}
           />
           {!isLogin && (
-            <TextField
-              fullWidth
+            <input
               type="password"
-              label="Confirm Password"
-              variant="filled"
+              placeholder="Confirm Password"
               value={formData.confirmPassword}
               onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
               required
-              sx={{ backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 1 }}
+              style={{ padding: '1rem', border: '2px solid #e2e8f0', borderRadius: '12px', fontSize: '1rem' }}
             />
           )}
-          
-          <Button
-            type="submit"
-            fullWidth
-            variant="contained"
-            size="large"
-            disabled={loading}
-            sx={{ 
-              mt: 2, 
-              py: 1.5, 
-              backgroundColor: 'white', 
-              color: '#667eea',
-              fontWeight: 600,
-              '&:hover': { backgroundColor: 'rgba(255,255,255,0.95)' }
-            }}
-          >
-            {loading ? <CircularProgress size={24} /> : (isLogin ? 'Login' : 'Register')}
-          </Button>
-        </Box>
-
-        <Box sx={{ textAlign: 'center', mt: 2 }}>
-          <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)' }}>
-            {isLogin ? "Don't have an account?" : "Already have an account?"}
-          </Typography>
-          <Button onClick={onSwitch} sx={{ color: 'white', fontWeight: 600 }}>
-            {isLogin ? 'Register' : 'Login'}
-          </Button>
-        </Box>
-      </Paper>
-    </Container>
+          <button type="submit" style={{ 
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            color: 'white', border: 'none', padding: '1rem', borderRadius: '12px',
+            fontSize: '1.1rem', fontWeight: '600', cursor: 'pointer'
+          }}>
+            {isLogin ? 'Login' : 'Register'}
+          </button>
+        </form>
+        
+        <div style={{ marginTop: '1.5rem', color: '#718096' }}>
+          {isLogin ? (
+            <p>Don't have an account? <button onClick={onSwitch} style={{ background: 'none', border: 'none', color: '#667eea', cursor: 'pointer', fontWeight: '600' }}>Register</button></p>
+          ) : (
+            <p>Already have an account? <button onClick={onSwitch} style={{ background: 'none', border: 'none', color: '#667eea', cursor: 'pointer', fontWeight: '600' }}>Login</button></p>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
 
-// --- MODERN DASHBOARD ---
-const ModernDashboard = () => {
+// Modern Dashboard
+const Dashboard = () => {
   const [user, setUser] = useState(null);
   const [workouts, setWorkouts] = useState([]);
-  const [tabValue, setTabValue] = useState(0);
-  const [restTimer, setRestTimer] = useState(0);
-  const [isTimerActive, setIsTimerActive] = useState(false);
   const [newWorkout, setNewWorkout] = useState({
     exercise: '',
     sets: 3,
@@ -191,7 +153,6 @@ const ModernDashboard = () => {
     weight: 0
   });
 
-  // Load user data
   useEffect(() => {
     const storedUser = localStorage.getItem('currentUser');
     if (storedUser) {
@@ -201,46 +162,6 @@ const ModernDashboard = () => {
       setWorkouts(userWorkouts);
     }
   }, []);
-
-  // Rest Timer Effect
-  useEffect(() => {
-    let interval = null;
-    if (isTimerActive && restTimer > 0) {
-      interval = setInterval(() => {
-        setRestTimer(prev => prev - 1);
-      }, 1000);
-    } else if (restTimer === 0 && isTimerActive) {
-      setIsTimerActive(false);
-      // Play musical notification
-      playMusicalNotification();
-    }
-    return () => clearInterval(interval);
-  }, [isTimerActive, restTimer]);
-
-  const playMusicalNotification = () => {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const notes = [523.25, 659.25, 783.99]; // C5, E5, G5 (musical chord)
-    
-    notes.forEach((freq, index) => {
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      
-      oscillator.frequency.setValueAtTime(freq, audioContext.currentTime + index * 0.1);
-      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime + index * 0.1);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + index * 0.1 + 0.5);
-      
-      oscillator.start(audioContext.currentTime + index * 0.1);
-      oscillator.stop(audioContext.currentTime + index * 0.1 + 0.5);
-    });
-  };
-
-  const startRestTimer = (minutes) => {
-    setRestTimer(minutes * 60);
-    setIsTimerActive(true);
-  };
 
   const addWorkout = () => {
     if (!newWorkout.exercise || newWorkout.weight <= 0) {
@@ -261,9 +182,11 @@ const ModernDashboard = () => {
     
     // Reset form
     setNewWorkout({ exercise: '', sets: 3, reps: 10, weight: 0 });
-    
-    // Start rest timer
-    startRestTimer(2);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('currentUser');
+    window.location.reload();
   };
 
   const getWorkoutStats = () => {
@@ -275,275 +198,113 @@ const ModernDashboard = () => {
       return workoutDate >= weekAgo;
     }).length;
     
-    const totalVolume = workouts.reduce((sum, w) => sum + (w.weight * w.sets * w.reps), 0);
-    const avgVolume = totalWorkouts > 0 ? Math.round(totalVolume / totalWorkouts) : 0;
-    
-    return { totalWorkouts, thisWeek, totalVolume, avgVolume };
+    return { totalWorkouts, thisWeek };
   };
 
   const stats = getWorkoutStats();
 
-  const getVolumeChartData = () => {
-    const last7Days = Array.from({length: 7}, (_, i) => {
-      const date = subDays(new Date(), 6 - i);
-      const dayWorkouts = workouts.filter(w => 
-        new Date(w.date).toDateString() === date.toDateString()
-      );
-      const volume = dayWorkouts.reduce((sum, w) => sum + (w.weight * w.sets * w.reps), 0);
-      return { date: format(date, 'MMM dd'), volume };
-    });
-
-    return {
-      labels: last7Days.map(d => d.date),
-      datasets: [{
-        label: 'Daily Volume (lbs)',
-        data: last7Days.map(d => d.volume),
-        borderColor: '#667eea',
-        backgroundColor: 'rgba(102, 126, 234, 0.1)',
-        tension: 0.4,
-        fill: true
-      }]
-    };
-  };
-
-  const getMuscleGroupData = () => {
-    const muscleGroups = {};
-    workouts.forEach(w => {
-      const group = w.exercise.includes('Press') ? 'Chest' : 
-                   w.exercise.includes('Curl') ? 'Biceps' :
-                   w.exercise.includes('Squat') ? 'Legs' : 'Back';
-      muscleGroups[group] = (muscleGroups[group] || 0) + 1;
-    });
-
-    return {
-      labels: Object.keys(muscleGroups),
-      datasets: [{
-        data: Object.values(muscleGroups),
-        backgroundColor: ['#667eea', '#764ba2', '#f50057', '#ff9800'],
-        borderWidth: 0
-      }]
-    };
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('currentUser');
-    window.location.reload();
-  };
-
   return (
-    <ThemeProvider theme={theme}>
-      <Box sx={{ flexGrow: 1 }}>
-        <AppBar position="static" elevation={0} sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-          <Toolbar>
-            <FitnessCenter sx={{ mr: 2 }} />
-            <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontWeight: 600 }}>
-              FitFiddle Dashboard
-            </Typography>
-            <Typography variant="body2" sx={{ mr: 2, color: 'rgba(255,255,255,0.8)' }}>
-              Welcome, {user?.email}
-            </Typography>
-            <IconButton color="inherit" onClick={handleLogout}>
-              <ExitToApp />
-            </IconButton>
-          </Toolbar>
-        </AppBar>
+    <div style={{ minHeight: '100vh', background: '#f7fafc' }}>
+      <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', padding: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1>FitFiddle Dashboard</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <span>Welcome, {user?.email}</span>
+          <button onClick={handleLogout} style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer' }}>
+            Logout
+          </button>
+        </div>
+      </div>
+      
+      <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
+        {/* Stats Cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+          <div style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', textAlign: 'center' }}>
+            <h3>Total Workouts</h3>
+            <p style={{ fontSize: '2rem', fontWeight: '800', color: '#667eea', margin: 0 }}>{stats.totalWorkouts}</p>
+          </div>
+          <div style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', textAlign: 'center' }}>
+            <h3>This Week</h3>
+            <p style={{ fontSize: '2rem', fontWeight: '800', color: '#667eea', margin: 0 }}>{stats.thisWeek}</p>
+          </div>
+        </div>
 
-        <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-          {/* Rest Timer Card */}
-          <Card sx={{ mb: 4, background: 'linear-gradient(135deg, #f6e05e 0%, #f6ad55 100%)' }}>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, color: '#744210' }}>
-                🎵 Rest Timer 🎵
-              </Typography>
-              <Typography variant="h3" sx={{ fontWeight: 800, color: '#744210', my: 2 }}>
-                {Math.floor(restTimer / 60)}:{(restTimer % 60).toString().padStart(2, '0')}
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
-                {[1, 2, 3].map(min => (
-                  <Button
-                    key={min}
-                    variant="outlined"
-                    onClick={() => startRestTimer(min)}
-                    disabled={isTimerActive}
-                    sx={{ borderColor: '#744210', color: '#744210' }}
-                  >
-                    {min} min
-                  </Button>
-                ))}
-                <Button
-                  variant="contained"
-                  onClick={() => setIsTimerActive(false)}
-                  sx={{ backgroundColor: '#744210' }}
-                >
-                  Stop
-                </Button>
-              </Box>
-            </CardContent>
-          </Card>
-
-          {/* Stats Cards */}
-          <Grid container spacing={3} sx={{ mb: 4 }}>
-            {[
-              { title: 'Total Workouts', value: stats.totalWorkouts, icon: <FitnessCenter /> },
-              { title: 'This Week', value: stats.thisWeek, icon: <TrendingUp /> },
-              { title: 'Total Volume', value: `${stats.totalVolume} lbs`, icon: <BarChart /> },
-              { title: 'Avg Volume', value: `${stats.avgVolume} lbs`, icon: <History /> }
-            ].map((stat, index) => (
-              <Grid item xs={12} sm={6} md={3} key={index}>
-                <Card elevation={3} sx={{ height: '100%' }}>
-                  <CardContent sx={{ textAlign: 'center' }}>
-                    <Box sx={{ color: '#667eea', mb: 1 }}>{stat.icon}</Box>
-                    <Typography variant="h4" sx={{ fontWeight: 800, color: '#667eea' }}>
-                      {stat.value}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                      {stat.title}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-
-          {/* Tabs for Different Views */}
-          <Paper elevation={3} sx={{ mb: 4 }}>
-            <Tabs
-              value={tabValue}
-              onChange={(e, newValue) => setTabValue(newValue)}
-              indicatorColor="primary"
-              textColor="primary"
-              sx={{ borderBottom: 1, borderColor: 'divider' }}
+        {/* Log Workout Section */}
+        <div style={{ background: 'white', padding: '2rem', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', marginBottom: '2rem' }}>
+          <h3>Log New Workout</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+            <select 
+              value={newWorkout.exercise}
+              onChange={(e) => setNewWorkout({...newWorkout, exercise: e.target.value})}
+              style={{ padding: '1rem', border: '2px solid #e2e8f0', borderRadius: '12px', fontSize: '1rem' }}
             >
-              <Tab label="Log Workout" icon={<AddCircle />} iconPosition="start" />
-              <Tab label="Progress Charts" icon={<BarChart />} iconPosition="start" />
-              <Tab label="Workout History" icon={<History />} iconPosition="start" />
-            </Tabs>
+              <option value="">Select Exercise</option>
+              <option value="Bench Press">Bench Press</option>
+              <option value="Squats">Squats</option>
+              <option value="Deadlifts">Deadlifts</option>
+              <option value="Pull-ups">Pull-ups</option>
+              <option value="Shoulder Press">Shoulder Press</option>
+              <option value="Bicep Curls">Bicep Curls</option>
+            </select>
+            <input 
+              type="number"
+              placeholder="Sets"
+              value={newWorkout.sets}
+              onChange={(e) => setNewWorkout({...newWorkout, sets: parseInt(e.target.value) || 1})}
+              style={{ padding: '1rem', border: '2px solid #e2e8f0', borderRadius: '12px', fontSize: '1rem' }}
+            />
+            <input 
+              type="number"
+              placeholder="Reps"
+              value={newWorkout.reps}
+              onChange={(e) => setNewWorkout({...newWorkout, reps: parseInt(e.target.value) || 1})}
+              style={{ padding: '1rem', border: '2px solid #e2e8f0', borderRadius: '12px', fontSize: '1rem' }}
+            />
+            <input 
+              type="number"
+              placeholder="Weight (lbs)"
+              value={newWorkout.weight}
+              onChange={(e) => setNewWorkout({...newWorkout, weight: parseInt(e.target.value) || 0})}
+              style={{ padding: '1rem', border: '2px solid #e2e8f0', borderRadius: '12px', fontSize: '1rem' }}
+            />
+          </div>
+          <button onClick={addWorkout} style={{ 
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            color: 'white', border: 'none', padding: '1rem 2rem', borderRadius: '12px',
+            fontSize: '1.1rem', fontWeight: '600', cursor: 'pointer'
+          }}>
+            Log Workout
+          </button>
+        </div>
 
-            <Box sx={{ p: 3 }}>
-              {tabValue === 0 && (
-                <Box>
-                  <Typography variant="h6" gutterBottom>Log New Workout</Typography>
-                  <Grid container spacing={3}>
-                    <Grid item xs={12} md={6}>
-                      <TextField
-                        fullWidth
-                        select
-                        label="Exercise"
-                        value={newWorkout.exercise}
-                        onChange={(e) => setNewWorkout({...newWorkout, exercise: e.target.value})}
-                        helperText="Select from exercise library"
-                      >
-                        <MenuItem value="">Select Exercise</MenuItem>
-                        {['Bench Press', 'Squats', 'Deadlifts', 'Pull-ups', 'Shoulder Press', 'Bicep Curls'].map(exercise => (
-                          <MenuItem key={exercise} value={exercise}>{exercise}</MenuItem>
-                        ))}
-                      </TextField>
-                    </Grid>
-                    <Grid item xs={12} md={2}>
-                      <TextField
-                        fullWidth
-                        type="number"
-                        label="Sets"
-                        value={newWorkout.sets}
-                        onChange={(e) => setNewWorkout({...newWorkout, sets: parseInt(e.target.value) || 1})}
-                      />
-                    </Grid>
-                    <Grid item xs={12} md={2}>
-                      <TextField
-                        fullWidth
-                        type="number"
-                        label="Reps"
-                        value={newWorkout.reps}
-                        onChange={(e) => setNewWorkout({...newWorkout, reps: parseInt(e.target.value) || 1})}
-                      />
-                    </Grid>
-                    <Grid item xs={12} md={2}>
-                      <TextField
-                        fullWidth
-                        type="number"
-                        label="Weight (lbs)"
-                        value={newWorkout.weight}
-                        onChange={(e) => setNewWorkout({...newWorkout, weight: parseInt(e.target.value) || 0})}
-                      />
-                    </Grid>
-                  </Grid>
-                  <Button
-                    variant="contained"
-                    size="large"
-                    onClick={addWorkout}
-                    sx={{ mt: 3, py: 1.5 }}
-                    startIcon={<AddCircle />}
-                  >
-                    Log Workout
-                  </Button>
-                </Box>
-              )}
-
-              {tabValue === 1 && (
-                <Grid container spacing={4}>
-                  <Grid item xs={12} md={6}>
-                    <Card>
-                      <CardContent>
-                        <Typography variant="h6" gutterBottom>Volume Progress</Typography>
-                        <Line data={getVolumeChartData()} options={{ responsive: true }} />
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <Card>
-                      <CardContent>
-                        <Typography variant="h6" gutterBottom>Muscle Group Distribution</Typography>
-                        <Doughnut data={getMuscleGroupData()} options={{ responsive: true }} />
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                </Grid>
-              )}
-
-              {tabValue === 2 && (
-                <Box>
-                  <Typography variant="h6" gutterBottom>Workout History</Typography>
-                  {workouts.length === 0 ? (
-                    <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
-                      No workouts logged yet. Start by logging your first workout!
-                    </Typography>
-                  ) : (
-                    <Grid container spacing={2}>
-                      {workouts.slice().reverse().map((workout) => (
-                        <Grid item xs={12} md={6} key={workout.id}>
-                          <Card variant="outlined">
-                            <CardContent>
-                              <Typography variant="h6" sx={{ color: '#667eea' }}>
-                                {workout.exercise}
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                {format(new Date(workout.date), 'MMM dd, yyyy')}
-                              </Typography>
-                              <Box sx={{ mt: 1 }}>
-                                <Typography variant="body2">
-                                  {workout.sets} sets × {workout.reps} reps
-                                </Typography>
-                                <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                                  {workout.weight} lbs
-                                </Typography>
-                              </Box>
-                            </CardContent>
-                          </Card>
-                        </Grid>
-                      ))}
-                    </Grid>
-                  )}
-                </Box>
-              )}
-            </Box>
-          </Paper>
-        </Container>
-      </Box>
-    </ThemeProvider>
+        {/* Recent Workouts */}
+        {workouts.length > 0 && (
+          <div style={{ background: 'white', padding: '2rem', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+            <h3>Recent Workouts</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {workouts.slice(-5).reverse().map(workout => (
+                <div key={workout.id} style={{ 
+                  background: '#f7fafc', border: '2px solid #e2e8f0', borderRadius: '12px', 
+                  padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' 
+                }}>
+                  <div>
+                    <h4 style={{ color: '#2d3748', marginBottom: '0.5rem' }}>{workout.exercise}</h4>
+                    <p style={{ color: '#718096', margin: 0 }}>{workout.sets} sets × {workout.reps} reps</p>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ fontSize: '2rem', fontWeight: '800', color: '#667eea' }}>{workout.weight}</span>
+                    <span style={{ fontSize: '1rem', color: '#a0aec0', marginLeft: '0.25rem' }}>lbs</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 
-// --- UPDATED MAIN APP ---
+// Main App Component
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
@@ -573,17 +334,17 @@ function App() {
   };
 
   return (
-    <>
+    <div className="App">
       {isAuthenticated ? (
-        <ModernDashboard />
+        <Dashboard />
       ) : (
-        <ModernAuthForm 
+        <AuthForm 
           isLogin={isLogin} 
           onSuccess={handleAuthSuccess}
           onSwitch={isLogin ? switchToRegister : switchToLogin}
         />
       )}
-    </>
+    </div>
   );
 }
 
