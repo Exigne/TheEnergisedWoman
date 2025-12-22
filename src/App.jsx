@@ -6,26 +6,51 @@ function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('fitFiddleUser');
     if (savedUser) setUser(JSON.parse(savedUser));
   }, []);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email || !password) return;
     
-    // For now, this mimics a successful login/register
-    // In the next step, we can connect this to a 'users' table in Neon
-    const userData = { email };
-    localStorage.setItem('fitFiddleUser', JSON.stringify(userData));
-    setUser(userData);
+    setLoading(true);
+    try {
+      const response = await fetch('/.netlify/functions/database', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'auth',
+          email,
+          password,
+          isRegistering
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Authentication failed');
+      }
+
+      // data will be { email: "user@example.com" } on success
+      localStorage.setItem('fitFiddleUser', JSON.stringify(data));
+      setUser(data);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogout = () => {
     localStorage.removeItem('fitFiddleUser');
     setUser(null);
+    setEmail('');
+    setPassword('');
   };
 
   if (!user) {
@@ -46,6 +71,7 @@ function App() {
               onChange={(e) => setEmail(e.target.value)}
               style={inputStyle}
               required
+              disabled={loading}
             />
             <input 
               type="password" 
@@ -54,15 +80,17 @@ function App() {
               onChange={(e) => setPassword(e.target.value)}
               style={inputStyle}
               required
+              disabled={loading}
             />
-            <button type="submit" style={btnPrimary}>
-              {isRegistering ? 'Sign Up' : 'Sign In'}
+            <button type="submit" style={btnPrimary} disabled={loading}>
+              {loading ? 'Processing...' : (isRegistering ? 'Sign Up' : 'Sign In')}
             </button>
           </form>
 
           <button 
             onClick={() => setIsRegistering(!isRegistering)} 
             style={toggleBtn}
+            disabled={loading}
           >
             {isRegistering ? 'Already have an account? Sign In' : "Don't have an account? Register"}
           </button>
@@ -74,7 +102,7 @@ function App() {
   return <Dashboard currentUser={user} onLogout={handleLogout} />;
 }
 
-// --- STYLES ---
+// --- STYLES (Kept exactly as yours) ---
 const authContainer = { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f8fafc' };
 const authCard = { background: 'white', padding: '40px', borderRadius: '16px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)', textAlign: 'center', width: '100%', maxWidth: '400px' };
 const formStyle = { display: 'flex', flexDirection: 'column', gap: '15px' };
