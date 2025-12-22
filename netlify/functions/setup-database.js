@@ -1,11 +1,19 @@
-const { neon } = require('@netlify/neon');
+// Use standard pg library instead of @netlify/neon
+import pg from 'pg';
+const { Pool } = pg;
 
-const db = neon(process.env.DATABASE_URL);
+// Create connection pool
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? {
+    rejectUnauthorized: false
+  } : false
+});
 
-exports.handler = async (event, context) => {
+export const handler = async (event, context) => {
   try {
     // Create users table
-    await db`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
@@ -15,10 +23,10 @@ exports.handler = async (event, context) => {
         experience INTEGER DEFAULT 0,
         streak INTEGER DEFAULT 0
       )
-    `;
+    `);
 
     // Create workouts table
-    await db`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS workouts (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id),
@@ -28,7 +36,7 @@ exports.handler = async (event, context) => {
         weight INTEGER NOT NULL,
         date TIMESTAMP DEFAULT NOW()
       )
-    `;
+    `);
 
     return {
       statusCode: 200,
