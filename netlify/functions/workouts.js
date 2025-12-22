@@ -1,7 +1,7 @@
 const { neon } = require('@neondatabase/serverless');
 
 exports.handler = async (event) => {
-  // Handle CORS
+  // Handle CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
@@ -16,12 +16,12 @@ exports.handler = async (event) => {
 
   const sql = neon(process.env.DATABASE_URL);
   
-  try {
-    const headers = {
-      'Access-Control-Allow-Origin': '*',
-      'Content-Type': 'application/json'
-    };
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Content-Type': 'application/json'
+  };
 
+  try {
     // GET - Fetch workouts for a user
     if (event.httpMethod === 'GET') {
       const { user } = event.queryStringParameters || {};
@@ -51,9 +51,17 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'POST') {
       const { userEmail, exercise, sets, reps, weight } = JSON.parse(event.body);
 
+      if (!userEmail || !exercise) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: 'userEmail and exercise are required' })
+        };
+      }
+
       const result = await sql`
         INSERT INTO workouts (user_email, exercise, sets, reps, weight, created_at)
-        VALUES (${userEmail}, ${exercise}, ${sets}, ${reps}, ${weight}, NOW())
+        VALUES (${userEmail}, ${exercise}, ${sets || 0}, ${reps || 0}, ${weight || 0}, NOW())
         RETURNING *
       `;
 
@@ -74,10 +82,7 @@ exports.handler = async (event) => {
     console.error('Workouts function error:', error);
     return {
       statusCode: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json'
-      },
+      headers,
       body: JSON.stringify({ error: error.message })
     };
   }
