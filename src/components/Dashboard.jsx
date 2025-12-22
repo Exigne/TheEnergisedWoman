@@ -1,30 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 
 const Dashboard = ({ currentUser, onLogout }) => {
-  const [workouts, setWorkouts] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  // Using React.useState directly to prevent ReferenceErrors in production
+  const [workouts, setWorkouts] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState('');
   
-  const [exercise, setExercise] = useState('');
-  const [sets, setSets] = useState('');
-  const [reps, setReps] = useState('');
-  const [weight, setWeight] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [exercise, setExercise] = React.useState('');
+  const [sets, setSets] = React.useState('');
+  const [reps, setReps] = React.useState('');
+  const [weight, setWeight] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
 
-  useEffect(() => {
+  React.useEffect(() => {
     loadWorkouts();
   }, []);
 
   const loadWorkouts = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/.netlify/functions/workouts?user=${encodeURIComponent(currentUser.email)}`);
-      if (!response.ok) throw new Error('Failed to load workouts');
+      // Updated to match your database function endpoint
+      const response = await fetch(`/.netlify/functions/database?user=${encodeURIComponent(currentUser.email)}`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (!response.ok) throw new Error('Failed to load history');
       const data = await response.json();
-      setWorkouts(data || []);
+      setWorkouts(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error loading workouts:', err);
-      setError('Failed to load workout history');
+      setError('Could not connect to database to fetch history.');
     } finally {
       setLoading(false);
     }
@@ -36,10 +42,11 @@ const Dashboard = ({ currentUser, onLogout }) => {
     setError('');
 
     try {
-      const response = await fetch('/.netlify/functions/workouts', {
+      const response = await fetch('/.netlify/functions/database', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'createWorkout', // Added action for your switch/case logic
           userEmail: currentUser.email,
           exercise: exercise.trim(),
           sets: parseInt(sets) || 0,
@@ -48,298 +55,75 @@ const Dashboard = ({ currentUser, onLogout }) => {
         })
       });
 
-      if (!response.ok) throw new Error('Failed to save workout');
+      if (!response.ok) throw new Error('Failed to save');
 
+      // Reset form
       setExercise('');
       setSets('');
       setReps('');
       setWeight('');
+      
+      // Refresh list
       await loadWorkouts();
       
     } catch (err) {
-      console.error('Error saving workout:', err);
-      setError('Failed to save workout. Please try again.');
+      setError('Failed to save workout. Check your database connection.');
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div style={{ 
-      minHeight: '100vh', 
-      background: '#fafafa',
-      padding: '2rem'
-    }}>
-      <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+    <div style={{ minHeight: '100vh', background: '#fafafa', padding: '2rem', fontFamily: 'sans-serif' }}>
+      <div style={{ maxWidth: '800px', margin: '0 auto' }}>
         
-        {/* Header */}
-        <div style={{ 
-          background: 'white', 
-          borderRadius: '16px', 
-          padding: '2rem', 
-          marginBottom: '1.5rem',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          border: '1px solid #e5e7eb',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
-          <div>
-            <h1 style={{ 
-              color: '#111827', 
-              margin: 0, 
-              marginBottom: '0.25rem',
-              fontSize: '1.875rem',
-              fontWeight: '700',
-              letterSpacing: '-0.025em'
-            }}>
-              FitFiddle
-            </h1>
-            <p style={{ color: '#6b7280', margin: 0, fontSize: '0.875rem' }}>
-              {currentUser?.email}
-            </p>
+        {/* Header Card */}
+        <div style={cardStyle}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h1 style={{ margin: 0, color: '#111827', fontSize: '1.5rem' }}>FitFiddle</h1>
+              <p style={{ margin: 0, color: '#6b7280', fontSize: '0.875rem' }}>{currentUser?.email}</p>
+            </div>
+            <button onClick={onLogout} style={secondaryButtonStyle}>Sign out</button>
           </div>
-          <button 
-            onClick={onLogout} 
-            style={{ 
-              background: 'white',
-              color: '#6b7280', 
-              border: '1px solid #e5e7eb', 
-              padding: '0.625rem 1.25rem', 
-              borderRadius: '8px', 
-              cursor: 'pointer',
-              fontSize: '0.875rem',
-              fontWeight: '500',
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = '#f9fafb';
-              e.target.style.borderColor = '#d1d5db';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'white';
-              e.target.style.borderColor = '#e5e7eb';
-            }}
-          >
-            Sign out
-          </button>
         </div>
 
-        {/* Log Workout Section */}
-        <div style={{ 
-          background: 'white', 
-          borderRadius: '16px', 
-          padding: '2rem', 
-          marginBottom: '1.5rem',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          border: '1px solid #e5e7eb'
-        }}>
-          <h2 style={{ 
-            color: '#111827', 
-            marginBottom: '1.5rem',
-            fontSize: '1.125rem',
-            fontWeight: '600',
-            letterSpacing: '-0.015em'
-          }}>
-            Log Exercise
-          </h2>
-          
-          {error && (
-            <div style={{ 
-              background: '#fef2f2', 
-              color: '#991b1b', 
-              padding: '0.875rem', 
-              borderRadius: '8px', 
-              marginBottom: '1.5rem',
-              fontSize: '0.875rem',
-              border: '1px solid #fee2e2'
-            }}>
-              {error}
-            </div>
-          )}
+        {/* Input Card */}
+        <div style={cardStyle}>
+          <h2 style={sectionTitleStyle}>Log Exercise</h2>
+          {error && <div style={errorBannerStyle}>{error}</div>}
 
-          <div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <input
               type="text"
-              placeholder="Exercise name"
+              placeholder="Exercise name (e.g. Bench Press)"
               value={exercise}
               onChange={(e) => setExercise(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.875rem',
-                border: '1px solid #e5e7eb',
-                borderRadius: '10px',
-                fontSize: '0.9375rem',
-                marginBottom: '1rem',
-                background: '#fafafa',
-                color: '#111827',
-                transition: 'all 0.2s'
-              }}
-              onFocus={(e) => {
-                e.target.style.background = 'white';
-                e.target.style.borderColor = '#9ca3af';
-              }}
-              onBlur={(e) => {
-                e.target.style.background = '#fafafa';
-                e.target.style.borderColor = '#e5e7eb';
-              }}
+              style={inputStyle}
             />
 
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '0.875rem',
-              marginBottom: '1.5rem'
-            }}>
-              <div>
-                <label style={{ 
-                  fontSize: '0.8125rem', 
-                  fontWeight: '500', 
-                  color: '#6b7280', 
-                  marginBottom: '0.5rem',
-                  display: 'block',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.025em'
-                }}>
-                  Sets
-                </label>
-                <input
-                  type="number"
-                  placeholder="0"
-                  value={sets}
-                  onChange={(e) => setSets(e.target.value)}
-                  min="0"
-                  style={{
-                    width: '100%',
-                    padding: '0.875rem',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '10px',
-                    fontSize: '0.9375rem',
-                    textAlign: 'center',
-                    background: '#fafafa',
-                    color: '#111827',
-                    fontWeight: '500',
-                    transition: 'all 0.2s'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.background = 'white';
-                    e.target.style.borderColor = '#9ca3af';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.background = '#fafafa';
-                    e.target.style.borderColor = '#e5e7eb';
-                  }}
-                />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+              <div style={inputGroupStyle}>
+                <label style={labelStyle}>Sets</label>
+                <input type="number" value={sets} onChange={(e) => setSets(e.target.value)} style={inputStyle} placeholder="0" />
               </div>
-
-              <div>
-                <label style={{ 
-                  fontSize: '0.8125rem', 
-                  fontWeight: '500', 
-                  color: '#6b7280', 
-                  marginBottom: '0.5rem',
-                  display: 'block',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.025em'
-                }}>
-                  Reps
-                </label>
-                <input
-                  type="number"
-                  placeholder="0"
-                  value={reps}
-                  onChange={(e) => setReps(e.target.value)}
-                  min="0"
-                  style={{
-                    width: '100%',
-                    padding: '0.875rem',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '10px',
-                    fontSize: '0.9375rem',
-                    textAlign: 'center',
-                    background: '#fafafa',
-                    color: '#111827',
-                    fontWeight: '500',
-                    transition: 'all 0.2s'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.background = 'white';
-                    e.target.style.borderColor = '#9ca3af';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.background = '#fafafa';
-                    e.target.style.borderColor = '#e5e7eb';
-                  }}
-                />
+              <div style={inputGroupStyle}>
+                <label style={labelStyle}>Reps</label>
+                <input type="number" value={reps} onChange={(e) => setReps(e.target.value)} style={inputStyle} placeholder="0" />
               </div>
-
-              <div>
-                <label style={{ 
-                  fontSize: '0.8125rem', 
-                  fontWeight: '500', 
-                  color: '#6b7280', 
-                  marginBottom: '0.5rem',
-                  display: 'block',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.025em'
-                }}>
-                  Weight
-                </label>
-                <input
-                  type="number"
-                  placeholder="0"
-                  value={weight}
-                  onChange={(e) => setWeight(e.target.value)}
-                  min="0"
-                  step="0.5"
-                  style={{
-                    width: '100%',
-                    padding: '0.875rem',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '10px',
-                    fontSize: '0.9375rem',
-                    textAlign: 'center',
-                    background: '#fafafa',
-                    color: '#111827',
-                    fontWeight: '500',
-                    transition: 'all 0.2s'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.background = 'white';
-                    e.target.style.borderColor = '#9ca3af';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.background = '#fafafa';
-                    e.target.style.borderColor = '#e5e7eb';
-                  }}
-                />
+              <div style={inputGroupStyle}>
+                <label style={labelStyle}>Weight (kg)</label>
+                <input type="number" value={weight} onChange={(e) => setWeight(e.target.value)} style={inputStyle} placeholder="0" />
               </div>
             </div>
 
             <button
               onClick={handleSaveWorkout}
-              disabled={saving || !exercise || !sets || !reps || !weight}
+              disabled={saving || !exercise}
               style={{
-                width: '100%',
-                background: (saving || !exercise || !sets || !reps || !weight) ? '#f3f4f6' : '#111827',
-                color: (saving || !exercise || !sets || !reps || !weight) ? '#9ca3af' : 'white',
-                border: 'none',
-                padding: '0.875rem 1.5rem',
-                borderRadius: '10px',
-                fontSize: '0.9375rem',
-                fontWeight: '500',
-                cursor: (saving || !exercise || !sets || !reps || !weight) ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={(e) => {
-                if (!saving && exercise && sets && reps && weight) {
-                  e.target.style.background = '#1f2937';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!saving && exercise && sets && reps && weight) {
-                  e.target.style.background = '#111827';
-                }
+                ...primaryButtonStyle,
+                opacity: (saving || !exercise) ? 0.6 : 1,
+                cursor: (saving || !exercise) ? 'not-allowed' : 'pointer'
               }}
             >
               {saving ? 'Saving...' : 'Save Exercise'}
@@ -347,161 +131,63 @@ const Dashboard = ({ currentUser, onLogout }) => {
           </div>
         </div>
 
-        {/* Workout History */}
-        <div style={{ 
-          background: 'white', 
-          borderRadius: '16px', 
-          padding: '2rem',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          border: '1px solid #e5e7eb'
-        }}>
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center',
-            marginBottom: '1.5rem' 
-          }}>
-            <h2 style={{ 
-              color: '#111827', 
-              margin: 0,
-              fontSize: '1.125rem',
-              fontWeight: '600',
-              letterSpacing: '-0.015em'
-            }}>
-              History
-            </h2>
-            <span style={{ 
-              color: '#9ca3af', 
-              fontSize: '0.875rem',
-              fontWeight: '500'
-            }}>
-              {workouts.length} {workouts.length === 1 ? 'exercise' : 'exercises'}
-            </span>
+        {/* History Card */}
+        <div style={cardStyle}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <h2 style={sectionTitleStyle}>History</h2>
+            <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>{workouts.length} entries</span>
           </div>
 
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
-              <div style={{
-                width: '32px',
-                height: '32px',
-                border: '3px solid #f3f4f6',
-                borderTop: '3px solid #9ca3af',
-                borderRadius: '50%',
-                animation: 'spin 1s linear infinite',
-                margin: '0 auto 1rem'
-              }}></div>
-              <p style={{ fontSize: '0.875rem', margin: 0 }}>Loading...</p>
-            </div>
+             <p style={{ textAlign: 'center', color: '#6b7280' }}>Loading your progress...</p>
           ) : workouts.length === 0 ? (
-            <div style={{ 
-              textAlign: 'center', 
-              padding: '3rem', 
-              color: '#9ca3af', 
-              fontSize: '0.875rem' 
-            }}>
-              <svg style={{ width: '48px', height: '48px', margin: '0 auto 1rem', opacity: 0.3 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <p style={{ margin: 0 }}>No exercises logged yet</p>
-            </div>
+            <p style={{ textAlign: 'center', color: '#9ca3af', padding: '2rem' }}>No exercises logged yet.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {workouts.map((workout, index) => (
-                <div
-                  key={workout.id || index}
-                  style={{
-                    background: '#fafafa',
-                    border: '1px solid #f3f4f6',
-                    borderRadius: '12px',
-                    padding: '1.25rem',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = '#f9fafb';
-                    e.currentTarget.style.borderColor = '#e5e7eb';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = '#fafafa';
-                    e.currentTarget.style.borderColor = '#f3f4f6';
-                  }}
-                >
+              {workouts.map((w, i) => (
+                <div key={w.id || i} style={historyItemStyle}>
                   <div>
-                    <div style={{ 
-                      fontSize: '0.9375rem', 
-                      fontWeight: '600', 
-                      color: '#111827',
-                      textTransform: 'capitalize',
-                      marginBottom: '0.375rem'
-                    }}>
-                      {workout.exercise}
-                    </div>
-                    <div style={{ 
-                      color: '#6b7280', 
-                      fontSize: '0.8125rem',
-                      display: 'flex',
-                      gap: '0.75rem',
-                      alignItems: 'center'
-                    }}>
-                      <span>{workout.sets} × {workout.reps}</span>
-                      <span style={{ color: '#d1d5db' }}>•</span>
-                      <span>{new Date(workout.created_at).toLocaleDateString('en-US', { 
-                        month: 'short', 
-                        day: 'numeric'
-                      })}</span>
+                    <div style={{ fontWeight: '600', textTransform: 'capitalize' }}>{w.exercise}</div>
+                    <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                      {w.sets} sets × {w.reps} reps • {new Date(w.created_at).toLocaleDateString()}
                     </div>
                   </div>
-                  
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ 
-                      fontSize: '1.5rem', 
-                      fontWeight: '700', 
-                      color: '#111827',
-                      letterSpacing: '-0.025em'
-                    }}>
-                      {workout.weight}
-                      <span style={{ 
-                        fontSize: '0.875rem', 
-                        color: '#9ca3af', 
-                        marginLeft: '0.25rem',
-                        fontWeight: '500'
-                      }}>
-                        kg
-                      </span>
-                    </div>
-                  </div>
+                  <div style={{ fontWeight: '700', fontSize: '1.2rem' }}>{w.weight}<small style={{fontSize: '0.7rem', color: '#9ca3af'}}>kg</small></div>
                 </div>
               ))}
             </div>
           )}
         </div>
-
       </div>
-
-      <style>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        
-        input::placeholder {
-          color: #d1d5db;
-        }
-        
-        input::-webkit-outer-spin-button,
-        input::-webkit-inner-spin-button {
-          -webkit-appearance: none;
-          margin: 0;
-        }
-        
-        input[type=number] {
-          -moz-appearance: textfield;
-        }
-      `}</style>
     </div>
   );
 };
+
+// --- Styles ---
+const cardStyle = {
+  background: 'white',
+  borderRadius: '12px',
+  padding: '1.5rem',
+  marginBottom: '1rem',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+  border: '1px solid #e5e7eb'
+};
+
+const inputStyle = {
+  width: '100%',
+  padding: '0.75rem',
+  borderRadius: '8px',
+  border: '1px solid #d1d5db',
+  fontSize: '1rem',
+  boxSizing: 'border-box'
+};
+
+const inputGroupStyle = { display: 'flex', flexDirection: 'column', gap: '0.4rem' };
+const labelStyle = { fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' };
+const sectionTitleStyle = { fontSize: '1.1rem', fontWeight: '600', marginBottom: '1rem', marginTop: 0 };
+const primaryButtonStyle = { background: '#111827', color: 'white', border: 'none', padding: '1rem', borderRadius: '8px', fontWeight: '600' };
+const secondaryButtonStyle = { background: 'none', border: '1px solid #d1d5db', padding: '0.5rem 1rem', borderRadius: '6px', cursor: 'pointer', color: '#4b5563' };
+const errorBannerStyle = { background: '#fef2f2', color: '#991b1b', padding: '0.75rem', borderRadius: '6px', marginBottom: '1rem', fontSize: '0.875rem' };
+const historyItemStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', background: '#f9fafb', borderRadius: '8px', border: '1px solid #f3f4f6' };
 
 export default Dashboard;
