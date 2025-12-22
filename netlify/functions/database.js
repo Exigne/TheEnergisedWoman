@@ -15,9 +15,8 @@ export const handler = async (event) => {
   try {
     const { user, action } = event.queryStringParameters || {};
 
-    // --- GET REQUESTS ---
     if (event.httpMethod === 'GET') {
-      // Action: Fetch Global Leaderboard
+      // Handles the League Table/Leaderboard request
       if (action === 'leaderboard') {
         const leaders = await sql`
           SELECT user_email, 
@@ -31,21 +30,14 @@ export const handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify(leaders) };
       }
 
-      // Action: Fetch Personal History
+      // Handles the personal history request
       if (!user) return { statusCode: 400, headers, body: JSON.stringify({ error: 'User email required' }) };
-      
-      const history = await sql`
-        SELECT * FROM workouts WHERE user_email = ${user} ORDER BY created_at DESC
-      `;
+      const history = await sql`SELECT * FROM workouts WHERE user_email = ${user} ORDER BY created_at DESC`;
       return { statusCode: 200, headers, body: JSON.stringify(history) };
     }
 
-    // --- POST REQUESTS ---
     if (event.httpMethod === 'POST') {
       const { userEmail, exercise, sets, reps, weight } = JSON.parse(event.body);
-      
-      if (!userEmail || !exercise) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing data' }) };
-
       const result = await sql`
         INSERT INTO workouts (user_email, exercise, sets, reps, weight)
         VALUES (${userEmail}, ${exercise}, ${sets}, ${reps}, ${weight})
@@ -53,9 +45,7 @@ export const handler = async (event) => {
       `;
       return { statusCode: 201, headers, body: JSON.stringify(result[0]) };
     }
-
   } catch (error) {
-    console.error('Database Error:', error);
     return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
   }
 };
