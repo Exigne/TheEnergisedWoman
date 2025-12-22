@@ -27,7 +27,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
       setWorkouts(Array.isArray(history) ? history : []);
       setLeaderboard(Array.isArray(leaders) ? leaders : []);
     } catch (err) {
-      setError('Connection failed. Check Netlify Environment Variables.');
+      setError('Connection failed. Check your database settings.');
     } finally {
       setLoading(false);
     }
@@ -39,6 +39,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
     try {
       await fetch('/.netlify/functions/database', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userEmail: currentUser.email,
           exercise,
@@ -53,77 +54,84 @@ const Dashboard = ({ currentUser, onLogout }) => {
     finally { setSaving(false); }
   };
 
-  // Simple Graph Logic (Volume of last 7 workouts)
   const chartWorkouts = [...workouts].reverse().slice(-7);
   const maxVolume = Math.max(...chartWorkouts.map(w => w.weight * w.reps * w.sets), 100);
 
   return (
-    <div style={{ padding: '20px', maxWidth: '1100px', margin: '0 auto', fontFamily: 'system-ui', backgroundColor: '#f9fafb' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-        <h1>FitFiddle Dashboard</h1>
-        <button onClick={onLogout} style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #ddd', cursor: 'pointer' }}>Sign Out</button>
-      </div>
+    <div style={containerStyle}>
+      <header style={headerStyle}>
+        <h1>FitFiddle</h1>
+        <button onClick={onLogout} style={btnSecondary}>Sign Out</button>
+      </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '20px' }}>
-        
-        {/* COLUMN 1: Log & Graphs */}
+      <div style={gridStyle}>
+        {/* LEFT COLUMN: Input & Chart */}
         <div>
-          <section style={cardStyle}>
-            <h3 style={{ marginTop: 0 }}>Log Exercise</h3>
-            <form onSubmit={handleSave} style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={cardStyle}>
+            <h3>Log Workout</h3>
+            <form onSubmit={handleSave} style={formStyle}>
               <select value={exercise} onChange={e => setExercise(e.target.value)} style={inputStyle}>
                 {EXERCISES.map(ex => <option key={ex} value={ex}>{ex}</option>)}
               </select>
-              <input type="number" placeholder="Sets" value={sets} onChange={e => setSets(e.target.value)} style={{...inputStyle, width: '70px'}} />
-              <input type="number" placeholder="Reps" value={reps} onChange={e => setReps(e.target.value)} style={{...inputStyle, width: '70px'}} />
-              <input type="number" placeholder="kg" value={weight} onChange={e => setWeight(e.target.value)} style={{...inputStyle, width: '70px'}} />
-              <button disabled={saving} style={btnStyle}>{saving ? '...' : 'Add'}</button>
+              <div style={rowStyle}>
+                <input type="number" placeholder="Sets" value={sets} onChange={e => setSets(e.target.value)} style={inputStyle} />
+                <input type="number" placeholder="Reps" value={reps} onChange={e => setReps(e.target.value)} style={inputStyle} />
+                <input type="number" placeholder="kg" value={weight} onChange={e => setWeight(e.target.value)} style={inputStyle} />
+              </div>
+              <button disabled={saving} style={btnPrimary}>{saving ? 'Saving...' : 'Add to Journal'}</button>
             </form>
-          </section>
+          </div>
 
-          <section style={{ ...cardStyle, marginTop: '20px' }}>
-            <h3>Progress (Volume per Session)</h3>
-            <div style={{ display: 'flex', alignItems: 'flex-end', height: '150px', gap: '8px', padding: '10px 0' }}>
+          <div style={{ ...cardStyle, marginTop: '20px' }}>
+            <h3>Volume Graph (Last 7)</h3>
+            <div style={chartContainer}>
               {chartWorkouts.map((w, i) => (
-                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <div style={{ 
-                    width: '100%', 
-                    backgroundColor: '#4f46e5', 
-                    borderRadius: '4px 4px 0 0',
-                    height: `${((w.weight * w.reps * w.sets) / maxVolume) * 100}%` 
-                  }} />
-                  <span style={{ fontSize: '10px', color: '#666', marginTop: '5px' }}>{new Date(w.created_at).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>
+                <div key={i} style={barWrapper}>
+                  <div style={{ ...barStyle, height: `${((w.weight * w.reps * w.sets) / maxVolume) * 100}%` }} />
+                  <span style={barLabel}>{w.exercise.substring(0, 3)}</span>
                 </div>
               ))}
             </div>
-          </section>
+          </div>
         </div>
 
-        {/* COLUMN 2: League Table */}
-        <div>
-          <section style={cardStyle}>
-            <h3 style={{ marginTop: 0 }}>Global League Table</h3>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr style={{ textAlign: 'left', borderBottom: '1px solid #eee' }}><th>User</th><th>Total Vol</th></tr></thead>
-              <tbody>
-                {leaderboard.map((user, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid #f9f9f9', height: '40px' }}>
-                    <td style={{ fontSize: '14px' }}>{user.user_email.split('@')[0]}</td>
-                    <td style={{ fontWeight: 'bold' }}>{Math.round(user.total_volume).toLocaleString()} kg</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
+        {/* RIGHT COLUMN: Leaderboard */}
+        <div style={cardStyle}>
+          <h3>League Table (Total Volume)</h3>
+          <table style={tableStyle}>
+            <thead><tr style={tableHeader}><th>User</th><th>Total kg</th></tr></thead>
+            <tbody>
+              {leaderboard.map((u, i) => (
+                <tr key={i} style={u.user_email === currentUser.email ? activeRow : rowItem}>
+                  <td>{u.user_email.split('@')[0]}</td>
+                  <td>{Math.round(u.total_volume).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-
       </div>
     </div>
   );
 };
 
-const cardStyle = { backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', border: '1px solid #e5e7eb' };
-const inputStyle = { padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db' };
-const btnStyle = { backgroundColor: '#4f46e5', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' };
+// --- STYLES ---
+const containerStyle = { maxWidth: '1000px', margin: '0 auto', padding: '20px', fontFamily: 'sans-serif', color: '#1a1a1a' };
+const headerStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' };
+const gridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' };
+const cardStyle = { background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #eee', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' };
+const formStyle = { display: 'flex', flexDirection: 'column', gap: '10px' };
+const rowStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' };
+const inputStyle = { padding: '10px', borderRadius: '6px', border: '1px solid #ddd' };
+const btnPrimary = { background: '#4f46e5', color: 'white', border: 'none', padding: '12px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' };
+const btnSecondary = { background: '#f3f4f6', border: '1px solid #ddd', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer' };
+const tableStyle = { width: '100%', borderCollapse: 'collapse' };
+const tableHeader = { textAlign: 'left', borderBottom: '2px solid #f3f4f6', height: '40px' };
+const rowItem = { height: '40px', borderBottom: '1px solid #f9fafb' };
+const activeRow = { ...rowItem, backgroundColor: '#f5f3ff', color: '#4f46e5', fontWeight: 'bold' };
+const chartContainer = { display: 'flex', alignItems: 'flex-end', height: '150px', gap: '10px', paddingBottom: '20px' };
+const barWrapper = { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' };
+const barStyle = { width: '100%', background: '#4f46e5', borderRadius: '4px 4px 0 0' };
+const barLabel = { fontSize: '10px', marginTop: '5px', color: '#666' };
 
 export default Dashboard;
