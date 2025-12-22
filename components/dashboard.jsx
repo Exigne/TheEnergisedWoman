@@ -17,7 +17,8 @@ const Dashboard = ({ currentUser, onLogout }) => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '2rem'
+      padding: '2rem',
+      fontFamily: 'sans-serif'
     }}>
       <div style={{ 
         background: 'white', 
@@ -38,7 +39,7 @@ const Dashboard = ({ currentUser, onLogout }) => {
         {/* Welcome Message */}
         <div style={{ marginBottom: '3rem' }}>
           <p style={{ color: '#4a5568', fontSize: '1.2rem', marginBottom: '0.5rem' }}>
-            Welcome, <strong>{currentUser?.email}</strong>!
+            Welcome, <strong>{currentUser?.email || 'User'}</strong>!
           </p>
           <p style={{ color: '#a0aec0' }}>Ready to track your fitness journey?</p>
         </div>
