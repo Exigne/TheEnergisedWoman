@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { databaseAPI } from './api/database.js';
-import './App.css';
-import React, { useState, useEffect } from 'react';
-import { databaseAPI } from './api/database.js';
-import Dashboard from '.components/Dashboard'; // ADD THIS LINE
+import Dashboard from './components/Dashboard'; // ADD THIS LINE
 import './App.css';
 
 const AuthForm = ({ isLogin, onSuccess, onSwitch }) => {
