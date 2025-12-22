@@ -1,171 +1,505 @@
 import React, { useState, useEffect } from 'react';
 
-// In your Dashboard component, add these functions:
-
 const Dashboard = ({ currentUser, onLogout }) => {
   const [workouts, setWorkouts] = useState([]);
-  const [showWorkoutForm, setShowWorkoutForm] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  
+  const [exercise, setExercise] = useState('');
+  const [sets, setSets] = useState('');
+  const [reps, setReps] = useState('');
+  const [weight, setWeight] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  // Load workouts when component mounts
   useEffect(() => {
     loadWorkouts();
   }, []);
 
   const loadWorkouts = async () => {
+    setLoading(true);
     try {
-      const response = await fetch('/.netlify/functions/database', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action: 'getWorkouts', 
-          userId: currentUser.id 
-        })
-      });
-      
+      const response = await fetch(`/.netlify/functions/workouts?user=${encodeURIComponent(currentUser.email)}`);
+      if (!response.ok) throw new Error('Failed to load workouts');
       const data = await response.json();
       setWorkouts(data || []);
-    } catch (error) {
-      console.error('Error loading workouts:', error);
+    } catch (err) {
+      console.error('Error loading workouts:', err);
+      setError('Failed to load workout history');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleLogWorkout = () => {
-    setShowWorkoutForm(true);
-  };
+  const handleSaveWorkout = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
 
-  const handleViewProgress = () => {
-    alert(`You have ${workouts.length} workouts logged! \n\nComing soon: Detailed progress charts with musical visualizations! 🎵`);
-  };
-
-  const handleAddWorkout = async (workoutData) => {
     try {
-      const response = await fetch('/.netlify/functions/database', {
+      const response = await fetch('/.netlify/functions/workouts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action: 'addWorkout', 
-          userId: currentUser.id,
-          name: workoutData.name,
-          exercises: workoutData.exercises,
-          duration: workoutData.duration
+        body: JSON.stringify({
+          userEmail: currentUser.email,
+          exercise: exercise.trim(),
+          sets: parseInt(sets) || 0,
+          reps: parseInt(reps) || 0,
+          weight: parseFloat(weight) || 0
         })
       });
+
+      if (!response.ok) throw new Error('Failed to save workout');
+
+      setExercise('');
+      setSets('');
+      setReps('');
+      setWeight('');
+      await loadWorkouts();
       
-      if (response.ok) {
-        await loadWorkouts(); // Reload workouts
-        setShowWorkoutForm(false);
-        alert('Workout logged successfully! 💪');
-      }
-    } catch (error) {
-      console.error('Error adding workout:', error);
+    } catch (err) {
+      console.error('Error saving workout:', err);
+      setError('Failed to save workout. Please try again.');
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', padding: '2rem' }}>
-      <div style={{ maxWidth: '1200px', margin: '0 auto', background: 'white', borderRadius: '20px', padding: '3rem', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
+    <div style={{ 
+      minHeight: '100vh', 
+      background: '#fafafa',
+      padding: '2rem'
+    }}>
+      <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
         
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-          <h1 style={{ color: '#4a5568' }}>🎵 FitFiddle Dashboard</h1>
-          <button onClick={onLogout} style={{ background: '#e53e3e', color: 'white', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '8px', cursor: 'pointer' }}>
-            Logout
+        <div style={{ 
+          background: 'white', 
+          borderRadius: '16px', 
+          padding: '2rem', 
+          marginBottom: '1.5rem',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          border: '1px solid #e5e7eb',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div>
+            <h1 style={{ 
+              color: '#111827', 
+              margin: 0, 
+              marginBottom: '0.25rem',
+              fontSize: '1.875rem',
+              fontWeight: '700',
+              letterSpacing: '-0.025em'
+            }}>
+              FitFiddle
+            </h1>
+            <p style={{ color: '#6b7280', margin: 0, fontSize: '0.875rem' }}>
+              {currentUser?.email}
+            </p>
+          </div>
+          <button 
+            onClick={onLogout} 
+            style={{ 
+              background: 'white',
+              color: '#6b7280', 
+              border: '1px solid #e5e7eb', 
+              padding: '0.625rem 1.25rem', 
+              borderRadius: '8px', 
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = '#f9fafb';
+              e.target.style.borderColor = '#d1d5db';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'white';
+              e.target.style.borderColor = '#e5e7eb';
+            }}
+          >
+            Sign out
           </button>
         </div>
 
-        {/* Welcome Message */}
-        <div style={{ marginBottom: '2rem' }}>
-          <h2 style={{ color: '#718096' }}>Welcome, {currentUser?.email}!</h2>
-          <p style={{ color: '#a0aec0' }}>Ready to track your fitness journey with musical motivation?</p>
-        </div>
-
-        {/* Action Buttons */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem', marginBottom: '3rem' }}>
-          <div style={{ background: '#f7fafc', padding: '2rem', borderRadius: '12px', border: '2px solid #e2e8f0' }}>
-            <h3 style={{ color: '#4a5568' }}>Quick Actions</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
-              <button onClick={handleLogWorkout} style={{
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white', border: 'none', padding: '1rem', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem'
-              }}>
-                🏋️ Log New Workout
-              </button>
-              <button onClick={handleViewProgress} style={{
-                background: '#4299e1', color: 'white', border: 'none', padding: '1rem', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem'
-              }}>
-                📊 View Progress ({workouts.length})
-              </button>
-            </div>
-          </div>
-
-          {/* Recent Workouts */}
-          <div style={{ background: '#f7fafc', padding: '2rem', borderRadius: '12px', border: '2px solid #e2e8f0' }}>
-            <h3 style={{ color: '#4a5568' }}>Recent Activity</h3>
-            {workouts.length === 0 ? (
-              <p style={{ color: '#a0aec0', marginTop: '1rem' }}>No workouts logged yet. Start your fitness journey!</p>
-            ) : (
-              <div style={{ marginTop: '1rem' }}>
-                {workouts.slice(0, 3).map((workout, index) => (
-                  <div key={index} style={{ 
-                    padding: '0.5rem', 
-                    marginBottom: '0.5rem', 
-                    background: 'white', 
-                    borderRadius: '4px',
-                    border: '1px solid #e2e8f0'
-                  }}>
-                    <strong>{workout.name}</strong> - {workout.duration}min
-                    <br />
-                    <small style={{ color: '#718096' }}>
-                      {new Date(workout.date).toLocaleDateString()}
-                    </small>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Coming Soon Features */}
-        <div style={{
-          padding: '2rem', background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-          borderRadius: '12px', color: 'white', textAlign: 'center'
+        {/* Log Workout Section */}
+        <div style={{ 
+          background: 'white', 
+          borderRadius: '16px', 
+          padding: '2rem', 
+          marginBottom: '1.5rem',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          border: '1px solid #e5e7eb'
         }}>
-          <h3>🎵 Musical Fitness Features Coming Soon!</h3>
-          <p>Volume charts, muscle group breakdown, consistency heatmaps, and more!</p>
+          <h2 style={{ 
+            color: '#111827', 
+            marginBottom: '1.5rem',
+            fontSize: '1.125rem',
+            fontWeight: '600',
+            letterSpacing: '-0.015em'
+          }}>
+            Log Exercise
+          </h2>
+          
+          {error && (
+            <div style={{ 
+              background: '#fef2f2', 
+              color: '#991b1b', 
+              padding: '0.875rem', 
+              borderRadius: '8px', 
+              marginBottom: '1.5rem',
+              fontSize: '0.875rem',
+              border: '1px solid #fee2e2'
+            }}>
+              {error}
+            </div>
+          )}
+
+          <div>
+            <input
+              type="text"
+              placeholder="Exercise name"
+              value={exercise}
+              onChange={(e) => setExercise(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.875rem',
+                border: '1px solid #e5e7eb',
+                borderRadius: '10px',
+                fontSize: '0.9375rem',
+                marginBottom: '1rem',
+                background: '#fafafa',
+                color: '#111827',
+                transition: 'all 0.2s'
+              }}
+              onFocus={(e) => {
+                e.target.style.background = 'white';
+                e.target.style.borderColor = '#9ca3af';
+              }}
+              onBlur={(e) => {
+                e.target.style.background = '#fafafa';
+                e.target.style.borderColor = '#e5e7eb';
+              }}
+            />
+
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '0.875rem',
+              marginBottom: '1.5rem'
+            }}>
+              <div>
+                <label style={{ 
+                  fontSize: '0.8125rem', 
+                  fontWeight: '500', 
+                  color: '#6b7280', 
+                  marginBottom: '0.5rem',
+                  display: 'block',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.025em'
+                }}>
+                  Sets
+                </label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={sets}
+                  onChange={(e) => setSets(e.target.value)}
+                  min="0"
+                  style={{
+                    width: '100%',
+                    padding: '0.875rem',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '10px',
+                    fontSize: '0.9375rem',
+                    textAlign: 'center',
+                    background: '#fafafa',
+                    color: '#111827',
+                    fontWeight: '500',
+                    transition: 'all 0.2s'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.background = 'white';
+                    e.target.style.borderColor = '#9ca3af';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.background = '#fafafa';
+                    e.target.style.borderColor = '#e5e7eb';
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ 
+                  fontSize: '0.8125rem', 
+                  fontWeight: '500', 
+                  color: '#6b7280', 
+                  marginBottom: '0.5rem',
+                  display: 'block',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.025em'
+                }}>
+                  Reps
+                </label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={reps}
+                  onChange={(e) => setReps(e.target.value)}
+                  min="0"
+                  style={{
+                    width: '100%',
+                    padding: '0.875rem',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '10px',
+                    fontSize: '0.9375rem',
+                    textAlign: 'center',
+                    background: '#fafafa',
+                    color: '#111827',
+                    fontWeight: '500',
+                    transition: 'all 0.2s'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.background = 'white';
+                    e.target.style.borderColor = '#9ca3af';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.background = '#fafafa';
+                    e.target.style.borderColor = '#e5e7eb';
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ 
+                  fontSize: '0.8125rem', 
+                  fontWeight: '500', 
+                  color: '#6b7280', 
+                  marginBottom: '0.5rem',
+                  display: 'block',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.025em'
+                }}>
+                  Weight
+                </label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={weight}
+                  onChange={(e) => setWeight(e.target.value)}
+                  min="0"
+                  step="0.5"
+                  style={{
+                    width: '100%',
+                    padding: '0.875rem',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '10px',
+                    fontSize: '0.9375rem',
+                    textAlign: 'center',
+                    background: '#fafafa',
+                    color: '#111827',
+                    fontWeight: '500',
+                    transition: 'all 0.2s'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.background = 'white';
+                    e.target.style.borderColor = '#9ca3af';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.background = '#fafafa';
+                    e.target.style.borderColor = '#e5e7eb';
+                  }}
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={handleSaveWorkout}
+              disabled={saving || !exercise || !sets || !reps || !weight}
+              style={{
+                width: '100%',
+                background: (saving || !exercise || !sets || !reps || !weight) ? '#f3f4f6' : '#111827',
+                color: (saving || !exercise || !sets || !reps || !weight) ? '#9ca3af' : 'white',
+                border: 'none',
+                padding: '0.875rem 1.5rem',
+                borderRadius: '10px',
+                fontSize: '0.9375rem',
+                fontWeight: '500',
+                cursor: (saving || !exercise || !sets || !reps || !weight) ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                if (!saving && exercise && sets && reps && weight) {
+                  e.target.style.background = '#1f2937';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!saving && exercise && sets && reps && weight) {
+                  e.target.style.background = '#111827';
+                }
+              }}
+            >
+              {saving ? 'Saving...' : 'Save Exercise'}
+            </button>
+          </div>
         </div>
 
-        {/* Simple Workout Form (when button clicked) */}
-        {showWorkoutForm && (
-          <div style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 1000
+        {/* Workout History */}
+        <div style={{ 
+          background: 'white', 
+          borderRadius: '16px', 
+          padding: '2rem',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          border: '1px solid #e5e7eb'
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            marginBottom: '1.5rem' 
           }}>
-            <div style={{ background: 'white', padding: '2rem', borderRadius: '12px', maxWidth: '500px', width: '90%' }}>
-              <h3>Log New Workout</h3>
-              <form onSubmit={(e) => {
-                e.preventDefault();
-                const formData = new FormData(e.target);
-                handleAddWorkout({
-                  name: formData.get('name'),
-                  exercises: formData.get('exercises').split(',').map(e => e.trim()),
-                  duration: parseInt(formData.get('duration'))
-                });
-              }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <input name="name" placeholder="Workout name" required style={{ padding: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '4px' }} />
-                  <input name="exercises" placeholder="Exercises (comma separated)" required style={{ padding: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '4px' }} />
-                  <input name="duration" type="number" placeholder="Duration (minutes)" required style={{ padding: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '4px' }} />
-                  <div style={{ display: 'flex', gap: '1rem' }}>
-                    <button type="submit" style={{ background: '#48bb78', color: 'white', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '4px', cursor: 'pointer' }}>Save Workout</button>
-                    <button type="button" onClick={() => setShowWorkoutForm(false)} style={{ background: '#e2e8f0', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
+            <h2 style={{ 
+              color: '#111827', 
+              margin: 0,
+              fontSize: '1.125rem',
+              fontWeight: '600',
+              letterSpacing: '-0.015em'
+            }}>
+              History
+            </h2>
+            <span style={{ 
+              color: '#9ca3af', 
+              fontSize: '0.875rem',
+              fontWeight: '500'
+            }}>
+              {workouts.length} {workouts.length === 1 ? 'exercise' : 'exercises'}
+            </span>
+          </div>
+
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
+              <div style={{
+                width: '32px',
+                height: '32px',
+                border: '3px solid #f3f4f6',
+                borderTop: '3px solid #9ca3af',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+                margin: '0 auto 1rem'
+              }}></div>
+              <p style={{ fontSize: '0.875rem', margin: 0 }}>Loading...</p>
+            </div>
+          ) : workouts.length === 0 ? (
+            <div style={{ 
+              textAlign: 'center', 
+              padding: '3rem', 
+              color: '#9ca3af', 
+              fontSize: '0.875rem' 
+            }}>
+              <svg style={{ width: '48px', height: '48px', margin: '0 auto 1rem', opacity: 0.3 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p style={{ margin: 0 }}>No exercises logged yet</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {workouts.map((workout, index) => (
+                <div
+                  key={workout.id || index}
+                  style={{
+                    background: '#fafafa',
+                    border: '1px solid #f3f4f6',
+                    borderRadius: '12px',
+                    padding: '1.25rem',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#f9fafb';
+                    e.currentTarget.style.borderColor = '#e5e7eb';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#fafafa';
+                    e.currentTarget.style.borderColor = '#f3f4f6';
+                  }}
+                >
+                  <div>
+                    <div style={{ 
+                      fontSize: '0.9375rem', 
+                      fontWeight: '600', 
+                      color: '#111827',
+                      textTransform: 'capitalize',
+                      marginBottom: '0.375rem'
+                    }}>
+                      {workout.exercise}
+                    </div>
+                    <div style={{ 
+                      color: '#6b7280', 
+                      fontSize: '0.8125rem',
+                      display: 'flex',
+                      gap: '0.75rem',
+                      alignItems: 'center'
+                    }}>
+                      <span>{workout.sets} × {workout.reps}</span>
+                      <span style={{ color: '#d1d5db' }}>•</span>
+                      <span>{new Date(workout.created_at).toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric'
+                      })}</span>
+                    </div>
+                  </div>
+                  
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ 
+                      fontSize: '1.5rem', 
+                      fontWeight: '700', 
+                      color: '#111827',
+                      letterSpacing: '-0.025em'
+                    }}>
+                      {workout.weight}
+                      <span style={{ 
+                        fontSize: '0.875rem', 
+                        color: '#9ca3af', 
+                        marginLeft: '0.25rem',
+                        fontWeight: '500'
+                      }}>
+                        kg
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </form>
+              ))}
             </div>
-          </div>
-        )}
+          )}
+        </div>
+
       </div>
+
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        
+        input::placeholder {
+          color: #d1d5db;
+        }
+        
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        
+        input[type=number] {
+          -moz-appearance: textfield;
+        }
+      `}</style>
     </div>
   );
 };
