@@ -18,7 +18,8 @@
     "react-chartjs-2": "^5.2.0",
     "date-fns": "^2.30.0",
     "@netlify/functions": "^2.4.0",
-    "pg": "^8.11.0"
+    "pg": "^8.11.0",
+    "@neondatabase/serverless": "^0.10.4"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.0",
