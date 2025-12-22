@@ -1,174 +1,109 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 
-const Dashboard = () => {
-  // Mock auth for now
-  const user = { email: 'user@fitasafiddle.com' };
-  const authLoading = false;
-  
-  const [exercise, setExercise] = useState('');
-  const [sets, setSets] = useState('');
-  const [reps, setReps] = useState('');
-  const [weight, setWeight] = useState('');
-  const [history, setHistory] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  const API_BASE_URL = '/api';
-
-  const fetchWorkoutHistory = async () => {
-    if (!user?.email) return;
-
-    try {
-      const res = await fetch(`${API_BASE_URL}/workouts?user=${encodeURIComponent(user.email)}`);
-      if (!res.ok) return;
-      
-      const data = await res.json();
-      setHistory(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Connection to backend failed:", err);
-    }
-  };
-
-  useEffect(() => {
-    if (user?.email) {
-      fetchWorkoutHistory();
-    }
-  }, [user?.email]);
-
-  const handleLogWorkout = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-
-    const payload = {
-      user_email: user.email,
-      exercise,
-      sets: Number(sets),
-      reps: Number(reps),
-      weight: Number(weight),
-    };
-
-    try {
-      const res = await fetch(`${API_BASE_URL}/workouts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) throw new Error('Save failed');
-      
-      alert('Workout logged! 💪');
-      setExercise('');
-      setSets('');
-      setReps('');
-      setWeight('');
-      fetchWorkoutHistory();
-    } catch (error) {
-      console.error('Error logging workout:', error);
-      alert('Failed to save workout');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (authLoading) {
-    return (
-      <div className="loading-container">
-        <div className="spinner"></div>
-        <p>Loading...</p>
-      </div>
-    );
-  }
-
-  if (!user?.email) {
-    return (
-      <div className="error-container">
-        <p>Please log in to continue</p>
-      </div>
-    );
-  }
-
+const Dashboard = ({ currentUser, onLogout }) => {
   return (
-    <div className="dashboard">
-      <header className="dashboard-header">
-        <h2 className="dashboard-title">FitasaFiddle 💪</h2>
-        <p className="user-email">{user.email}</p>
-      </header>
-
-      <div className="log-workout-section">
-        <h3 className="section-title">Log New Session</h3>
-        <form onSubmit={handleLogWorkout} className="workout-form">
-          <input
-            className="exercise-input"
-            value={exercise}
-            onChange={(e) => setExercise(e.target.value)}
-            placeholder="Exercise Name (e.g., Bench Press)"
-            required
-          />
-          
-          <div className="stats-grid">
-            <div className="stat-input">
-              <label>Sets</label>
-              <input
-                type="number"
-                value={sets}
-                onChange={(e) => setSets(e.target.value)}
-                placeholder="3"
-                required
-              />
-            </div>
-            <div className="stat-input">
-              <label>Reps</label>
-              <input
-                type="number"
-                value={reps}
-                onChange={(e) => setReps(e.target.value)}
-                placeholder="10"
-                required
-              />
-            </div>
-            <div className="stat-input">
-              <label>Weight (kg)</label>
-              <input
-                type="number"
-                value={weight}
-                onChange={(e) => setWeight(e.target.value)}
-                placeholder="60"
-                required
-              />
-            </div>
-          </div>
-          
-          <button
-            type="submit"
-            disabled={loading}
-            className="save-button"
+    <div style={{ 
+      minHeight: '100vh', 
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      padding: '2rem'
+    }}>
+      <div style={{ 
+        maxWidth: '1200px', 
+        margin: '0 auto', 
+        background: 'white', 
+        borderRadius: '20px', 
+        padding: '3rem', 
+        boxShadow: '0 20px 40px rgba(0,0,0,0.1)'
+      }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          marginBottom: '2rem' 
+        }}>
+          <h1 style={{ color: '#4a5568' }}>🎵 FitFiddle Dashboard</h1>
+          <button 
+            onClick={onLogout}
+            style={{
+              background: '#e53e3e',
+              color: 'white',
+              border: 'none',
+              padding: '0.75rem 1.5rem',
+              borderRadius: '8px',
+              cursor: 'pointer'
+            }}
           >
-            {loading ? 'Logging...' : 'Save Workout 💾'}
+            Logout
           </button>
-        </form>
-      </div>
+        </div>
+        
+        <div style={{ marginBottom: '2rem' }}>
+          <h2 style={{ color: '#718096' }}>Welcome, {currentUser?.email}!</h2>
+          <p style={{ color: '#a0aec0' }}>Ready to track your fitness journey with musical motivation?</p>
+        </div>
 
-      <div className="history-section">
-        <h3 className="section-title">Workout History</h3>
-        {history.length === 0 ? (
-          <div className="empty-state">
-            <p>No workouts logged yet. Start training! 🏋️</p>
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: '2rem',
+          marginBottom: '3rem'
+        }}>
+          <div style={{
+            background: '#f7fafc',
+            padding: '2rem',
+            borderRadius: '12px',
+            border: '2px solid #e2e8f0'
+          }}>
+            <h3 style={{ color: '#4a5568' }}>Quick Actions</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+              <button style={{
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+                border: 'none',
+                padding: '1rem',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '1rem'
+              }}>
+                🏋️ Log New Workout
+              </button>
+              <button style={{
+                background: '#4299e1',
+                color: 'white',
+                border: 'none',
+                padding: '1rem',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '1rem'
+              }}>
+                📊 View Progress
+              </button>
+            </div>
           </div>
-        ) : (
-          <div className="workout-list">
-            {history.map((w) => (
-              <div key={w.id} className="workout-card">
-                <div className="workout-info">
-                  <p className="exercise-name">{w.exercise}</p>
-                  <p className="workout-stats">{w.sets} sets × {w.reps} reps</p>
-                </div>
-                <div className="weight-display">
-                  <span className="weight-number">{w.weight}</span>
-                  <span className="weight-unit">kg</span>
-                </div>
-              </div>
-            ))}
+
+          <div style={{
+            background: '#f7fafc',
+            padding: '2rem',
+            borderRadius: '12px',
+            border: '2px solid #e2e8f0'
+          }}>
+            <h3 style={{ color: '#4a5568' }}>Recent Activity</h3>
+            <p style={{ color: '#a0aec0', marginTop: '1rem' }}>
+              No workouts logged yet. Start your fitness journey!
+            </p>
           </div>
-        )}
+        </div>
+
+        <div style={{
+          padding: '2rem',
+          background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+          borderRadius: '12px',
+          color: 'white',
+          textAlign: 'center'
+        }}>
+          <h3>🎵 Musical Fitness Features Coming Soon!</h3>
+          <p>Volume charts, muscle group breakdown, consistency heatmaps, and more!</p>
+        </div>
       </div>
     </div>
   );
