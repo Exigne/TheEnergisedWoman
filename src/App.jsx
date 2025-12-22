@@ -1,15 +1,62 @@
 import React, { useState, useEffect } from 'react';
 import { databaseAPI } from './api/database.js';
 import './App.css';
+
 const AuthForm = ({ isLogin, onSuccess, onSwitch }) => {
   const [formData, setFormData] = useState({ email: '', password: '', confirmPassword: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [debugInfo, setDebugInfo] = useState('');
+
+  // Debug function to test database connection
+  const testDatabase = async () => {
+    console.log('=== DATABASE DEBUG ===');
+    setDebugInfo('Testing connection...');
+    
+    try {
+      // Test the database function directly
+      const response = await fetch('/.netlify/functions/database', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          action: 'getUser', 
+          email: formData.email || 'test@test.com', 
+          password: formData.password || 'test123' 
+        })
+      });
+      
+      console.log('Response status:', response.status);
+      const text = await response.text();
+      console.log('Raw response:', `"${text}"`);
+      console.log('Response length:', text.length);
+      
+      setDebugInfo(`Raw response: "${text}" (${text.length} bytes)`);
+      
+      if (!text || text.trim() === '') {
+        setDebugInfo('❌ Empty response - database may need setup');
+      } else {
+        try {
+          const data = JSON.parse(text);
+          setDebugInfo(`Found: ${data ? JSON.stringify(data) : 'null'}`);
+        } catch (e) {
+          setDebugInfo(`Raw text: ${text}`);
+        }
+      }
+    } catch (err) {
+      setDebugInfo(`❌ Error: ${err.message}`);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+    setDebugInfo(''); // Clear debug info
+
+    console.log('=== LOGIN ATTEMPT ===');
+    console.log('Email:', formData.email);
+    console.log('Password:', formData.password);
+    console.log('Action:', isLogin ? 'login' : 'register');
 
     if (!isLogin && formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
@@ -21,21 +68,28 @@ const AuthForm = ({ isLogin, onSuccess, onSwitch }) => {
       let user;
       
       if (isLogin) {
+        console.log('Attempting login...');
         user = await databaseAPI.getUser(formData.email, formData.password);
+        console.log('Login result:', user);
+        
         if (!user) {
-          setError('Invalid credentials');
+          setError('Invalid credentials - user not found');
           setLoading(false);
           return;
         }
       } else {
+        console.log('Attempting registration...');
         user = await databaseAPI.createUser(formData.email, formData.password);
+        console.log('Registration result:', user);
       }
       
+      console.log('Success! User:', user);
       onSuccess(user);
       
     } catch (err) {
       console.error('Auth error:', err);
       setError(err.message || 'Authentication failed');
+      setDebugInfo(`Error: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -51,6 +105,22 @@ const AuthForm = ({ isLogin, onSuccess, onSwitch }) => {
         <p style={{ color: '#718096', marginBottom: '2rem' }}>Musical Fitness App</p>
         
         {error && <div style={{ background: '#fed7d7', color: '#c53030', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem' }}>{error}</div>}
+        
+        {/* DEBUG BUTTON - shows exactly what's happening */}
+        <button 
+          type="button" 
+          onClick={testDatabase}
+          style={{background: '#ff9800', color: 'white', padding: '0.5rem', marginBottom: '1rem', width: '100%', fontSize: '0.9rem'}}
+        >
+          🔍 Test Database Connection
+        </button>
+        
+        {/* DEBUG INFO DISPLAY */}
+        {debugInfo && (
+          <div style={{ background: '#e3f2fd', color: '#1565c0', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.8rem', wordBreak: 'break-all' }}>
+            {debugInfo}
+          </div>
+        )}
         
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <input
@@ -100,6 +170,7 @@ const AuthForm = ({ isLogin, onSuccess, onSwitch }) => {
   );
 };
 
+// Rest of your App.jsx (Dashboard and App components) remain the same...
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
