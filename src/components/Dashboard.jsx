@@ -1,563 +1,713 @@
 import React, { useState, useEffect } from 'react';
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement, PointElement, LineElement } from 'chart.js';
-import { Bar } from 'react-chartjs-2';
+import { Activity, Dumbbell, TrendingUp, Calendar } from 'lucide-react';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement, PointElement, LineElement);
-
-const ACTIVITY_CONFIG = {
-  'Bench Press': { group: 'Chest' },
-  'Squat': { group: 'Legs' },
-  'Deadlift': { group: 'Back' },
-  'Rows': { group: 'Back' },
-  'Pull-ups': { group: 'Back' },
-  'Overhead Press': { group: 'Shoulders' },
-  'Bicep Curls': { group: 'Arms' },
-  'Tricep Extensions': { group: 'Arms' },
-  'Running': { group: 'Cardio' },
-  'Swimming': { group: 'Full Body' },
-  'Pilates': { group: 'Core' }
+const EXERCISES = {
+  'Bench Press': { group: 'Chest', icon: '💪' },
+  'Squat': { group: 'Legs', icon: '🦵' },
+  'Deadlift': { group: 'Back', icon: '🏋️' },
+  'Overhead Press': { group: 'Shoulders', icon: '💪' },
+  'Pull-ups': { group: 'Back', icon: '🔝' },
+  'Rows': { group: 'Back', icon: '⬅️' },
+  'Bicep Curls': { group: 'Arms', icon: '💪' },
+  'Tricep Dips': { group: 'Arms', icon: '💪' },
+  'Lunges': { group: 'Legs', icon: '🦵' },
+  'Planks': { group: 'Core', icon: '🧘' }
 };
 
-const Dashboard = ({ currentUser, onLogout }) => {
+const FitnessDashboard = () => {
+  const [user, setUser] = useState(null);
   const [workouts, setWorkouts] = useState([]);
-  const [draftExercises, setDraftExercises] = useState([]);
-  const [exercise, setExercise] = useState('Bench Press');
+  const [isLoggingWorkout, setIsLoggingWorkout] = useState(false);
+  const [currentExercises, setCurrentExercises] = useState([]);
+  const [selectedExercise, setSelectedExercise] = useState('Bench Press');
   const [sets, setSets] = useState('');
   const [reps, setReps] = useState('');
   const [weight, setWeight] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => { 
-    if (currentUser?.email) {
-      loadData(); 
+  useEffect(() => {
+    const savedUser = localStorage.getItem('fitnessUser');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
     }
-  }, [currentUser]);
+  }, []);
 
-  const loadData = async () => {
-    setLoading(true);
-    setError(null);
-    
+  useEffect(() => {
+    if (user) {
+      loadWorkouts();
+    }
+  }, [user]);
+
+  const loadWorkouts = async () => {
     try {
-      const res = await fetch(`/.netlify/functions/database?user=${encodeURIComponent(currentUser.email)}`);
-      
-      if (!res.ok) {
-        throw new Error(`Failed to load data: ${res.status}`);
-      }
-      
+      const res = await fetch(`/.netlify/functions/database?user=${encodeURIComponent(user.email)}`);
       const data = await res.json();
-      
-      // Handle the new response format from improved database handler
-      if (data.workouts && Array.isArray(data.workouts)) {
-        setWorkouts(data.workouts);
-      } else {
-        setWorkouts([]);
-      }
-    } catch (e) { 
-      console.error("Fetch error", e);
-      setError("Failed to load workout history");
-      setWorkouts([]);
-    } finally {
-      setLoading(false);
+      setWorkouts(data.workouts || []);
+    } catch (e) {
+      console.error('Failed to load workouts', e);
     }
   };
 
-  const addToDraft = () => {
-    if (!sets || !reps) {
-      alert("Please enter sets and reps");
-      return;
-    }
-
-    const setsNum = parseInt(sets);
-    const repsNum = parseInt(reps);
-    const weightNum = parseFloat(weight) || 0;
-
-    if (setsNum <= 0 || repsNum <= 0) {
-      alert("Sets and reps must be greater than 0");
-      return;
-    }
-
-    const newEntry = {
-      name: exercise,
-      sets: setsNum,
-      reps: repsNum,
-      weight: weightNum,
-      group: ACTIVITY_CONFIG[exercise].group
-    };
-
-    setDraftExercises([...draftExercises, newEntry]);
-    setSets('');
-    setReps('');
-    setWeight('');
-  };
-
-  const removeDraftExercise = (index) => {
-    setDraftExercises(draftExercises.filter((_, i) => i !== index));
-  };
-
-  const handleFinishWorkout = async () => {
-    if (draftExercises.length === 0) {
-      alert("Add at least one exercise before finishing workout");
-      return;
-    }
-
-    setSaving(true);
-    setError(null);
-
+  const handleAuth = async () => {
+    if (!email || !password) return alert('Enter email and password');
+    setLoading(true);
     try {
       const res = await fetch('/.netlify/functions/database', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userEmail: currentUser.email,
-          exercises: draftExercises
-        })
+        body: JSON.stringify({ action: 'auth', email, password, isRegistering })
       });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to save workout');
+      const data = await res.json();
+      if (res.ok) {
+        const userData = { email: data.email };
+        setUser(userData);
+        localStorage.setItem('fitnessUser', JSON.stringify(userData));
+      } else {
+        alert(data.error);
       }
-
-      const result = await res.json();
-      
-      if (result.success) {
-        setDraftExercises([]);
-        await loadData();
-        alert('Workout saved successfully!');
-      }
-    } catch (err) { 
-      console.error('Save error:', err);
-      setError(err.message || 'Failed to save workout');
-      alert('Failed to save workout: ' + err.message);
-    } finally { 
-      setSaving(false); 
+    } catch (err) {
+      alert('Authentication failed');
     }
+    setLoading(false);
   };
 
-  // Calculate statistics from workouts
+  const addExercise = () => {
+    if (!sets || !reps) return alert('Enter sets and reps');
+    setCurrentExercises([...currentExercises, {
+      name: selectedExercise,
+      sets: parseInt(sets),
+      reps: parseInt(reps),
+      weight: parseFloat(weight) || 0,
+      group: EXERCISES[selectedExercise].group
+    }]);
+    setSets(''); setReps(''); setWeight('');
+  };
+
+  const finishWorkout = async () => {
+    if (currentExercises.length === 0) return;
+    setLoading(true);
+    try {
+      const res = await fetch('/.netlify/functions/database', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userEmail: user.email, exercises: currentExercises })
+      });
+      if (res.ok) {
+        setCurrentExercises([]);
+        setIsLoggingWorkout(false);
+        await loadWorkouts();
+      }
+    } catch (err) {
+      alert('Failed to save workout');
+    }
+    setLoading(false);
+  };
+
   const calculateStats = () => {
-    if (!workouts || workouts.length === 0) {
-      return { totalVolume: 0, totalExercises: 0, recentWorkouts: [] };
-    }
-
-    const recentWorkouts = workouts.slice(0, 5).map(workout => {
-      // Parse exercises from JSON if needed
-      const exercises = Array.isArray(workout.exercises) 
-        ? workout.exercises 
-        : [];
-
-      const totalVolume = exercises.reduce((sum, ex) => {
-        return sum + ((ex.sets || 0) * (ex.reps || 0) * (ex.weight || 0));
-      }, 0);
-
-      return {
-        date: workout.created_at,
-        exerciseCount: exercises.length,
-        totalVolume: totalVolume
-      };
-    });
-
-    const totalExercises = workouts.reduce((sum, w) => {
+    const totalSessions = workouts.length;
+    const totalVolume = workouts.reduce((sum, w) => {
       const exercises = Array.isArray(w.exercises) ? w.exercises : [];
-      return sum + exercises.length;
+      return sum + exercises.reduce((s, e) => s + (e.sets * e.reps * e.weight), 0);
     }, 0);
+    
+    const last7Days = workouts.slice(0, 7).map(w => {
+      const exercises = Array.isArray(w.exercises) ? w.exercises : [];
+      return {
+        date: new Date(w.created_at),
+        volume: exercises.reduce((s, e) => s + (e.sets * e.reps * e.weight), 0),
+        exercises: exercises.length
+      };
+    }).reverse();
 
-    return { recentWorkouts, totalExercises };
+    return { totalSessions, totalVolume, last7Days };
   };
 
-  const stats = calculateStats();
-
-  // Chart data
-  const volumeData = {
-    labels: stats.recentWorkouts.map(w => 
-      new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    ).reverse(),
-    datasets: [{
-      label: 'Total Volume (kg)',
-      data: stats.recentWorkouts.map(w => Math.round(w.totalVolume)).reverse(),
-      backgroundColor: '#38bdf8',
-      borderRadius: 8
-    }]
-  };
-
-  const chartOptions = {
-    maintainAspectRatio: false,
-    responsive: true,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        backgroundColor: '#1e293b',
-        titleColor: '#f8fafc',
-        bodyColor: '#f8fafc',
-        padding: 12,
-        displayColors: false
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        grid: { color: '#334155' },
-        ticks: { color: '#94a3b8' }
-      },
-      x: {
-        grid: { display: false },
-        ticks: { color: '#94a3b8' }
-      }
-    }
-  };
-
-  if (loading) {
+  if (!user) {
     return (
-      <div style={theme.wrapper}>
-        <div style={{ textAlign: 'center', marginTop: '100px' }}>
-          <div style={theme.spinner}></div>
-          <p style={{ color: '#94a3b8', marginTop: '20px' }}>Loading your data...</p>
+      <div style={styles.container}>
+        <div style={styles.authCard}>
+          <div style={styles.authHeader}>
+            <Dumbbell size={48} color="#6366f1" />
+            <h1 style={styles.authTitle}>FitTrack Pro</h1>
+            <p style={styles.authSubtitle}>Your Personal Fitness Journey</p>
+          </div>
+          <div style={styles.authForm}>
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              style={styles.authInput}
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              onKeyPress={e => e.key === 'Enter' && handleAuth()}
+              style={styles.authInput}
+            />
+            <button onClick={handleAuth} style={styles.authButton} disabled={loading}>
+              {loading ? 'Loading...' : (isRegistering ? 'Create Account' : 'Sign In')}
+            </button>
+            <button
+              onClick={() => setIsRegistering(!isRegistering)}
+              style={styles.toggleButton}
+            >
+              {isRegistering ? 'Already have an account? Sign in' : "Don't have an account? Register"}
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
+  const stats = calculateStats();
+  const avgVolume = stats.totalSessions > 0 ? Math.round(stats.totalVolume / stats.totalSessions) : 0;
+  const maxVolume = Math.max(...stats.last7Days.map(d => d.volume), 1);
+
   return (
-    <div style={theme.wrapper}>
-      <header style={theme.header}>
-        <div style={theme.profileSection}>
-          <div style={theme.avatar}>{currentUser.email[0].toUpperCase()}</div>
+    <div style={styles.container}>
+      <div style={styles.header}>
+        <div>
+          <h1 style={styles.greeting}>Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'}, {user.email.split('@')[0]}!</h1>
+          <p style={styles.date}>
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+          </p>
+        </div>
+        <button onClick={() => { setUser(null); localStorage.removeItem('fitnessUser'); }} style={styles.logoutBtn}>
+          Sign Out
+        </button>
+      </div>
+
+      <div style={styles.statsGrid}>
+        <div style={styles.statCard}>
+          <div style={styles.statIcon}>
+            <Dumbbell size={24} color="#fff" />
+          </div>
           <div>
-            <h2 style={{ margin: 0, fontSize: '20px' }}>{currentUser.email.split('@')[0]}</h2>
-            <span style={theme.badge}>{workouts.length} SESSIONS LOGGED</span>
-          </div>
-        </div>
-        <button onClick={onLogout} style={theme.logoutBtn}>Sign Out</button>
-      </header>
-
-      {error && (
-        <div style={theme.errorBanner}>
-          <span>⚠️ {error}</span>
-          <button onClick={() => setError(null)} style={theme.dismissBtn}>✕</button>
-        </div>
-      )}
-
-      <div style={theme.dashboardGrid}>
-        <div style={theme.column}>
-          <div style={theme.glassCard}>
-            <h3 style={theme.cardTitle}>Volume Progress</h3>
-            {stats.recentWorkouts.length > 0 ? (
-              <div style={{ height: '200px' }}>
-                <Bar data={volumeData} options={chartOptions} />
-              </div>
-            ) : (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: '#64748b' }}>
-                <p>No workout data yet</p>
-                <p style={{ fontSize: '14px' }}>Start logging workouts to see your progress!</p>
-              </div>
-            )}
-          </div>
-          
-          <div style={{...theme.glassCard, marginTop: '20px'}}>
-            <h3 style={theme.cardTitle}>Recent Sessions</h3>
-            {stats.recentWorkouts.length > 0 ? (
-              stats.recentWorkouts.slice(0, 4).map((session, i) => (
-                <div key={i} style={theme.historyItem}>
-                  <div>
-                    <div style={{ fontWeight: '600' }}>
-                      {new Date(session.date).toLocaleDateString(undefined, { 
-                        month: 'short', 
-                        day: 'numeric',
-                        year: 'numeric'
-                      })}
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                      {session.exerciseCount} exercise{session.exerciseCount !== 1 ? 's' : ''}
-                    </div>
-                  </div>
-                  <div style={{ color: '#38bdf8', fontWeight: 'bold' }}>
-                    {Math.round(session.totalVolume)}kg
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div style={{ textAlign: 'center', padding: '20px 0', color: '#64748b', fontSize: '14px' }}>
-                No sessions yet
-              </div>
-            )}
+            <div style={styles.statValue}>{stats.totalSessions}</div>
+            <div style={styles.statLabel}>Total Sessions</div>
           </div>
         </div>
 
-        <div style={theme.column}>
-          <div style={theme.actionCard}>
-            <h3 style={{ color: '#fff', marginTop: 0, marginBottom: '20px' }}>Record Workout</h3>
-            
-            <div style={theme.inputGroup}>
-              <label style={theme.label}>Exercise</label>
-              <select 
-                value={exercise} 
-                onChange={e => setExercise(e.target.value)} 
-                style={theme.input}
-              >
-                {Object.keys(ACTIVITY_CONFIG).map(name => 
-                  <option key={name} value={name}>{name}</option>
-                )}
-              </select>
-              
-              <div style={theme.row}>
-                <div>
-                  <label style={{...theme.label, fontSize: '10px'}}>Sets</label>
-                  <input 
-                    type="number" 
-                    placeholder="Sets" 
-                    value={sets} 
-                    onChange={e => setSets(e.target.value)} 
-                    style={theme.input}
-                    min="1"
-                  />
-                </div>
-                <div>
-                  <label style={{...theme.label, fontSize: '10px'}}>Reps</label>
-                  <input 
-                    type="number" 
-                    placeholder="Reps" 
-                    value={reps} 
-                    onChange={e => setReps(e.target.value)} 
-                    style={theme.input}
-                    min="1"
-                  />
-                </div>
-                <div>
-                  <label style={{...theme.label, fontSize: '10px'}}>Weight (kg)</label>
-                  <input 
-                    type="number" 
-                    placeholder="kg" 
-                    value={weight} 
-                    onChange={e => setWeight(e.target.value)} 
-                    style={theme.input}
-                    min="0"
-                    step="0.5"
-                  />
-                </div>
-              </div>
-              <button onClick={addToDraft} style={theme.secondaryBtn}>+ Add Exercise</button>
-            </div>
+        <div style={styles.statCard}>
+          <div style={{...styles.statIcon, background: 'linear-gradient(135deg, #f59e0b, #d97706)'}}>
+            🔥
+          </div>
+          <div>
+            <div style={styles.statValue}>{Math.round(stats.totalVolume)}kg</div>
+            <div style={styles.statLabel}>Total Volume</div>
+          </div>
+        </div>
 
-            {draftExercises.length > 0 && (
-              <div style={theme.draftList}>
-                <h4 style={{ margin: '0 0 10px 0', fontSize: '14px' }}>Current Session</h4>
-                {draftExercises.map((ex, i) => (
-                  <div key={i} style={theme.draftItem}>
-                    <div>
-                      <div style={{ fontWeight: '600' }}>{ex.name}</div>
-                      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>
-                        {ex.sets} × {ex.reps} {ex.weight > 0 ? `@ ${ex.weight}kg` : ''}
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => removeDraftExercise(i)} 
-                      style={theme.removeBtn}
-                      title="Remove exercise"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-                <div style={{ marginTop: '15px', padding: '12px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>Total Volume</div>
-                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#fff' }}>
-                    {draftExercises.reduce((sum, ex) => sum + (ex.sets * ex.reps * ex.weight), 0).toFixed(1)}kg
-                  </div>
-                </div>
-                <button 
-                  onClick={handleFinishWorkout} 
-                  disabled={saving} 
-                  style={{...theme.primaryBtn, opacity: saving ? 0.6 : 1}}
-                >
-                  {saving ? 'Saving...' : 'Finish Workout'}
-                </button>
-              </div>
-            )}
+        <div style={styles.statCard}>
+          <div style={{...styles.statIcon, background: 'linear-gradient(135deg, #8b5cf6, #6366f1)'}}>
+            <TrendingUp size={24} color="#fff" />
+          </div>
+          <div>
+            <div style={styles.statValue}>{avgVolume}kg</div>
+            <div style={styles.statLabel}>Avg Volume</div>
+          </div>
+        </div>
+
+        <div style={styles.statCard}>
+          <div style={{...styles.statIcon, background: 'linear-gradient(135deg, #10b981, #059669)'}}>
+            <Activity size={24} color="#fff" />
+          </div>
+          <div>
+            <div style={styles.statValue}>{stats.last7Days.length}</div>
+            <div style={styles.statLabel}>This Week</div>
           </div>
         </div>
       </div>
+
+      <div style={styles.mainGrid}>
+        <div style={styles.card}>
+          <div style={styles.cardHeader}>
+            <h3 style={styles.cardTitle}>📊 Weekly Progress</h3>
+          </div>
+          <div style={styles.chartContainer}>
+            {stats.last7Days.map((day, i) => (
+              <div key={i} style={styles.barWrapper}>
+                <div style={styles.barContainer}>
+                  <div 
+                    style={{
+                      ...styles.bar,
+                      height: `${(day.volume / maxVolume) * 100}%`,
+                      background: `linear-gradient(to top, ${['#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#06b6d4'][i % 7]}, ${['#be185d', '#d97706', '#059669', '#1d4ed8', '#6366f1', '#dc2626', '#0891b2'][i % 7]})`
+                    }}
+                  >
+                    <span style={styles.barValue}>{Math.round(day.volume)}</span>
+                  </div>
+                </div>
+                <div style={styles.barLabel}>{day.date.toLocaleDateString('en-US', { weekday: 'short' })[0]}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={styles.card}>
+          <div style={styles.cardHeader}>
+            <h3 style={styles.cardTitle}>📅 Recent Sessions</h3>
+          </div>
+          <div style={styles.sessionList}>
+            {workouts.slice(0, 4).map((w, i) => {
+              const exercises = Array.isArray(w.exercises) ? w.exercises : [];
+              const volume = exercises.reduce((s, e) => s + (e.sets * e.reps * e.weight), 0);
+              return (
+                <div key={i} style={styles.sessionItem}>
+                  <div style={styles.sessionIcon}>
+                    <Calendar size={16} color="#6366f1" />
+                  </div>
+                  <div style={styles.sessionInfo}>
+                    <div style={styles.sessionDate}>
+                      {new Date(w.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </div>
+                    <div style={styles.sessionExercises}>{exercises.length} exercises</div>
+                  </div>
+                  <div style={styles.sessionVolume}>{Math.round(volume)}kg</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {!isLoggingWorkout ? (
+        <button onClick={() => setIsLoggingWorkout(true)} style={styles.fabButton}>
+          <Dumbbell size={24} />
+          <span style={{ marginLeft: '8px' }}>Start Workout</span>
+        </button>
+      ) : (
+        <div style={styles.workoutPanel}>
+          <div style={styles.workoutHeader}>
+            <h3 style={styles.workoutTitle}>💪 Log Workout</h3>
+            <button onClick={() => setIsLoggingWorkout(false)} style={styles.closeBtn}>✕</button>
+          </div>
+          
+          <div style={styles.inputGrid}>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>Exercise</label>
+              <select value={selectedExercise} onChange={e => setSelectedExercise(e.target.value)} style={styles.select}>
+                {Object.keys(EXERCISES).map(name => (
+                  <option key={name} value={name}>{EXERCISES[name].icon} {name}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div style={styles.inputRow}>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Sets</label>
+                <input type="number" value={sets} onChange={e => setSets(e.target.value)} style={styles.input} />
+              </div>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Reps</label>
+                <input type="number" value={reps} onChange={e => setReps(e.target.value)} style={styles.input} />
+              </div>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Weight (kg)</label>
+                <input type="number" value={weight} onChange={e => setWeight(e.target.value)} style={styles.input} step="0.5" />
+              </div>
+            </div>
+            
+            <button onClick={addExercise} style={styles.addButton}>+ Add Exercise</button>
+          </div>
+
+          {currentExercises.length > 0 && (
+            <div style={styles.exerciseList}>
+              <h4 style={styles.listTitle}>Current Session</h4>
+              {currentExercises.map((ex, i) => (
+                <div key={i} style={styles.exerciseItem}>
+                  <span>{EXERCISES[ex.name].icon} {ex.name}</span>
+                  <span style={styles.exerciseDetails}>{ex.sets} × {ex.reps} @ {ex.weight}kg</span>
+                </div>
+              ))}
+              <div style={styles.totalVolume}>
+                Total: {currentExercises.reduce((s, e) => s + (e.sets * e.reps * e.weight), 0).toFixed(1)}kg
+              </div>
+              <button onClick={finishWorkout} disabled={loading} style={styles.finishButton}>
+                {loading ? 'Saving...' : '✓ Finish Workout'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
 
-const theme = {
-  wrapper: { 
-    minHeight: '100vh', 
-    backgroundColor: '#020617', 
-    color: '#f8fafc', 
-    padding: '40px', 
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' 
+const styles = {
+  container: {
+    minHeight: '100vh',
+    background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)',
+    color: '#f8fafc',
+    padding: '24px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
   },
-  header: { 
-    display: 'flex', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: '40px' 
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: '32px'
   },
-  profileSection: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: '15px' 
+  greeting: {
+    fontSize: '32px',
+    fontWeight: '700',
+    margin: '0 0 4px 0',
+    background: 'linear-gradient(135deg, #f8fafc, #cbd5e1)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent'
   },
-  avatar: { 
-    width: '42px', 
-    height: '42px', 
-    borderRadius: '10px', 
-    background: '#38bdf8', 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    fontWeight: '800', 
-    color: '#020617' 
+  date: {
+    color: '#94a3b8',
+    fontSize: '14px'
   },
-  badge: { 
-    fontSize: '11px', 
-    color: '#38bdf8', 
-    fontWeight: 'bold' 
+  logoutBtn: {
+    padding: '8px 16px',
+    background: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '12px',
+    color: '#94a3b8',
+    cursor: 'pointer',
+    fontSize: '14px'
   },
-  dashboardGrid: { 
-    display: 'grid', 
-    gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', 
-    gap: '24px' 
+  statsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '16px',
+    marginBottom: '24px'
   },
-  glassCard: { 
-    background: '#1e293b', 
-    borderRadius: '24px', 
-    padding: '24px', 
-    border: '1px solid #334155' 
+  statCard: {
+    background: 'rgba(255, 255, 255, 0.05)',
+    backdropFilter: 'blur(10px)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '20px',
+    padding: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px'
   },
-  actionCard: { 
-    background: 'linear-gradient(145deg, #4f46e5, #3730a3)', 
-    borderRadius: '24px', 
-    padding: '24px', 
-    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)' 
+  statIcon: {
+    width: '48px',
+    height: '48px',
+    borderRadius: '12px',
+    background: 'linear-gradient(135deg, #ec4899, #be185d)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '24px'
   },
-  cardTitle: { 
-    fontSize: '13px', 
-    color: '#94a3b8', 
-    marginBottom: '20px', 
-    textTransform: 'uppercase', 
-    letterSpacing: '0.05em',
-    marginTop: 0
-  },
-  inputGroup: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '10px' 
-  },
-  label: { 
-    fontSize: '12px', 
-    color: 'rgba(255,255,255,0.8)', 
-    fontWeight: '500',
+  statValue: {
+    fontSize: '24px',
+    fontWeight: '700',
     marginBottom: '4px'
   },
-  input: { 
-    padding: '12px', 
-    borderRadius: '12px', 
-    border: 'none', 
-    backgroundColor: 'rgba(255,255,255,0.1)', 
-    color: '#fff', 
-    fontSize: '14px',
-    outline: 'none'
-  },
-  row: { 
-    display: 'grid', 
-    gridTemplateColumns: '1fr 1fr 1fr', 
-    gap: '10px' 
-  },
-  secondaryBtn: { 
-    padding: '12px', 
-    borderRadius: '12px', 
-    border: '1px solid rgba(255,255,255,0.3)', 
-    background: 'rgba(255,255,255,0.05)', 
-    color: '#fff', 
-    cursor: 'pointer', 
-    fontWeight: '600',
-    transition: 'all 0.2s'
-  },
-  primaryBtn: { 
-    marginTop: '15px', 
-    padding: '14px', 
-    borderRadius: '12px', 
-    border: 'none', 
-    backgroundColor: '#fff', 
-    color: '#4338ca', 
-    fontWeight: '800', 
-    cursor: 'pointer', 
-    width: '100%',
-    transition: 'all 0.2s'
-  },
-  draftList: { 
-    marginTop: '20px', 
-    padding: '15px', 
-    backgroundColor: 'rgba(0,0,0,0.2)', 
-    borderRadius: '16px' 
-  },
-  draftItem: { 
-    display: 'flex', 
-    justifyContent: 'space-between', 
-    alignItems: 'center',
-    padding: '12px', 
-    borderBottom: '1px solid rgba(255,255,255,0.05)', 
-    fontSize: '13px' 
-  },
-  historyItem: { 
-    display: 'flex', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    padding: '12px 0', 
-    borderBottom: '1px solid #334155' 
-  },
-  logoutBtn: { 
-    background: 'transparent', 
-    border: '1px solid #334155', 
-    color: '#94a3b8', 
-    padding: '8px 16px', 
-    borderRadius: '10px', 
-    fontSize: '13px', 
-    cursor: 'pointer',
-    transition: 'all 0.2s'
-  },
-  removeBtn: {
-    background: 'rgba(239, 68, 68, 0.2)',
-    border: '1px solid rgba(239, 68, 68, 0.3)',
-    color: '#ef4444',
-    padding: '4px 8px',
-    borderRadius: '6px',
-    cursor: 'pointer',
+  statLabel: {
     fontSize: '12px',
-    fontWeight: 'bold'
+    color: '#94a3b8'
   },
-  errorBanner: {
-    background: '#7f1d1d',
-    border: '1px solid #991b1b',
+  mainGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+    gap: '24px',
+    marginBottom: '100px'
+  },
+  card: {
+    background: 'rgba(255, 255, 255, 0.05)',
+    backdropFilter: 'blur(10px)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '24px',
+    padding: '24px'
+  },
+  cardHeader: {
+    marginBottom: '20px'
+  },
+  cardTitle: {
+    fontSize: '16px',
+    fontWeight: '600',
+    margin: 0
+  },
+  chartContainer: {
+    display: 'flex',
+    alignItems: 'flex-end',
+    gap: '12px',
+    height: '200px'
+  },
+  barWrapper: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '8px'
+  },
+  barContainer: {
+    flex: 1,
+    width: '100%',
+    display: 'flex',
+    alignItems: 'flex-end'
+  },
+  bar: {
+    width: '100%',
+    borderRadius: '8px 8px 0 0',
+    position: 'relative',
+    minHeight: '4px',
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    paddingTop: '4px'
+  },
+  barValue: {
+    fontSize: '10px',
+    fontWeight: '700',
+    color: '#fff'
+  },
+  barLabel: {
+    fontSize: '12px',
+    color: '#94a3b8',
+    fontWeight: '600'
+  },
+  sessionList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px'
+  },
+  sessionItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '12px',
+    background: 'rgba(255, 255, 255, 0.03)',
     borderRadius: '12px',
-    padding: '12px 16px',
-    marginBottom: '20px',
+    border: '1px solid rgba(255, 255, 255, 0.05)'
+  },
+  sessionIcon: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    background: 'rgba(99, 102, 241, 0.2)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  sessionInfo: {
+    flex: 1
+  },
+  sessionDate: {
+    fontSize: '14px',
+    fontWeight: '600',
+    marginBottom: '2px'
+  },
+  sessionExercises: {
+    fontSize: '12px',
+    color: '#94a3b8'
+  },
+  sessionVolume: {
+    fontSize: '16px',
+    fontWeight: '700',
+    color: '#6366f1'
+  },
+  fabButton: {
+    position: 'fixed',
+    bottom: '24px',
+    right: '24px',
+    padding: '16px 32px',
+    background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+    border: 'none',
+    borderRadius: '16px',
+    color: '#fff',
+    fontSize: '16px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    boxShadow: '0 8px 24px rgba(99, 102, 241, 0.4)',
+    display: 'flex',
+    alignItems: 'center'
+  },
+  workoutPanel: {
+    position: 'fixed',
+    bottom: '24px',
+    right: '24px',
+    width: '400px',
+    maxWidth: 'calc(100vw - 48px)',
+    background: 'rgba(30, 27, 75, 0.95)',
+    backdropFilter: 'blur(20px)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '24px',
+    padding: '24px',
+    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)'
+  },
+  workoutHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    color: '#fecaca'
+    marginBottom: '20px'
   },
-  dismissBtn: {
+  workoutTitle: {
+    fontSize: '18px',
+    fontWeight: '700',
+    margin: 0
+  },
+  closeBtn: {
+    background: 'rgba(255, 255, 255, 0.1)',
+    border: 'none',
+    color: '#fff',
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '18px'
+  },
+  inputGrid: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px'
+  },
+  inputGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px'
+  },
+  inputRow: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr 1fr',
+    gap: '12px'
+  },
+  label: {
+    fontSize: '12px',
+    color: '#94a3b8',
+    fontWeight: '600'
+  },
+  select: {
+    padding: '12px',
+    background: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '12px',
+    color: '#fff',
+    fontSize: '14px',
+    outline: 'none'
+  },
+  input: {
+    padding: '12px',
+    background: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '12px',
+    color: '#fff',
+    fontSize: '14px',
+    outline: 'none'
+  },
+  addButton: {
+    padding: '12px',
+    background: 'rgba(255, 255, 255, 0.1)',
+    border: '1px solid rgba(255, 255, 255, 0.2)',
+    borderRadius: '12px',
+    color: '#fff',
+    fontWeight: '600',
+    cursor: 'pointer'
+  },
+  exerciseList: {
+    marginTop: '20px',
+    padding: '16px',
+    background: 'rgba(0, 0, 0, 0.2)',
+    borderRadius: '16px'
+  },
+  listTitle: {
+    fontSize: '14px',
+    fontWeight: '600',
+    marginTop: 0,
+    marginBottom: '12px'
+  },
+  exerciseItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    padding: '8px 0',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+    fontSize: '14px'
+  },
+  exerciseDetails: {
+    color: '#94a3b8'
+  },
+  totalVolume: {
+    marginTop: '12px',
+    padding: '12px',
+    background: 'rgba(99, 102, 241, 0.1)',
+    borderRadius: '8px',
+    textAlign: 'center',
+    fontSize: '16px',
+    fontWeight: '700',
+    color: '#6366f1'
+  },
+  finishButton: {
+    marginTop: '12px',
+    width: '100%',
+    padding: '14px',
+    background: 'linear-gradient(135deg, #10b981, #059669)',
+    border: 'none',
+    borderRadius: '12px',
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: '16px',
+    cursor: 'pointer'
+  },
+  authCard: {
+    maxWidth: '400px',
+    margin: '80px auto',
+    background: 'rgba(255, 255, 255, 0.05)',
+    backdropFilter: 'blur(20px)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '24px',
+    padding: '40px'
+  },
+  authHeader: {
+    textAlign: 'center',
+    marginBottom: '32px'
+  },
+  authTitle: {
+    fontSize: '32px',
+    fontWeight: '700',
+    margin: '16px 0 8px',
+    background: 'linear-gradient(135deg, #6366f1, #ec4899)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent'
+  },
+  authSubtitle: {
+    color: '#94a3b8',
+    fontSize: '14px'
+  },
+  authForm: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px'
+  },
+  authInput: {
+    padding: '14px',
+    background: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '12px',
+    color: '#fff',
+    fontSize: '14px',
+    outline: 'none'
+  },
+  authButton: {
+    padding: '14px',
+    background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+    border: 'none',
+    borderRadius: '12px',
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: '16px',
+    cursor: 'pointer'
+  },
+  toggleButton: {
+    padding: '12px',
     background: 'transparent',
     border: 'none',
-    color: '#fecaca',
-    cursor: 'pointer',
-    fontSize: '18px',
-    padding: '0 4px'
-  },
-  spinner: {
-    border: '4px solid #334155',
-    borderTop: '4px solid #38bdf8',
-    borderRadius: '50%',
-    width: '40px',
-    height: '40px',
-    animation: 'spin 1s linear infinite',
-    margin: '0 auto'
+    color: '#94a3b8',
+    fontSize: '14px',
+    cursor: 'pointer'
   }
 };
 
-export default Dashboard;
+export default FitnessDashboard;
