@@ -7,16 +7,17 @@ export const handler = async (event) => {
   const headers = { 
     'Access-Control-Allow-Origin': '*', 
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type'
   };
   
+  // Handle CORS preflight requests
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers, body: '' };
   }
 
   try {
-    // GET requests - Fetch user data
+    // --- GET: Fetch Workouts ---
     if (event.httpMethod === 'GET') {
       const { user } = event.queryStringParameters || {};
       
@@ -45,16 +46,13 @@ export const handler = async (event) => {
       return { statusCode: 200, headers, body: JSON.stringify({ workouts }) };
     }
 
-    // POST requests
+    // --- POST: Auth and Workout Creation ---
     if (event.httpMethod === 'POST') {
       const body = JSON.parse(event.body);
 
-      // Authentication Handler
+      // 1. Authentication Action
       if (body.action === 'auth') {
         const { email, password, isRegistering } = body;
-        if (!email || !password) {
-          return { statusCode: 400, headers, body: JSON.stringify({ error: 'Email and password required' }) };
-        }
 
         if (isRegistering) {
           const hashedPassword = await bcrypt.hash(password, 10);
@@ -77,18 +75,9 @@ export const handler = async (event) => {
         }
       }
 
-      // Workout Creation Handler (FIXED KEYS)
+      // 2. Workout Logging Action
       if (body.exercises && Array.isArray(body.exercises)) {
         const { userEmail, exercises } = body;
-
-        if (!userEmail) {
-          return { statusCode: 400, headers, body: JSON.stringify({ error: 'User email required' }) };
-        }
-
-        const userExists = await sql`SELECT email FROM users WHERE email = ${userEmail}`;
-        if (userExists.length === 0) {
-          return { statusCode: 404, headers, body: JSON.stringify({ error: 'User not found' }) };
-        }
 
         const workout = await sql`
           INSERT INTO workouts (user_email) 
@@ -97,14 +86,12 @@ export const handler = async (event) => {
         `;
         
         const workoutId = workout[0].id;
-
-        // FIXED: Mapping to match Dashboard.jsx keys (exercise_name and group)
         const exerciseInserts = exercises.map(ex => 
           sql`
             INSERT INTO workout_logs (workout_id, exercise_name, muscle_group, sets, reps, weight)
             VALUES (
               ${workoutId}, 
-              ${ex.exercise_name || 'Unknown'}, 
+              ${ex.exercise_name}, 
               ${ex.group || 'General'}, 
               ${parseInt(ex.sets) || 0}, 
               ${parseInt(ex.reps) || 0}, 
@@ -114,19 +101,33 @@ export const handler = async (event) => {
         );
 
         await Promise.all(exerciseInserts);
-
-        return { 
-          statusCode: 201, 
-          headers, 
-          body: JSON.stringify({ success: true, workoutId }) 
-        };
+        return { statusCode: 201, headers, body: JSON.stringify({ success: true, workoutId }) };
       }
+    }
+
+    // --- DELETE: Remove Workout ---
+    if (event.httpMethod === 'DELETE') {
+      const { workoutId } = event.queryStringParameters || {};
+
+      if (!workoutId) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Workout ID required' }) };
+      }
+
+      // We delete from workout_logs first because of the Foreign Key relationship
+      await sql`DELETE FROM workout_logs WHERE workout_id = ${workoutId}`;
+      await sql`DELETE FROM workouts WHERE id = ${workoutId}`;
+
+      return { 
+        statusCode: 200, 
+        headers, 
+        body: JSON.stringify({ message: 'Workout deleted successfully' }) 
+      };
     }
 
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
 
   } catch (e) {
-    console.error('Database error:', e);
+    console.error('Database Error:', e);
     return { 
       statusCode: 500, 
       headers, 
