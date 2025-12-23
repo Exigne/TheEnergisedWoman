@@ -1,10 +1,29 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Dumbbell, Calendar, Heart, Sparkles, Trash2, X, Trophy, User, Target, Zap, Wind, LogOut } from 'lucide-react';
+import { Dumbbell, Calendar, Heart, Sparkles, Trash2, X, Trophy, User, Target, Zap, Wind, LogOut, Clock, TrendingUp } from 'lucide-react';
 
 const EXERCISES = {
   strength: { 'Bench Press': 'Chest', 'Squat': 'Legs', 'Deadlift': 'Back', 'Overhead Press': 'Shoulders', 'Rows': 'Back', 'Bicep Curls': 'Arms' },
   cardio: { 'Running': 'Cardio', 'Cycling': 'Cardio', 'Swimming': 'Cardio' },
   stretch: { 'Yoga': 'Flexibility', 'Mobility Work': 'Flexibility' }
+};
+
+// Workout type configurations
+const WORKOUT_CONFIGS = {
+  strength: {
+    fields: ['sets', 'reps', 'weight'],
+    labels: { sets: 'SETS', reps: 'REPS', weight: 'KG' },
+    placeholders: { sets: 'Sets', reps: 'Reps', weight: 'Weight (kg)' }
+  },
+  cardio: {
+    fields: ['minutes', 'distance'],
+    labels: { minutes: 'MINUTES', distance: 'DISTANCE' },
+    placeholders: { minutes: 'Minutes', distance: 'Distance (km)' }
+  },
+  stretch: {
+    fields: ['minutes'],
+    labels: { minutes: 'MINUTES' },
+    placeholders: { minutes: 'Minutes' }
+  }
 };
 
 const Dashboard = () => {
@@ -13,9 +32,7 @@ const Dashboard = () => {
   const [isLogging, setIsLogging] = useState(false);
   const [workoutType, setWorkoutType] = useState('strength');
   const [selectedEx, setSelectedEx] = useState('Bench Press');
-  const [sets, setSets] = useState('');
-  const [reps, setReps] = useState('');
-  const [weight, setWeight] = useState('');
+  const [formData, setFormData] = useState({ sets: '', reps: '', weight: '', minutes: '', distance: '' });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -32,6 +49,7 @@ const Dashboard = () => {
       if (!res.ok) throw new Error('Failed to fetch data');
       
       const data = await res.json();
+      console.log('Database response:', data); // Debug log
       setAllData(data || { workouts: [], users: [] });
     } catch (e) {
       console.error('Load data error:', e);
@@ -50,9 +68,22 @@ const Dashboard = () => {
     if (user) loadData();
   }, [user, loadData]);
 
+  // Reset form data when workout type changes
+  useEffect(() => {
+    setFormData({ sets: '', reps: '', weight: '', minutes: '', distance: '' });
+    // Set default exercise for workout type
+    const firstExercise = Object.keys(EXERCISES[workoutType])[0];
+    setSelectedEx(firstExercise);
+  }, [workoutType]);
+
   const finishWorkout = async () => {
-    if (!sets || !reps || !weight) {
-      alert('Please fill in all fields');
+    const config = WORKOUT_CONFIGS[workoutType];
+    const requiredFields = config.fields;
+    
+    // Validate required fields
+    const missingFields = requiredFields.filter(field => !formData[field]);
+    if (missingFields.length > 0) {
+      alert(`Please fill in: ${missingFields.join(', ')}`);
       return;
     }
 
@@ -60,12 +91,25 @@ const Dashboard = () => {
     setError(null);
     
     try {
-      const payload = [{ 
-        exercise_name: selectedEx, 
-        sets: Number(sets), 
-        reps: Number(reps), 
-        weight: Number(weight) 
-      }];
+      // Create exercise payload based on workout type
+      let exerciseData = {
+        exercise_name: selectedEx,
+        workout_type: workoutType
+      };
+
+      // Add workout-specific fields
+      if (workoutType === 'strength') {
+        exerciseData.sets = Number(formData.sets);
+        exerciseData.reps = Number(formData.reps);
+        exerciseData.weight = Number(formData.weight);
+      } else if (workoutType === 'cardio') {
+        exerciseData.minutes = Number(formData.minutes);
+        exerciseData.distance = Number(formData.distance);
+      } else if (workoutType === 'stretch') {
+        exerciseData.minutes = Number(formData.minutes);
+      }
+
+      const payload = [exerciseData];
       
       const res = await fetch('/.netlify/functions/database', {
         method: 'POST',
@@ -76,9 +120,7 @@ const Dashboard = () => {
       if (!res.ok) throw new Error('Failed to save workout');
       
       setIsLogging(false);
-      setSets(''); 
-      setReps(''); 
-      setWeight('');
+      setFormData({ sets: '', reps: '', weight: '', minutes: '', distance: '' });
       await loadData();
       
     } catch (e) {
@@ -113,7 +155,7 @@ const Dashboard = () => {
       localStorage.setItem('fitnessUser', JSON.stringify(userData));
       
     } catch (e) {
-      console.error('Auth error:', e);
+      console.error('Auth error', e);
       setError('Authentication failed');
     } finally {
       setLoading(false);
@@ -137,13 +179,14 @@ const Dashboard = () => {
       await loadData();
       
     } catch (e) {
-      console.error('Delete error:', e);
+      console.error('Delete error', e);
       setError('Failed to delete workout');
     } finally {
       setLoading(false);
     }
   };
 
+  // Updated stats calculation to handle different workout types
   const stats = (() => {
     if (!user || !allData?.workouts) {
       return { myLogs: [], muscleSplit: {}, pbs: {}, league: [] };
@@ -154,9 +197,29 @@ const Dashboard = () => {
     const pbs = {};
 
     myLogs.forEach(w => {
-      const group = EXERCISES.strength[w.ex_name] || EXERCISES.cardio[w.ex_name] || EXERCISES.stretch[w.ex_name];
+      // Handle both flattened data from function and raw JSONB data
+      const exerciseName = w.ex_name || (w.exercises && w.exercises[0] && w.exercises[0].exercise_name) || 'Unknown';
+      const workoutType = w.workout_type || (w.exercises && w.exercises[0] && w.exercises[0].workout_type) || 'strength';
+      
+      // Get muscle group based on exercise name
+      let group = null;
+      if (workoutType === 'cardio') {
+        group = 'Cardio';
+      } else if (workoutType === 'stretch') {
+        group = 'Flexibility';
+      } else {
+        // For strength exercises, map to muscle groups
+        group = EXERCISES.strength[exerciseName] || 'Other';
+      }
+      
       if (group) muscleSplit[group]++;
-      if (w.ex_weight > (pbs[w.ex_name] || 0)) pbs[w.ex_name] = w.ex_weight;
+      
+      // Track personal bests for strength exercises only
+      if (workoutType === 'strength' && w.ex_weight) {
+        if (w.ex_weight > (pbs[exerciseName] || 0)) {
+          pbs[exerciseName] = w.ex_weight;
+        }
+      }
     });
 
     const league = Object.entries((allData.workouts || []).reduce((acc, w) => {
@@ -170,58 +233,32 @@ const Dashboard = () => {
     return { myLogs, muscleSplit, pbs, league };
   })();
 
-  // Define styles BEFORE using them in JSX
-  const styles = {
-    container: { minHeight: '100vh', background: '#0a0f1d', color: '#f8fafc', padding: '40px', fontFamily: 'sans-serif' },
-    header: { display:'flex', justifyContent:'space-between', marginBottom:'40px', alignItems:'center' },
-    brandTitle: { color:'#6366f1', margin:0, fontWeight:'900', fontSize:'28px' },
-    gridTop: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'25px', marginBottom:'25px' },
-    gridBottom: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'25px', paddingBottom:'100px' },
-    card: { background:'#161d2f', padding:'25px', borderRadius:'24px', border:'1px solid rgba(255,255,255,0.05)' },
-    cardHeader: { display:'flex', gap:'10px', alignItems:'center', marginBottom:'20px' },
-    row: { display:'flex', justifyContent:'space-between', padding:'12px', background:'rgba(255,255,255,0.02)', borderRadius:'12px', marginBottom:'8px' },
-    balanceRow: { display:'flex', alignItems:'center', gap:'15px', marginBottom:'12px' },
-    groupLabel: { width:'80px', fontSize:'11px', color:'#94a3b8' },
-    barBg: { flex:1, height:'8px', background:'#0a0f1d', borderRadius:'10px' },
-    barFill: { height:'100%', background:'#6366f1', borderRadius:'10px' },
-    scrollArea: { maxHeight:'400px', overflowY:'auto' },
-    historyItem: { display:'flex', padding:'18px', background:'rgba(255,255,255,0.03)', borderRadius:'18px', marginBottom:'12px', alignItems:'center' },
-    dateText: { color:'#6366f1', fontWeight:'bold', width:'65px', fontSize:'12px' },
-    leagueItem: { display:'flex', alignItems:'center', gap:'15px', padding:'14px', background:'rgba(255,255,255,0.02)', borderRadius:'14px', marginBottom:'10px' },
-    rankCircle: { width:'24px', height:'24px', background:'#0a0f1d', borderRadius:'50%', textAlign:'center', fontSize:'11px', lineHeight:'24px' },
-    fabContainer: { position:'fixed', bottom:'30px', left:'50%', transform:'translateX(-50%)', display:'flex', gap:'15px', zIndex: 100 },
-    fab: { padding:'16px 28px', borderRadius:'22px', color:'#fff', border:'none', cursor:'pointer', display:'flex', gap:'10px', fontWeight:'bold' },
-    modalOverlay: { position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', backdropFilter:'blur(5px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200 },
-    modalContent: { background:'#161d2f', padding:'35px', borderRadius:'32px', width:'90%', maxWidth:'420px' },
-    modalHeader: { display:'flex', justifyContent:'space-between', marginBottom:'25px', alignItems:'center' },
-    label: { fontSize:'10px', color:'#94a3b8', marginBottom:'5px', display:'block' },
-    inputGrid: { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'15px' },
-    input: { width:'100%', padding:'16px', borderRadius:'16px', background:'#0a0f1d', color:'#fff', border:'1px solid #1e293b', marginBottom:'20px', boxSizing:'border-box' },
-    mainBtn: { width:'100%', padding:'18px', background:'#6366f1', color:'#fff', border:'none', borderRadius:'18px', fontWeight:'bold', cursor:'pointer' },
-    logoutBtn: { background:'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px 18px', borderRadius: '12px', border: '1px solid rgba(239, 68, 68, 0.2)', cursor: 'pointer', display:'flex', alignItems:'center', gap:'8px', fontSize:'14px', fontWeight:'bold' },
-    authCard: { maxWidth:'400px', margin:'100px auto', background:'#161d2f', padding:'50px', borderRadius:'40px', textAlign:'center' },
-    error: { color: '#ef4444', fontSize: '14px', marginBottom: '15px', textAlign: 'center' },
-    errorBanner: { 
-      background: 'rgba(239, 68, 68, 0.1)', 
-      color: '#ef4444', 
-      padding: '12px', 
-      borderRadius: '12px', 
-      marginBottom: '20px',
-      textAlign: 'center'
-    },
-    loadingBanner: { 
-      background: 'rgba(99, 102, 241, 0.1)', 
-      color: '#6366f1', 
-      padding: '12px', 
-      borderRadius: '12px', 
-      marginBottom: '20px',
-      textAlign: 'center'
-    },
-    emptyState: { 
-      textAlign: 'center', 
-      color: '#94a3b8', 
-      padding: '40px 20px', 
-      fontSize: '14px' 
+  // Render workout details based on type
+  const renderWorkoutDetails = (workout) => {
+    const exerciseName = workout.ex_name || (workout.exercises && workout.exercises[0] && workout.exercises[0].exercise_name) || 'Unknown';
+    const workoutType = workout.workout_type || (workout.exercises && workout.exercises[0] && workout.exercises[0].workout_type) || 'strength';
+    
+    if (workoutType === 'cardio') {
+      return (
+        <div style={{textAlign:'right', marginRight:'15px'}}>
+          <div style={{fontWeight:'bold', color:'#ec4899'}}>{workout.ex_minutes || (workout.exercises && workout.exercises[0] && workout.exercises[0].minutes)} min</div>
+          <div style={{fontSize:'10px', color:'#94a3b8'}}>{workout.ex_distance || (workout.exercises && workout.exercises[0] && workout.exercises[0].distance)} km</div>
+        </div>
+      );
+    } else if (workoutType === 'stretch') {
+      return (
+        <div style={{textAlign:'right', marginRight:'15px'}}>
+          <div style={{fontWeight:'bold', color:'#10b981'}}>{workout.ex_minutes || (workout.exercises && workout.exercises[0] && workout.exercises[0].minutes)} min</div>
+        </div>
+      );
+    } else {
+      // Strength workout
+      return (
+        <div style={{textAlign:'right', marginRight:'15px'}}>
+          <div style={{fontWeight:'bold', color:'#6366f1'}}>{workout.ex_weight || (workout.exercises && workout.exercises[0] && workout.exercises[0].weight)}kg</div>
+          <div style={{fontSize:'10px', color:'#94a3b8'}}>{workout.ex_sets || (workout.exercises && workout.exercises[0] && workout.exercises[0].sets)} x {workout.ex_reps || (workout.exercises && workout.exercises[0] && workout.exercises[0].reps)}</div>
+        </div>
+      );
     }
   };
 
@@ -322,11 +359,10 @@ const Dashboard = () => {
                   <span style={styles.dateText}>
                     {new Date(w.created_at).toLocaleDateString(undefined, {day:'numeric', month:'short'})}
                   </span>
-                  <span style={{flex:1, fontWeight:'600'}}>{w.ex_name}</span>
-                  <div style={{textAlign:'right', marginRight:'15px'}}>
-                     <div style={{fontWeight:'bold', color:'#6366f1'}}>{w.ex_weight}kg</div>
-                     <div style={{fontSize:'10px', color:'#94a3b8'}}>{w.ex_sets} x {w.ex_reps}</div>
-                  </div>
+                  <span style={{flex:1, fontWeight:'600'}}>
+                    {w.ex_name || (w.exercises && w.exercises[0] && w.exercises[0].exercise_name) || 'Unknown'}
+                  </span>
+                  {renderWorkoutDetails(w)}
                   <Trash2 
                     size={16} 
                     color="#ef4444" 
@@ -365,7 +401,6 @@ const Dashboard = () => {
           onClick={() => {
             setWorkoutType('strength'); 
             setIsLogging(true); 
-            setSelectedEx('Bench Press');
           }} 
           style={{...styles.fab, background:'#6366f1'}}
           disabled={loading}
@@ -376,7 +411,6 @@ const Dashboard = () => {
           onClick={() => {
             setWorkoutType('cardio'); 
             setIsLogging(true); 
-            setSelectedEx('Running');
           }} 
           style={{...styles.fab, background:'#ec4899'}}
           disabled={loading}
@@ -387,7 +421,6 @@ const Dashboard = () => {
           onClick={() => {
             setWorkoutType('stretch'); 
             setIsLogging(true); 
-            setSelectedEx('Yoga');
           }} 
           style={{...styles.fab, background:'#10b981'}}
           disabled={loading}
@@ -414,36 +447,21 @@ const Dashboard = () => {
                   )}
                </select>
                <div style={styles.inputGrid}>
-                  <div>
-                    <label style={styles.label}>SETS</label>
-                    <input 
-                      style={styles.input} 
-                      type="number" 
-                      value={sets} 
-                      onChange={e=>setSets(e.target.value)} 
-                      disabled={loading}
-                    />
-                  </div>
-                  <div>
-                    <label style={styles.label}>REPS</label>
-                    <input 
-                      style={styles.input} 
-                      type="number" 
-                      value={reps} 
-                      onChange={e=>setReps(e.target.value)} 
-                      disabled={loading}
-                    />
-                  </div>
-                  <div>
-                    <label style={styles.label}>KG</label>
-                    <input 
-                      style={styles.input} 
-                      type="number" 
-                      value={weight} 
-                      onChange={e=>setWeight(e.target.value)} 
-                      disabled={loading}
-                    />
-                  </div>
+                  {WORKOUT_CONFIGS[workoutType].fields.map(field => (
+                    <div key={field}>
+                      <label style={styles.label}>
+                        {WORKOUT_CONFIGS[workoutType].labels[field]}
+                      </label>
+                      <input 
+                        style={styles.input} 
+                        type="number" 
+                        value={formData[field]} 
+                        onChange={e => setFormData(prev => ({ ...prev, [field]: e.target.value }))} 
+                        placeholder={WORKOUT_CONFIGS[workoutType].placeholders[field]}
+                        disabled={loading}
+                      />
+                    </div>
+                  ))}
                </div>
                <button 
                  style={styles.mainBtn} 
@@ -457,6 +475,61 @@ const Dashboard = () => {
       )}
     </div>
   );
+};
+
+// Styles object (moved to the bottom to avoid hoisting issues)
+const styles = {
+  container: { minHeight: '100vh', background: '#0a0f1d', color: '#f8fafc', padding: '40px', fontFamily: 'sans-serif' },
+  header: { display:'flex', justifyContent:'space-between', marginBottom:'40px', alignItems:'center' },
+  brandTitle: { color:'#6366f1', margin:0, fontWeight:'900', fontSize:'28px' },
+  gridTop: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'25px', marginBottom:'25px' },
+  gridBottom: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'25px', paddingBottom:'100px' },
+  card: { background:'#161d2f', padding:'25px', borderRadius:'24px', border:'1px solid rgba(255,255,255,0.05)' },
+  cardHeader: { display:'flex', gap:'10px', alignItems:'center', marginBottom:'20px' },
+  row: { display:'flex', justifyContent:'space-between', padding:'12px', background:'rgba(255,255,255,0.02)', borderRadius:'12px', marginBottom:'8px' },
+  balanceRow: { display:'flex', alignItems:'center', gap:'15px', marginBottom:'12px' },
+  groupLabel: { width:'80px', fontSize:'11px', color:'#94a3b8' },
+  barBg: { flex:1, height:'8px', background:'#0a0f1d', borderRadius:'10px' },
+  barFill: { height:'100%', background:'#6366f1', borderRadius:'10px' },
+  scrollArea: { maxHeight:'400px', overflowY:'auto' },
+  historyItem: { display:'flex', padding:'18px', background:'rgba(255,255,255,0.03)', borderRadius:'18px', marginBottom:'12px', alignItems:'center' },
+  dateText: { color:'#6366f1', fontWeight:'bold', width:'65px', fontSize:'12px' },
+  leagueItem: { display:'flex', alignItems:'center', gap:'15px', padding:'14px', background:'rgba(255,255,255,0.02)', borderRadius:'14px', marginBottom:'10px' },
+  rankCircle: { width:'24px', height:'24px', background:'#0a0f1d', borderRadius:'50%', textAlign:'center', fontSize:'11px', lineHeight:'24px' },
+  fabContainer: { position:'fixed', bottom:'30px', left:'50%', transform:'translateX(-50%)', display:'flex', gap:'15px', zIndex: 100 },
+  fab: { padding:'16px 28px', borderRadius:'22px', color:'#fff', border:'none', cursor:'pointer', display:'flex', gap:'10px', fontWeight:'bold' },
+  modalOverlay: { position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', backdropFilter:'blur(5px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200 },
+  modalContent: { background:'#161d2f', padding:'35px', borderRadius:'32px', width:'90%', maxWidth:'420px' },
+  modalHeader: { display:'flex', justifyContent:'space-between', marginBottom:'25px', alignItems:'center' },
+  label: { fontSize:'10px', color:'#94a3b8', marginBottom:'5px', display:'block' },
+  inputGrid: { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'15px' },
+  input: { width:'100%', padding:'16px', borderRadius:'16px', background:'#0a0f1d', color:'#fff', border:'1px solid #1e293b', marginBottom:'20px', boxSizing:'border-box' },
+  mainBtn: { width:'100%', padding:'18px', background:'#6366f1', color:'#fff', border:'none', borderRadius:'18px', fontWeight:'bold', cursor:'pointer' },
+  logoutBtn: { background:'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px 18px', borderRadius: '12px', border: '1px solid rgba(239, 68, 68, 0.2)', cursor: 'pointer', display:'flex', alignItems:'center', gap:'8px', fontSize:'14px', fontWeight:'bold' },
+  authCard: { maxWidth:'400px', margin:'100px auto', background:'#161d2f', padding:'50px', borderRadius:'40px', textAlign:'center' },
+  error: { color: '#ef4444', fontSize: '14px', marginBottom: '15px', textAlign: 'center' },
+  errorBanner: { 
+    background: 'rgba(239, 68, 68, 0.1)', 
+    color: '#ef4444', 
+    padding: '12px', 
+    borderRadius: '12px', 
+    marginBottom: '20px',
+    textAlign: 'center'
+  },
+  loadingBanner: { 
+    background: 'rgba(99, 102, 241, 0.1)', 
+    color: '#6366f1', 
+    padding: '12px', 
+    borderRadius: '12px', 
+    marginBottom: '20px',
+    textAlign: 'center'
+  },
+  emptyState: { 
+    textAlign: 'center', 
+    color: '#94a3b8', 
+    padding: '40px 20px', 
+    fontSize: '14px' 
+  }
 };
 
 export default Dashboard;
