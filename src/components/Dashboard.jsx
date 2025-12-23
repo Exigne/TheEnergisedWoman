@@ -1,4 +1,4 @@
-// Dashboard.jsx - Fixed version with proper styles definition
+// Dashboard.jsx - Updated with workout names and day streak
 import React, { useState, useEffect, useCallback } from 'react';
 import { Activity, Dumbbell, TrendingUp, Calendar, Heart, Sparkles } from 'lucide-react';
 
@@ -370,7 +370,7 @@ const Dashboard = () => {
 
   const calculateStats = useCallback(() => {
     if (!Array.isArray(workouts)) {
-      return { totalSessions: 0, totalVolume: 0, last7Days: [] };
+      return { totalSessions: 0, totalVolume: 0, last7Days: [], currentStreak: 0 };
     }
     
     const totalSessions = workouts.length;
@@ -386,6 +386,29 @@ const Dashboard = () => {
       }, 0);
     }, 0);
     
+    // Calculate current streak
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    let currentStreak = 0;
+    const uniqueWorkoutDates = [...new Set(workouts.map(w => {
+      const date = new Date(w.created_at);
+      date.setHours(0, 0, 0, 0);
+      return date.getTime();
+    }))].sort((a, b) => b - a); // Sort descending
+
+    for (let i = 0; i < uniqueWorkoutDates.length; i++) {
+      const workoutDate = new Date(uniqueWorkoutDates[i]);
+      const expectedDate = new Date(today);
+      expectedDate.setDate(today.getDate() - i);
+      
+      if (workoutDate.getTime() === expectedDate.getTime()) {
+        currentStreak++;
+      } else {
+        break;
+      }
+    }
+
     const last7Days = workouts
       .slice(0, 7)
       .map(workout => {
@@ -407,7 +430,7 @@ const Dashboard = () => {
       })
       .reverse();
 
-    return { totalSessions, totalVolume, last7Days };
+    return { totalSessions, totalVolume, last7Days, currentStreak };
   }, [workouts]);
 
   if (!user) {
@@ -429,7 +452,30 @@ const Dashboard = () => {
 
   const stats = calculateStats();
   const avgVolume = stats.totalSessions > 0 ? Math.round(stats.totalVolume / stats.totalSessions) : 0;
-  const maxVolume = Math.max(...stats.last7Days.map(d => d.volume), 1);
+
+  // Helper function to get workout type name and icon
+  const getWorkoutInfo = (workout) => {
+    const type = workout.type || 'strength';
+    const exercises = workout.exercises || [];
+    
+    if (exercises.length === 0) {
+      return { name: 'Workout', icon: '💪', color: '#6366f1' };
+    }
+    
+    // Get the first exercise to determine the workout type
+    const firstExercise = exercises[0];
+    const exerciseData = EXERCISES[type]?.[firstExercise.name];
+    
+    if (exerciseData) {
+      return { 
+        name: firstExercise.name, 
+        icon: exerciseData.icon, 
+        color: type === 'strength' ? '#6366f1' : type === 'cardio' ? '#ec4899' : '#10b981' 
+      };
+    }
+    
+    return { name: firstExercise.name, icon: '💪', color: '#6366f1' };
+  };
 
   return (
     <div style={styles.container}>
@@ -492,8 +538,8 @@ const Dashboard = () => {
             <Activity size={24} color="#fff" />
           </div>
           <div>
-            <div style={styles.statValue}>{stats.last7Days.length}</div>
-            <div style={styles.statLabel}>This Week</div>
+            <div style={styles.statValue}>{stats.currentStreak}</div>
+            <div style={styles.statLabel}>Day Streak</div>
           </div>
         </div>
       </div>
@@ -501,29 +547,43 @@ const Dashboard = () => {
       <div style={styles.mainGrid}>
         <div style={styles.card}>
           <div style={styles.cardHeader}>
-            <h3 style={styles.cardTitle}>📊 Weekly Progress</h3>
+            <h3 style={styles.cardTitle}>🔥 Day Streak</h3>
           </div>
-          <div style={styles.chartContainer}>
-            {stats.last7Days.length > 0 ? (
-              stats.last7Days.map((day, i) => (
-                <div key={i} style={styles.barWrapper}>
-                  <div style={styles.barContainer}>
-                    <div 
-                      style={{
-                        ...styles.bar,
-                        height: `${(day.volume / maxVolume) * 100}%`,
-                        background: `linear-gradient(to top, ${['#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#06b6d4'][i % 7]}, ${['#be185d', '#d97706', '#059669', '#1d4ed8', '#6366f1', '#dc2626', '#0891b2'][i % 7]})`
-                      }}
-                    >
-                      <span style={styles.barValue}>{Math.round(day.volume)}</span>
-                    </div>
-                  </div>
-                  <div style={styles.barLabel}>{day.date.toLocaleDateString('en-US', { weekday: 'short' })[0]}</div>
-                </div>
-              ))
-            ) : (
-              <div style={styles.noDataMessage}>No workout data available</div>
-            )}
+          <div style={styles.streakContainer}>
+            <div style={styles.streakDisplay}>
+              <div style={styles.streakNumber}>{stats.currentStreak}</div>
+              <div style={styles.streakText}>days in a row!</div>
+            </div>
+            <div style={styles.streakMessage}>
+              {stats.currentStreak === 0 
+                ? "Start your fitness journey today!" 
+                : stats.currentStreak < 7 
+                ? "Great consistency! Keep it up!" 
+                : stats.currentStreak < 30 
+                ? "Amazing dedication! You're building a solid habit!" 
+                : "Outstanding commitment! You're a fitness champion!"
+              }
+            </div>
+            <div style={styles.streakBarContainer}>
+              <div style={styles.streakBar}>
+                {Array.from({ length: Math.min(stats.currentStreak, 30) }, (_, i) => (
+                  <div 
+                    key={i} 
+                    style={{
+                      ...styles.streakDay,
+                      background: i < stats.currentStreak 
+                        ? `linear-gradient(135deg, ${['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6'][i % 5]}, ${['#4f46e5', '#be185d', '#059669', '#d97706', '#6366f1'][i % 5]})`
+                        : 'rgba(255, 255, 255, 0.1)'
+                    }}
+                  />
+                ))}
+              </div>
+              <div style={styles.streakLegend}>
+                <span>Day 1</span>
+                <span>Day 15</span>
+                <span>Day 30</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -540,12 +600,15 @@ const Dashboard = () => {
                   return sum + (exercise.sets * exercise.reps * (exercise.weight || 0));
                 }, 0);
                 
+                const workoutInfo = getWorkoutInfo(workout);
+                
                 return (
                   <div key={workout.id || i} style={styles.sessionItem}>
-                    <div style={styles.sessionIcon}>
-                      <Calendar size={16} color="#6366f1" />
+                    <div style={{...styles.sessionIcon, background: `linear-gradient(135deg, ${workoutInfo.color}, ${workoutInfo.color}80)`}}>
+                      <span style={styles.workoutIcon}>{workoutInfo.icon}</span>
                     </div>
                     <div style={styles.sessionInfo}>
+                      <div style={styles.sessionWorkoutName}>{workoutInfo.name}</div>
                       <div style={styles.sessionDate}>
                         {new Date(workout.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </div>
@@ -592,7 +655,7 @@ const Dashboard = () => {
   );
 };
 
-// Define styles object - THIS WAS MISSING AND CAUSING THE ESLINT ERRORS
+// Define styles object
 const styles = {
   container: {
     minHeight: '100vh',
@@ -782,50 +845,57 @@ const styles = {
     fontWeight: '600',
     margin: 0
   },
-  chartContainer: {
+  streakContainer: {
     display: 'flex',
-    alignItems: 'flex-end',
-    gap: '12px',
-    height: '200px'
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '20px'
   },
-  barWrapper: {
-    flex: 1,
+  streakDisplay: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     gap: '8px'
   },
-  barContainer: {
-    flex: 1,
-    width: '100%',
-    display: 'flex',
-    alignItems: 'flex-end'
-  },
-  bar: {
-    width: '100%',
-    borderRadius: '8px 8px 0 0',
-    position: 'relative',
-    minHeight: '4px',
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    paddingTop: '4px'
-  },
-  barValue: {
-    fontSize: '10px',
+  streakNumber: {
+    fontSize: '48px',
     fontWeight: '700',
-    color: '#fff'
+    background: 'linear-gradient(135deg, #6366f1, #ec4899)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent'
   },
-  barLabel: {
-    fontSize: '12px',
+  streakText: {
+    fontSize: '18px',
     color: '#94a3b8',
     fontWeight: '600'
   },
-  noDataMessage: {
+  streakMessage: {
     textAlign: 'center',
     color: '#94a3b8',
     fontSize: '14px',
-    padding: '20px'
+    lineHeight: '1.5'
+  },
+  streakBarContainer: {
+    width: '100%',
+    marginTop: '20px'
+  },
+  streakBar: {
+    display: 'flex',
+    gap: '4px',
+    marginBottom: '12px',
+    padding: '0 8px'
+  },
+  streakDay: {
+    flex: 1,
+    height: '8px',
+    borderRadius: '4px',
+    minWidth: '0'
+  },
+  streakLegend: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: '10px',
+    color: '#94a3b8'
   },
   sessionList: {
     display: 'flex',
@@ -842,20 +912,29 @@ const styles = {
     border: '1px solid rgba(255, 255, 255, 0.05)'
   },
   sessionIcon: {
-    width: '32px',
-    height: '32px',
-    borderRadius: '8px',
-    background: 'rgba(99, 102, 241, 0.2)',
+    width: '40px',
+    height: '40px',
+    borderRadius: '10px',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    fontSize: '18px'
+  },
+  workoutIcon: {
+    fontSize: '20px'
   },
   sessionInfo: {
     flex: 1
   },
-  sessionDate: {
-    fontSize: '14px',
+  sessionWorkoutName: {
+    fontSize: '16px',
     fontWeight: '600',
+    marginBottom: '2px',
+    color: '#f8fafc'
+  },
+  sessionDate: {
+    fontSize: '12px',
+    color: '#94a3b8',
     marginBottom: '2px'
   },
   sessionExercises: {
@@ -866,6 +945,12 @@ const styles = {
     fontSize: '16px',
     fontWeight: '700',
     color: '#6366f1'
+  },
+  noDataMessage: {
+    textAlign: 'center',
+    color: '#94a3b8',
+    fontSize: '14px',
+    padding: '20px'
   },
   fabContainer: {
     position: 'fixed',
