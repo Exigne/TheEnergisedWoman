@@ -3,7 +3,7 @@ import { Dumbbell, Calendar, Heart, Sparkles, Trash2, X, Trophy, User, Target, Z
 
 const EXERCISES = {
   strength: { 'Bench Press': 'Chest', 'Squat': 'Legs', 'Deadlift': 'Back', 'Overhead Press': 'Shoulders', 'Rows': 'Back', 'Bicep Curls': 'Arms' },
-  cardio: { 'Running': 'Cardio', 'Cycling': 'Cardio', 'Swimming': 'Cardio' },
+  cardio: { 'Running': 'Cardio', 'Stair Climbing': 'Cardio', 'Cycling': 'Cardio', 'Swimming': 'Cardio' },
   stretch: { 'Yoga': 'Flexibility', 'Mobility Work': 'Flexibility' }
 };
 
@@ -28,7 +28,7 @@ const WORKOUT_CONFIGS = {
 
 const Dashboard = () => {
   const [user, setUser] = useState(null);
-  const [allData, setAllData] = useState({ workouts: [], users: [] });
+  const [allData, setAllData] = useState({ workouts: [], workoutLogs: [], users: [] });
   const [isLogging, setIsLogging] = useState(false);
   const [workoutType, setWorkoutType] = useState('strength');
   const [selectedEx, setSelectedEx] = useState('Bench Press');
@@ -50,7 +50,13 @@ const Dashboard = () => {
       
       const data = await res.json();
       console.log('Database response:', data); // Debug log
-      setAllData(data || { workouts: [], users: [] });
+      
+      // Handle both old and new data structures
+      setAllData({
+        workouts: data.workouts || [],
+        workoutLogs: data.workoutLogs || [], // Add workoutLogs support
+        users: data.users || []
+      });
     } catch (e) {
       console.error('Load data error:', e);
       setError('Failed to load workout data');
@@ -64,14 +70,10 @@ const Dashboard = () => {
     if (saved) setUser(JSON.parse(saved));
   }, []);
 
-  useEffect(() => {
-    if (user) loadData();
-  }, [user, loadData]);
+  useEffect(() => { if (user) loadData(); }, [user, loadData]);
 
-  // Reset form data when workout type changes
   useEffect(() => {
     setFormData({ sets: '', reps: '', weight: '', minutes: '', distance: '' });
-    // Set default exercise for workout type
     const firstExercise = Object.keys(EXERCISES[workoutType])[0];
     setSelectedEx(firstExercise);
   }, [workoutType]);
@@ -80,7 +82,6 @@ const Dashboard = () => {
     const config = WORKOUT_CONFIGS[workoutType];
     const requiredFields = config.fields;
     
-    // Validate required fields
     const missingFields = requiredFields.filter(field => !formData[field]);
     if (missingFields.length > 0) {
       alert(`Please fill in: ${missingFields.join(', ')}`);
@@ -91,9 +92,9 @@ const Dashboard = () => {
     setError(null);
     
     try {
-      // Create exercise payload based on workout type
       let exerciseData = {
         exercise_name: selectedEx,
+        muscle_group: EXERCISES[workoutType][selectedEx] || 'Other',
         workout_type: workoutType
       };
 
@@ -103,10 +104,13 @@ const Dashboard = () => {
         exerciseData.reps = Number(formData.reps);
         exerciseData.weight = Number(formData.weight);
       } else if (workoutType === 'cardio') {
-        exerciseData.minutes = Number(formData.minutes);
-        exerciseData.distance = Number(formData.distance);
+        exerciseData.sets = 1; // Default for cardio
+        exerciseData.reps = Number(formData.minutes);
+        exerciseData.weight = Number(formData.distance) || 0;
       } else if (workoutType === 'stretch') {
-        exerciseData.minutes = Number(formData.minutes);
+        exerciseData.sets = 1; // Default for stretch
+        exerciseData.reps = Number(formData.minutes);
+        exerciseData.weight = 0;
       }
 
       const payload = [exerciseData];
@@ -186,81 +190,62 @@ const Dashboard = () => {
     }
   };
 
-  // Updated stats calculation to handle different workout types
+  // Updated stats for workout_logs table structure
   const stats = (() => {
-    if (!user || !allData?.workouts) {
-      return { myLogs: [], muscleSplit: {}, pbs: {}, league: [] };
+    if (!user || !allData?.workoutLogs) {
+      return { myLogs: [], muscleSplit: {}, pbs: {}, league: [], profile: null };
     }
 
-    const myLogs = allData.workouts.filter(w => w.user_email === user.email) || [];
+    // Use workoutLogs instead of workouts for history
+    const myLogs = allData.workoutLogs.filter(log => log.user_email === user.email) || [];
     const muscleSplit = { Chest: 0, Legs: 0, Back: 0, Shoulders: 0, Arms: 0, Cardio: 0, Flexibility: 0 };
     const pbs = {};
 
-    myLogs.forEach(w => {
-      // Handle both flattened data from function and raw JSONB data
-      const exerciseName = w.ex_name || (w.exercises && w.exercises[0] && w.exercises[0].exercise_name) || 'Unknown';
-      const workoutType = w.workout_type || (w.exercises && w.exercises[0] && w.exercises[0].workout_type) || 'strength';
+    myLogs.forEach(log => {
+      const exerciseName = log.exercise_name || 'Unknown';
+      const muscleGroup = log.muscle_group || 'Other';
       
-      // Get muscle group based on exercise name
-      let group = null;
-      if (workoutType === 'cardio') {
-        group = 'Cardio';
-      } else if (workoutType === 'stretch') {
-        group = 'Flexibility';
-      } else {
-        // For strength exercises, map to muscle groups
-        group = EXERCISES.strength[exerciseName] || 'Other';
+      // Count muscle groups
+      if (muscleGroup) {
+        muscleSplit[muscleGroup] = (muscleSplit[muscleGroup] || 0) + 1;
       }
       
-      if (group) muscleSplit[group]++;
-      
       // Track personal bests for strength exercises only
-      if (workoutType === 'strength' && w.ex_weight) {
-        if (w.ex_weight > (pbs[exerciseName] || 0)) {
-          pbs[exerciseName] = w.ex_weight;
+      if (log.weight && log.weight > 0 && muscleGroup !== 'Cardio' && muscleGroup !== 'Flexibility') {
+        if (log.weight > (pbs[exerciseName] || 0)) {
+          pbs[exerciseName] = log.weight;
         }
       }
     });
 
-    const league = Object.entries((allData.workouts || []).reduce((acc, w) => {
-      acc[w.user_email] = (acc[w.user_email] || 0) + 1;
+    // League calculation based on workout logs
+    const league = Object.entries((allData.workoutLogs || []).reduce((acc, log) => {
+      acc[log.user_email] = (acc[log.user_email] || 0) + 1;
       return acc;
     }, {})).map(([email, count]) => {
       const u = allData.users?.find(usr => usr.email === email);
       return { name: u?.display_name || email.split('@')[0], count };
     }).sort((a,b) => b.count - a.count);
 
-    return { myLogs, muscleSplit, pbs, league };
-  })();
+    // User profile stats
+    const profile = {
+      totalWorkouts: myLogs.length,
+      thisWeek: myLogs.filter(log => {
+        const logDate = new Date(log.created_at);
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        return logDate >= weekAgo;
+      }).length,
+      favoriteExercise: myLogs.reduce((acc, log) => {
+        const exercise = log.exercise_name;
+        acc[exercise] = (acc[exercise] || 0) + 1;
+        return acc;
+      }, {}),
+      totalWeight: myLogs.reduce((sum, log) => sum + (log.weight || 0), 0)
+    };
 
-  // Render workout details based on type
-  const renderWorkoutDetails = (workout) => {
-    const exerciseName = workout.ex_name || (workout.exercises && workout.exercises[0] && workout.exercises[0].exercise_name) || 'Unknown';
-    const workoutType = workout.workout_type || (workout.exercises && workout.exercises[0] && workout.exercises[0].workout_type) || 'strength';
-    
-    if (workoutType === 'cardio') {
-      return (
-        <div style={{textAlign:'right', marginRight:'15px'}}>
-          <div style={{fontWeight:'bold', color:'#ec4899'}}>{workout.ex_minutes || (workout.exercises && workout.exercises[0] && workout.exercises[0].minutes)} min</div>
-          <div style={{fontSize:'10px', color:'#94a3b8'}}>{workout.ex_distance || (workout.exercises && workout.exercises[0] && workout.exercises[0].distance)} km</div>
-        </div>
-      );
-    } else if (workoutType === 'stretch') {
-      return (
-        <div style={{textAlign:'right', marginRight:'15px'}}>
-          <div style={{fontWeight:'bold', color:'#10b981'}}>{workout.ex_minutes || (workout.exercises && workout.exercises[0] && workout.exercises[0].minutes)} min</div>
-        </div>
-      );
-    } else {
-      // Strength workout
-      return (
-        <div style={{textAlign:'right', marginRight:'15px'}}>
-          <div style={{fontWeight:'bold', color:'#6366f1'}}>{workout.ex_weight || (workout.exercises && workout.exercises[0] && workout.exercises[0].weight)}kg</div>
-          <div style={{fontSize:'10px', color:'#94a3b8'}}>{workout.ex_sets || (workout.exercises && workout.exercises[0] && workout.exercises[0].sets)} x {workout.ex_reps || (workout.exercises && workout.exercises[0] && workout.exercises[0].reps)}</div>
-        </div>
-      );
-    }
-  };
+    return { myLogs, muscleSplit, pbs, league, profile };
+  })();
 
   if (!user) return (
     <div style={styles.container}>
@@ -310,6 +295,39 @@ const Dashboard = () => {
       {error && <div style={styles.errorBanner}>{error}</div>}
       {loading && <div style={styles.loadingBanner}>Loading...</div>}
 
+      {/* Profile Details Section - RESTORED */}
+      <div style={styles.profileSection}>
+        <div style={styles.profileCard}>
+          <div style={styles.profileHeader}>
+            <User size={24} color="#6366f1" />
+            <h2>Profile Details</h2>
+          </div>
+          <div style={styles.profileStats}>
+            <div style={styles.statItem}>
+              <div style={styles.statValue}>{stats.profile.totalWorkouts}</div>
+              <div style={styles.statLabel}>Total Workouts</div>
+            </div>
+            <div style={styles.statItem}>
+              <div style={styles.statValue}>{stats.profile.thisWeek}</div>
+              <div style={styles.statLabel}>This Week</div>
+            </div>
+            <div style={styles.statItem}>
+              <div style={styles.statValue}>{Object.keys(stats.profile.favoriteExercise).length}</div>
+              <div style={styles.statLabel}>Exercises</div>
+            </div>
+            <div style={styles.statItem}>
+              <div style={styles.statValue}>{Math.round(stats.profile.totalWeight)}kg</div>
+              <div style={styles.statLabel}>Total Weight</div>
+            </div>
+          </div>
+          {Object.keys(stats.profile.favoriteExercise).length > 0 && (
+            <div style={styles.favoriteExercise}>
+              <strong>Favorite:</strong> {Object.entries(stats.profile.favoriteExercise).sort((a,b) => b[1] - a[1])[0][0]}
+            </div>
+          )}
+        </div>
+      </div>
+
       <div style={styles.gridTop}>
         <div style={styles.card}>
           <div style={styles.cardHeader}>
@@ -354,20 +372,34 @@ const Dashboard = () => {
             {stats.myLogs.length === 0 ? (
               <div style={styles.emptyState}>No workouts logged yet</div>
             ) : (
-              stats.myLogs.map((w, i) => (
+              stats.myLogs.map((log, i) => (
                 <div key={i} style={styles.historyItem}>
                   <span style={styles.dateText}>
-                    {new Date(w.created_at).toLocaleDateString(undefined, {day:'numeric', month:'short'})}
+                    {new Date(log.created_at).toLocaleDateString(undefined, {day:'numeric', month:'short'})}
                   </span>
                   <span style={{flex:1, fontWeight:'600'}}>
-                    {w.ex_name || (w.exercises && w.exercises[0] && w.exercises[0].exercise_name) || 'Unknown'}
+                    {log.exercise_name || 'Unknown Exercise'}
                   </span>
-                  {renderWorkoutDetails(w)}
+                  <div style={{textAlign:'right', marginRight:'15px'}}>
+                    {log.muscle_group === 'Cardio' ? (
+                      <>
+                        <div style={{fontWeight:'bold', color:'#ec4899'}}>{log.reps} min</div>
+                        {log.weight > 0 && <div style={{fontSize:'10px', color:'#94a3b8'}}>{log.weight} km</div>}
+                      </>
+                    ) : log.muscle_group === 'Flexibility' ? (
+                      <div style={{fontWeight:'bold', color:'#10b981'}}>{log.reps} min</div>
+                    ) : (
+                      <>
+                        <div style={{fontWeight:'bold', color:'#6366f1'}}>{log.weight}kg</div>
+                        <div style={{fontSize:'10px', color:'#94a3b8'}}>{log.sets} x {log.reps}</div>
+                      </>
+                    )}
+                  </div>
                   <Trash2 
                     size={16} 
                     color="#ef4444" 
                     style={{cursor:'pointer', opacity: loading ? 0.5 : 1}} 
-                    onClick={() => deleteWorkout(w.id)}
+                    onClick={() => deleteWorkout(log.id)}
                   />
                 </div>
               ))
@@ -477,11 +509,22 @@ const Dashboard = () => {
   );
 };
 
-// Styles object (moved to the bottom to avoid hoisting issues)
+// Styles with profile section styles added
 const styles = {
   container: { minHeight: '100vh', background: '#0a0f1d', color: '#f8fafc', padding: '40px', fontFamily: 'sans-serif' },
   header: { display:'flex', justifyContent:'space-between', marginBottom:'40px', alignItems:'center' },
   brandTitle: { color:'#6366f1', margin:0, fontWeight:'900', fontSize:'28px' },
+  
+  // Profile Section Styles
+  profileSection: { marginBottom: '25px' },
+  profileCard: { background:'#161d2f', padding:'30px', borderRadius:'24px', border:'1px solid rgba(255,255,255,0.05)' },
+  profileHeader: { display:'flex', gap:'15px', alignItems:'center', marginBottom:'25px' },
+  profileStats: { display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'20px', marginBottom:'20px' },
+  statItem: { textAlign:'center', padding:'15px', background:'rgba(255,255,255,0.03)', borderRadius:'12px' },
+  statValue: { fontSize:'24px', fontWeight:'bold', color:'#6366f1', marginBottom:'5px' },
+  statLabel: { fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' },
+  favoriteExercise: { textAlign:'center', color:'#94a3b8', fontSize:'14px', marginTop:'10px' },
+  
   gridTop: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'25px', marginBottom:'25px' },
   gridBottom: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'25px', paddingBottom:'100px' },
   card: { background:'#161d2f', padding:'25px', borderRadius:'24px', border:'1px solid rgba(255,255,255,0.05)' },
