@@ -9,28 +9,39 @@ export const handler = async (event) => {
       const workouts = await sql`SELECT * FROM workouts ORDER BY created_at DESC`;
       const users = await sql`SELECT email, display_name, profile_pic FROM users`;
       
-      // PRE-PARSING: We fix the "Workout" name issue here before sending to UI
-      const cleanedWorkouts = workouts.map(w => {
-        let parsed = w.exercises;
-        if (typeof w.exercises === 'string') {
-          try { parsed = JSON.parse(w.exercises); } catch (e) { parsed = []; }
+      // THE FIX: Manually cleaning the data before it leaves the server
+      const formattedWorkouts = workouts.map(w => {
+        let rawEx = w.exercises;
+        // If Neon sent a string, turn it into an object
+        if (typeof rawEx === 'string') {
+          try { rawEx = JSON.parse(rawEx); } catch (e) { rawEx = []; }
         }
-        // Ensure it's always an array for the frontend .map()
-        const finalEx = Array.isArray(parsed) ? parsed : [parsed];
-        return { ...w, exercises: finalEx };
+        // Ensure it's an array
+        const exArray = Array.isArray(rawEx) ? rawEx : [rawEx];
+        
+        // Pick the first exercise and flatten it so the UI doesn't have to guess
+        const first = exArray[0] || {};
+        return {
+          id: w.id,
+          user_email: w.user_email,
+          created_at: w.created_at,
+          ex_name: first.exercise_name || first.name || "Workout",
+          ex_weight: first.weight || 0,
+          ex_sets: first.sets || 0,
+          ex_reps: first.reps || 0
+        };
       });
 
       return {
         statusCode: 200,
-        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ workouts: cleanedWorkouts, users }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workouts: formattedWorkouts, users }),
       };
     }
 
     if (method === 'POST') {
       const body = JSON.parse(event.body || '{}');
 
-      // AUTH logic
       if (body.action === 'auth') {
         const results = await sql`SELECT * FROM users WHERE email = ${body.email}`;
         if (results.length === 0) {
@@ -40,22 +51,18 @@ export const handler = async (event) => {
         return { statusCode: 200, body: JSON.stringify(results[0]) };
       }
 
-      // SAVING logic
       if (body.userEmail && body.exercises) {
-        // We stringify the payload and cast to jsonb to satisfy Neon
-        const jsonPayload = JSON.stringify(body.exercises);
-        await sql`INSERT INTO workouts (user_email, exercises, created_at) VALUES (${body.userEmail}, ${jsonPayload}::jsonb, NOW())`;
+        // Force the save as a clean stringified JSON
+        await sql`INSERT INTO workouts (user_email, exercises, created_at) VALUES (${body.userEmail}, ${JSON.stringify(body.exercises)}::jsonb, NOW())`;
         return { statusCode: 200, body: JSON.stringify({ success: true }) };
       }
     }
 
     if (method === 'DELETE') {
-      const { workoutId } = event.queryStringParameters;
-      await sql`DELETE FROM workouts WHERE id = ${workoutId}`;
+      await sql`DELETE FROM workouts WHERE id = ${event.queryStringParameters.workoutId}`;
       return { statusCode: 200, body: JSON.stringify({ success: true }) };
     }
   } catch (err) {
-    console.error("Backend Error:", err);
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
