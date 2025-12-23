@@ -19,10 +19,11 @@
     "date-fns": "^2.30.0",
     "@netlify/functions": "^2.4.0",
     "pg": "^8.11.0",
-    "@neondatabase/serverless": "^0.10.4"
+    "@neondatabase/serverless": "^0.10.4",
+    "bcryptjs": "^2.4.3"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.0.0",
-    "vite": "^4.4.0"
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.0.10"
   }
 }
