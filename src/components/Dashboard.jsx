@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Dumbbell, Calendar, Heart, Sparkles, Trash2, X, Trophy, User, Target, Zap, Wind, LogOut, Clock, TrendingUp } from 'lucide-react';
+import { Dumbbell, Calendar, Heart, Sparkles, Trash2, X, Trophy, User, Target, Zap, Wind, LogOut, Settings, Camera } from 'lucide-react';
 
 const EXERCISES = {
   strength: { 'Bench Press': 'Chest', 'Squat': 'Legs', 'Deadlift': 'Back', 'Overhead Press': 'Shoulders', 'Rows': 'Back', 'Bicep Curls': 'Arms' },
@@ -7,7 +7,6 @@ const EXERCISES = {
   stretch: { 'Yoga': 'Flexibility', 'Mobility Work': 'Flexibility' }
 };
 
-// Workout type configurations
 const WORKOUT_CONFIGS = {
   strength: {
     fields: ['sets', 'reps', 'weight'],
@@ -30,9 +29,11 @@ const Dashboard = () => {
   const [user, setUser] = useState(null);
   const [allData, setAllData] = useState({ workouts: [], workoutLogs: [], users: [] });
   const [isLogging, setIsLogging] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [workoutType, setWorkoutType] = useState('strength');
   const [selectedEx, setSelectedEx] = useState('Bench Press');
   const [formData, setFormData] = useState({ sets: '', reps: '', weight: '', minutes: '', distance: '' });
+  const [profileForm, setProfileForm] = useState({ displayName: '', profilePic: '' });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -49,12 +50,12 @@ const Dashboard = () => {
       if (!res.ok) throw new Error('Failed to fetch data');
       
       const data = await res.json();
-      console.log('Database response:', data); // Debug log
+      console.log('Database response:', data);
+      console.log('WorkoutLogs sample:', data.workoutLogs?.[0]);
       
-      // Handle both old and new data structures
       setAllData({
         workouts: data.workouts || [],
-        workoutLogs: data.workoutLogs || [], // Add workoutLogs support
+        workoutLogs: data.workoutLogs || [],
         users: data.users || []
       });
     } catch (e) {
@@ -67,7 +68,14 @@ const Dashboard = () => {
 
   useEffect(() => {
     const saved = localStorage.getItem('fitnessUser');
-    if (saved) setUser(JSON.parse(saved));
+    if (saved) {
+      const userData = JSON.parse(saved);
+      setUser(userData);
+      setProfileForm({
+        displayName: userData.display_name || userData.email.split('@')[0],
+        profilePic: userData.profile_pic || ''
+      });
+    }
   }, []);
 
   useEffect(() => { if (user) loadData(); }, [user, loadData]);
@@ -98,21 +106,21 @@ const Dashboard = () => {
         workout_type: workoutType
       };
 
-      // Add workout-specific fields
       if (workoutType === 'strength') {
         exerciseData.sets = Number(formData.sets);
         exerciseData.reps = Number(formData.reps);
         exerciseData.weight = Number(formData.weight);
       } else if (workoutType === 'cardio') {
-        exerciseData.sets = 1; // Default for cardio
+        exerciseData.sets = 1;
         exerciseData.reps = Number(formData.minutes);
         exerciseData.weight = Number(formData.distance) || 0;
       } else if (workoutType === 'stretch') {
-        exerciseData.sets = 1; // Default for stretch
+        exerciseData.sets = 1;
         exerciseData.reps = Number(formData.minutes);
         exerciseData.weight = 0;
       }
 
+      console.log('Sending exercise data:', exerciseData);
       const payload = [exerciseData];
       
       const res = await fetch('/.netlify/functions/database', {
@@ -154,13 +162,57 @@ const Dashboard = () => {
       if (!res.ok) throw new Error('Authentication failed');
       
       const data = await res.json();
-      const userData = { email: data.email };
+      const userData = { 
+        email: data.email,
+        display_name: data.display_name || email.split('@')[0],
+        profile_pic: data.profile_pic || ''
+      };
       setUser(userData);
       localStorage.setItem('fitnessUser', JSON.stringify(userData));
+      setProfileForm({
+        displayName: userData.display_name,
+        profilePic: userData.profile_pic
+      });
       
     } catch (e) {
       console.error('Auth error', e);
       setError('Authentication failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateProfile = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const res = await fetch('/.netlify/functions/database', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          action: 'updateProfile',
+          email: user.email,
+          displayName: profileForm.displayName,
+          profilePic: profileForm.profilePic
+        })
+      });
+      
+      if (!res.ok) throw new Error('Failed to update profile');
+      
+      const updatedUser = {
+        ...user,
+        display_name: profileForm.displayName,
+        profile_pic: profileForm.profilePic
+      };
+      setUser(updatedUser);
+      localStorage.setItem('fitnessUser', JSON.stringify(updatedUser));
+      setShowProfile(false);
+      await loadData();
+      
+    } catch (e) {
+      console.error('Update profile error:', e);
+      setError('Failed to update profile');
     } finally {
       setLoading(false);
     }
@@ -190,35 +242,31 @@ const Dashboard = () => {
     }
   };
 
-  // Updated stats for workout_logs table structure
   const stats = (() => {
     if (!user || !allData?.workoutLogs) {
       return { myLogs: [], muscleSplit: {}, pbs: {}, league: [], profile: null };
     }
 
-    // Use workoutLogs instead of workouts for history
     const myLogs = allData.workoutLogs.filter(log => log.user_email === user.email) || [];
     const muscleSplit = { Chest: 0, Legs: 0, Back: 0, Shoulders: 0, Arms: 0, Cardio: 0, Flexibility: 0 };
     const pbs = {};
 
     myLogs.forEach(log => {
-      const exerciseName = log.exercise_name || 'Unknown';
+      const exerciseName = log.exercise_name || log.ex_name || 'Unknown';
       const muscleGroup = log.muscle_group || 'Other';
       
-      // Count muscle groups
       if (muscleGroup) {
         muscleSplit[muscleGroup] = (muscleSplit[muscleGroup] || 0) + 1;
       }
       
-      // Track personal bests for strength exercises only
-      if (log.weight && log.weight > 0 && muscleGroup !== 'Cardio' && muscleGroup !== 'Flexibility') {
-        if (log.weight > (pbs[exerciseName] || 0)) {
-          pbs[exerciseName] = log.weight;
+      const weight = log.weight || log.ex_weight || 0;
+      if (weight > 0 && muscleGroup !== 'Cardio' && muscleGroup !== 'Flexibility') {
+        if (weight > (pbs[exerciseName] || 0)) {
+          pbs[exerciseName] = weight;
         }
       }
     });
 
-    // League calculation based on workout logs
     const league = Object.entries((allData.workoutLogs || []).reduce((acc, log) => {
       acc[log.user_email] = (acc[log.user_email] || 0) + 1;
       return acc;
@@ -227,7 +275,6 @@ const Dashboard = () => {
       return { name: u?.display_name || email.split('@')[0], count };
     }).sort((a,b) => b.count - a.count);
 
-    // User profile stats
     const profile = {
       totalWorkouts: myLogs.length,
       thisWeek: myLogs.filter(log => {
@@ -237,11 +284,11 @@ const Dashboard = () => {
         return logDate >= weekAgo;
       }).length,
       favoriteExercise: myLogs.reduce((acc, log) => {
-        const exercise = log.exercise_name;
+        const exercise = log.exercise_name || log.ex_name || 'Unknown';
         acc[exercise] = (acc[exercise] || 0) + 1;
         return acc;
       }, {}),
-      totalWeight: myLogs.reduce((sum, log) => sum + (log.weight || 0), 0)
+      totalWeight: myLogs.reduce((sum, log) => sum + (log.weight || log.ex_weight || 0), 0)
     };
 
     return { myLogs, muscleSplit, pbs, league, profile };
@@ -283,19 +330,27 @@ const Dashboard = () => {
     <div style={styles.container}>
       <div style={styles.header}>
         <h1 style={styles.brandTitle}>Fit as a Fiddle</h1>
-        <button 
-          onClick={() => {setUser(null); localStorage.removeItem('fitnessUser');}} 
-          style={styles.logoutBtn}
-          disabled={loading}
-        >
-          <LogOut size={16} /> Sign Out
-        </button>
+        <div style={{display:'flex', gap:'10px'}}>
+          <button 
+            onClick={() => setShowProfile(true)} 
+            style={styles.profileBtn}
+            disabled={loading}
+          >
+            <Settings size={16} /> Profile
+          </button>
+          <button 
+            onClick={() => {setUser(null); localStorage.removeItem('fitnessUser');}} 
+            style={styles.logoutBtn}
+            disabled={loading}
+          >
+            <LogOut size={16} /> Sign Out
+          </button>
+        </div>
       </div>
 
       {error && <div style={styles.errorBanner}>{error}</div>}
       {loading && <div style={styles.loadingBanner}>Loading...</div>}
 
-      {/* Profile Details Section - RESTORED */}
       <div style={styles.profileSection}>
         <div style={styles.profileCard}>
           <div style={styles.profileHeader}>
@@ -372,37 +427,45 @@ const Dashboard = () => {
             {stats.myLogs.length === 0 ? (
               <div style={styles.emptyState}>No workouts logged yet</div>
             ) : (
-              stats.myLogs.map((log, i) => (
-                <div key={i} style={styles.historyItem}>
-                  <span style={styles.dateText}>
-                    {new Date(log.created_at).toLocaleDateString(undefined, {day:'numeric', month:'short'})}
-                  </span>
-                  <span style={{flex:1, fontWeight:'600'}}>
-                    {log.exercise_name || 'Unknown Exercise'}
-                  </span>
-                  <div style={{textAlign:'right', marginRight:'15px'}}>
-                    {log.muscle_group === 'Cardio' ? (
-                      <>
-                        <div style={{fontWeight:'bold', color:'#ec4899'}}>{log.reps} min</div>
-                        {log.weight > 0 && <div style={{fontSize:'10px', color:'#94a3b8'}}>{log.weight} km</div>}
-                      </>
-                    ) : log.muscle_group === 'Flexibility' ? (
-                      <div style={{fontWeight:'bold', color:'#10b981'}}>{log.reps} min</div>
-                    ) : (
-                      <>
-                        <div style={{fontWeight:'bold', color:'#6366f1'}}>{log.weight}kg</div>
-                        <div style={{fontSize:'10px', color:'#94a3b8'}}>{log.sets} x {log.reps}</div>
-                      </>
-                    )}
+              stats.myLogs.map((log, i) => {
+                const exerciseName = log.exercise_name || log.ex_name || 'Unknown Exercise';
+                const muscleGroup = log.muscle_group || 'Other';
+                const weight = log.weight || log.ex_weight || 0;
+                const sets = log.sets || log.ex_sets || 0;
+                const reps = log.reps || log.ex_reps || 0;
+                
+                return (
+                  <div key={i} style={styles.historyItem}>
+                    <span style={styles.dateText}>
+                      {new Date(log.created_at).toLocaleDateString(undefined, {day:'numeric', month:'short'})}
+                    </span>
+                    <span style={{flex:1, fontWeight:'600'}}>
+                      {exerciseName}
+                    </span>
+                    <div style={{textAlign:'right', marginRight:'15px'}}>
+                      {muscleGroup === 'Cardio' ? (
+                        <>
+                          <div style={{fontWeight:'bold', color:'#ec4899'}}>{reps} min</div>
+                          {weight > 0 && <div style={{fontSize:'10px', color:'#94a3b8'}}>{weight} km</div>}
+                        </>
+                      ) : muscleGroup === 'Flexibility' ? (
+                        <div style={{fontWeight:'bold', color:'#10b981'}}>{reps} min</div>
+                      ) : (
+                        <>
+                          <div style={{fontWeight:'bold', color:'#6366f1'}}>{weight}kg</div>
+                          <div style={{fontSize:'10px', color:'#94a3b8'}}>{sets} x {reps}</div>
+                        </>
+                      )}
+                    </div>
+                    <Trash2 
+                      size={16} 
+                      color="#ef4444" 
+                      style={{cursor:'pointer', opacity: loading ? 0.5 : 1}} 
+                      onClick={() => deleteWorkout(log.id)}
+                    />
                   </div>
-                  <Trash2 
-                    size={16} 
-                    color="#ef4444" 
-                    style={{cursor:'pointer', opacity: loading ? 0.5 : 1}} 
-                    onClick={() => deleteWorkout(log.id)}
-                  />
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -505,11 +568,53 @@ const Dashboard = () => {
             </div>
          </div>
       )}
+
+      {showProfile && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <div style={styles.modalHeader}>
+              <h3>Edit Profile</h3>
+              <X onClick={() => setShowProfile(false)} style={{cursor:'pointer'}}/>
+            </div>
+            <div style={{textAlign:'center', marginBottom:'20px'}}>
+              <div style={styles.avatarCircle}>
+                {profileForm.profilePic ? (
+                  <img src={profileForm.profilePic} alt="Profile" style={{width:'100%', height:'100%', objectFit:'cover'}} />
+                ) : (
+                  <User size={40} color="#6366f1" />
+                )}
+              </div>
+            </div>
+            <label style={styles.label}>Display Name</label>
+            <input 
+              style={styles.input}
+              value={profileForm.displayName}
+              onChange={e => setProfileForm(prev => ({...prev, displayName: e.target.value}))}
+              placeholder="Display Name"
+              disabled={loading}
+            />
+            <label style={styles.label}>Profile Picture URL</label>
+            <input 
+              style={styles.input}
+              value={profileForm.profilePic}
+              onChange={e => setProfileForm(prev => ({...prev, profilePic: e.target.value}))}
+              placeholder="https://example.com/avatar.jpg"
+              disabled={loading}
+            />
+            <button 
+              style={styles.mainBtn}
+              onClick={updateProfile}
+              disabled={loading}
+            >
+              {loading ? 'Saving...' : 'Save Profile'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-// Styles with profile section styles added
 const styles = {
   container: { minHeight: '100vh', background: '#0a0f1d', color: '#f8fafc', padding: '40px', fontFamily: 'sans-serif' },
   header: { display:'flex', justifyContent:'space-between', marginBottom:'40px', alignItems:'center' },
