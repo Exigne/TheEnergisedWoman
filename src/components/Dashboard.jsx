@@ -18,49 +18,153 @@ const Dashboard = () => {
   const [weight, setWeight] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const loadData = useCallback(async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    setError(null);
+    
     try {
       const res = await fetch(`/.netlify/functions/database`);
+      if (!res.ok) throw new Error('Failed to fetch data');
+      
       const data = await res.json();
       setAllData(data || { workouts: [], users: [] });
-    } catch (e) { console.error(e); }
-  }, []);
+    } catch (e) {
+      console.error('Load data error:', e);
+      setError('Failed to load workout data');
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
   useEffect(() => {
     const saved = localStorage.getItem('fitnessUser');
     if (saved) setUser(JSON.parse(saved));
   }, []);
 
-  useEffect(() => { if (user) loadData(); }, [user, loadData]);
+  useEffect(() => {
+    if (user) loadData();
+  }, [user, loadData]);
 
   const finishWorkout = async () => {
-    setIsLogging(false);
-    const payload = [{ exercise_name: selectedEx, sets: Number(sets), reps: Number(reps), weight: Number(weight) }];
-    await fetch('/.netlify/functions/database', {
-      method: 'POST',
-      body: JSON.stringify({ userEmail: user.email, exercises: payload })
-    });
-    setSets(''); setReps(''); setWeight('');
-    loadData();
+    if (!sets || !reps || !weight) {
+      alert('Please fill in all fields');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const payload = [{ 
+        exercise_name: selectedEx, 
+        sets: Number(sets), 
+        reps: Number(reps), 
+        weight: Number(weight) 
+      }];
+      
+      const res = await fetch('/.netlify/functions/database', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userEmail: user.email, exercises: payload })
+      });
+      
+      if (!res.ok) throw new Error('Failed to save workout');
+      
+      setIsLogging(false);
+      setSets(''); 
+      setReps(''); 
+      setWeight('');
+      await loadData();
+      
+    } catch (e) {
+      console.error('Save workout error:', e);
+      setError('Failed to save workout');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAuth = async () => {
+    if (!email || !password) {
+      alert('Please enter email and password');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const res = await fetch('/.netlify/functions/database', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'auth', email, password }) 
+      });
+      
+      if (!res.ok) throw new Error('Authentication failed');
+      
+      const data = await res.json();
+      const userData = { email: data.email };
+      setUser(userData);
+      localStorage.setItem('fitnessUser', JSON.stringify(userData));
+      
+    } catch (e) {
+      console.error('Auth error:', e);
+      setError('Authentication failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteWorkout = async (workoutId) => {
+    if (!confirm('Delete this workout?')) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const res = await fetch(`/.netlify/functions/database?workoutId=${workoutId}`, { 
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (!res.ok) throw new Error('Failed to delete workout');
+      
+      await loadData();
+      
+    } catch (e) {
+      console.error('Delete error:', e);
+      setError('Failed to delete workout');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const stats = (() => {
-    const myLogs = allData?.workouts?.filter(w => w.user_email === user?.email) || [];
+    if (!user || !allData?.workouts) {
+      return { myLogs: [], muscleSplit: {}, pbs: {}, league: [] };
+    }
+
+    const myLogs = allData.workouts.filter(w => w.user_email === user.email) || [];
     const muscleSplit = { Chest: 0, Legs: 0, Back: 0, Shoulders: 0, Arms: 0, Cardio: 0, Flexibility: 0 };
     const pbs = {};
 
     myLogs.forEach(w => {
+      // Use ex_name which is the flattened field from your function
       const group = EXERCISES.strength[w.ex_name] || EXERCISES.cardio[w.ex_name] || EXERCISES.stretch[w.ex_name];
       if (group) muscleSplit[group]++;
       if (w.ex_weight > (pbs[w.ex_name] || 0)) pbs[w.ex_name] = w.ex_weight;
     });
 
-    const league = Object.entries((allData?.workouts || []).reduce((acc, w) => {
+    const league = Object.entries((allData.workouts || []).reduce((acc, w) => {
       acc[w.user_email] = (acc[w.user_email] || 0) + 1;
       return acc;
     }, {})).map(([email, count]) => {
-      const u = allData?.users?.find(usr => usr.email === email);
+      const u = allData.users?.find(usr => usr.email === email);
       return { name: u?.display_name || email.split('@')[0], count };
     }).sort((a,b) => b.count - a.count);
 
@@ -72,12 +176,29 @@ const Dashboard = () => {
       <div style={styles.authCard}>
         <Sparkles size={40} color="#6366f1" />
         <h2 style={{margin:'20px 0'}}>Fit as a Fiddle</h2>
-        <input style={styles.input} placeholder="Email" onChange={e => setEmail(e.target.value)} />
-        <input style={styles.input} type="password" placeholder="Password" onChange={e => setPassword(e.target.value)} />
-        <button style={styles.mainBtn} onClick={async () => {
-            const res = await fetch('/.netlify/functions/database', { method: 'POST', body: JSON.stringify({ action: 'auth', email, password }) });
-            if (res.ok) { const d = await res.json(); setUser({email: d.email}); localStorage.setItem('fitnessUser', JSON.stringify({email: d.email})); }
-        }}>Enter Dashboard</button>
+        {error && <div style={styles.error}>{error}</div>}
+        <input 
+          style={styles.input} 
+          placeholder="Email" 
+          value={email}
+          onChange={e => setEmail(e.target.value)} 
+          disabled={loading}
+        />
+        <input 
+          style={styles.input} 
+          type="password" 
+          placeholder="Password" 
+          value={password}
+          onChange={e => setPassword(e.target.value)} 
+          disabled={loading}
+        />
+        <button 
+          style={styles.mainBtn} 
+          onClick={handleAuth}
+          disabled={loading}
+        >
+          {loading ? 'Loading...' : 'Enter Dashboard'}
+        </button>
       </div>
     </div>
   );
@@ -86,24 +207,47 @@ const Dashboard = () => {
     <div style={styles.container}>
       <div style={styles.header}>
         <h1 style={styles.brandTitle}>Fit as a Fiddle</h1>
-        <button onClick={() => {setUser(null); localStorage.removeItem('fitnessUser');}} style={styles.logoutBtn}>
+        <button 
+          onClick={() => {setUser(null); localStorage.removeItem('fitnessUser');}} 
+          style={styles.logoutBtn}
+          disabled={loading}
+        >
           <LogOut size={16} /> Sign Out
         </button>
       </div>
 
+      {error && <div style={styles.errorBanner}>{error}</div>}
+      {loading && <div style={styles.loadingBanner}>Loading...</div>}
+
       <div style={styles.gridTop}>
         <div style={styles.card}>
-          <div style={styles.cardHeader}><Target size={18} color="#6366f1" /><h3>Personal Bests</h3></div>
-          {Object.entries(stats.pbs).map(([name, val]) => (
-            <div key={name} style={styles.row}><span>{name}</span><span style={{color:'#6366f1', fontWeight:'bold'}}>{val}kg</span></div>
-          ))}
+          <div style={styles.cardHeader}>
+            <Target size={18} color="#6366f1" />
+            <h3>Personal Bests</h3>
+          </div>
+          {Object.entries(stats.pbs).length === 0 ? (
+            <div style={styles.emptyState}>No personal bests yet</div>
+          ) : (
+            Object.entries(stats.pbs).map(([name, val]) => (
+              <div key={name} style={styles.row}>
+                <span>{name}</span>
+                <span style={{color:'#6366f1', fontWeight:'bold'}}>{val}kg</span>
+              </div>
+            ))
+          )}
         </div>
+
         <div style={styles.card}>
-          <div style={styles.cardHeader}><Zap size={18} color="#fbbf24" /><h3>Muscle Balance</h3></div>
+          <div style={styles.cardHeader}>
+            <Zap size={18} color="#fbbf24" />
+            <h3>Muscle Balance</h3>
+          </div>
           {Object.entries(stats.muscleSplit).map(([group, count]) => (
             <div key={group} style={styles.balanceRow}>
               <span style={styles.groupLabel}>{group}</span>
-              <div style={styles.barBg}><div style={{...styles.barFill, width: `${Math.min(100, count * 20)}%`}} /></div>
+              <div style={styles.barBg}>
+                <div style={{...styles.barFill, width: `${Math.min(100, count * 20)}%`}} />
+              </div>
             </div>
           ))}
         </div>
@@ -111,58 +255,149 @@ const Dashboard = () => {
 
       <div style={styles.gridBottom}>
         <div style={styles.card}>
-          <div style={styles.cardHeader}><Calendar size={18} color="#6366f1" /><h3>Workout History</h3></div>
+          <div style={styles.cardHeader}>
+            <Calendar size={18} color="#6366f1" />
+            <h3>Workout History</h3>
+          </div>
           <div style={styles.scrollArea}>
-            {stats.myLogs.map((w, i) => (
-              <div key={i} style={styles.historyItem}>
-                <span style={styles.dateText}>{new Date(w.created_at).toLocaleDateString(undefined, {day:'numeric', month:'short'})}</span>
-                <span style={{flex:1, fontWeight:'600'}}>{w.ex_name}</span>
-                <div style={{textAlign:'right', marginRight:'15px'}}>
-                   <div style={{fontWeight:'bold', color:'#6366f1'}}>{w.ex_weight}kg</div>
-                   <div style={{fontSize:'10px', color:'#94a3b8'}}>{w.ex_sets} x {w.ex_reps}</div>
+            {stats.myLogs.length === 0 ? (
+              <div style={styles.emptyState}>No workouts logged yet</div>
+            ) : (
+              stats.myLogs.map((w, i) => (
+                <div key={i} style={styles.historyItem}>
+                  <span style={styles.dateText}>
+                    {new Date(w.created_at).toLocaleDateString(undefined, {day:'numeric', month:'short'})}
+                  </span>
+                  <span style={{flex:1, fontWeight:'600'}}>{w.ex_name}</span>
+                  <div style={{textAlign:'right', marginRight:'15px'}}>
+                     <div style={{fontWeight:'bold', color:'#6366f1'}}>{w.ex_weight}kg</div>
+                     <div style={{fontSize:'10px', color:'#94a3b8'}}>{w.ex_sets} x {w.ex_reps}</div>
+                  </div>
+                  <Trash2 
+                    size={16} 
+                    color="#ef4444" 
+                    style={{cursor:'pointer', opacity: loading ? 0.5 : 1}} 
+                    onClick={() => deleteWorkout(w.id)}
+                  />
                 </div>
-                <Trash2 size={16} color="#ef4444" style={{cursor:'pointer'}} onClick={async () => {
-                   await fetch(`/.netlify/functions/database?workoutId=${w.id}`, { method: 'DELETE' });
-                   loadData();
-                }} />
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
         <div style={styles.card}>
-          <div style={styles.cardHeader}><Trophy size={18} color="#fbbf24" /><h3>League Standings</h3></div>
+          <div style={styles.cardHeader}>
+            <Trophy size={18} color="#fbbf24" />
+            <h3>League Standings</h3>
+          </div>
           <div style={styles.scrollArea}>
-            {stats.league.map((entry, i) => (
-              <div key={i} style={styles.leagueItem}>
-                <div style={styles.rankCircle}>{i+1}</div>
-                <div style={{flex:1}}>{entry.name}</div>
-                <div style={{fontSize:'12px', fontWeight:'bold', color:'#fbbf24'}}>{entry.count} sessions</div>
-              </div>
-            ))}
+            {stats.league.length === 0 ? (
+              <div style={styles.emptyState}>No league data available</div>
+            ) : (
+              stats.league.map((entry, i) => (
+                <div key={i} style={styles.leagueItem}>
+                  <div style={styles.rankCircle}>{i+1}</div>
+                  <div style={{flex:1}}>{entry.name}</div>
+                  <div style={{fontSize:'12px', fontWeight:'bold', color:'#fbbf24'}}>{entry.count} sessions</div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
 
       <div style={styles.fabContainer}>
-        <button onClick={() => {setWorkoutType('strength'); setIsLogging(true); setSelectedEx('Bench Press')}} style={{...styles.fab, background:'#6366f1'}}><Dumbbell size={18}/> Strength</button>
-        <button onClick={() => {setWorkoutType('cardio'); setIsLogging(true); setSelectedEx('Running')}} style={{...styles.fab, background:'#ec4899'}}><Heart size={18}/> Cardio</button>
-        <button onClick={() => {setWorkoutType('stretch'); setIsLogging(true); setSelectedEx('Yoga')}} style={{...styles.fab, background:'#10b981'}}><Wind size={18}/> Stretch</button>
+        <button 
+          onClick={() => {
+            setWorkoutType('strength'); 
+            setIsLogging(true); 
+            setSelectedEx('Bench Press');
+          }} 
+          style={{...styles.fab, background:'#6366f1'}}
+          disabled={loading}
+        >
+          <Dumbbell size={18}/> Strength
+        </button>
+        <button 
+          onClick={() => {
+            setWorkoutType('cardio'); 
+            setIsLogging(true); 
+            setSelectedEx('Running');
+          }} 
+          style={{...styles.fab, background:'#ec4899'}}
+          disabled={loading}
+        >
+          <Heart size={18}/> Cardio
+        </button>
+        <button 
+          onClick={() => {
+            setWorkoutType('stretch'); 
+            setIsLogging(true); 
+            setSelectedEx('Yoga');
+          }} 
+          style={{...styles.fab, background:'#10b981'}}
+          disabled={loading}
+        >
+          <Wind size={18}/> Stretch
+        </button>
       </div>
 
       {isLogging && (
          <div style={styles.modalOverlay}>
             <div style={styles.modalContent}>
-               <div style={styles.modalHeader}><h3>Log {workoutType}</h3><X onClick={()=>setIsLogging(false)} style={{cursor:'pointer'}}/></div>
-               <select style={styles.input} value={selectedEx} onChange={e=>setSelectedEx(e.target.value)}>
-                  {Object.keys(EXERCISES[workoutType]).map(ex => <option key={ex} value={ex}>{ex}</option>)}
+               <div style={styles.modalHeader}>
+                 <h3>Log {workoutType}</h3>
+                 <X onClick={()=>setIsLogging(false)} style={{cursor:'pointer'}}/>
+               </div>
+               <select 
+                 style={styles.input} 
+                 value={selectedEx} 
+                 onChange={e=>setSelectedEx(e.target.value)}
+                 disabled={loading}
+               >
+                  {Object.keys(EXERCISES[workoutType]).map(ex => 
+                    <option key={ex} value={ex}>{ex}</option>
+                  )}
                </select>
                <div style={styles.inputGrid}>
-                  <div><label style={styles.label}>SETS</label><input style={styles.input} type="number" value={sets} onChange={e=>setSets(e.target.value)} /></div>
-                  <div><label style={styles.label}>REPS</label><input style={styles.input} type="number" value={reps} onChange={e=>setReps(e.target.value)} /></div>
-                  <div><label style={styles.label}>KG</label><input style={styles.input} type="number" value={weight} onChange={e=>setWeight(e.target.value)} /></div>
+                  <div>
+                    <label style={styles.label}>SETS</label>
+                    <input 
+                      style={styles.input} 
+                      type="number" 
+                      value={sets} 
+                      onChange={e=>setSets(e.target.value)} 
+                      disabled={loading}
+                    />
+                  </div>
+                  <div>
+                    <label style={styles.label}>REPS</label>
+                    <input 
+                      style={styles.input} 
+                      type="number" 
+                      value={reps} 
+                      onChange={e=>setReps(e.target.value)} 
+                      disabled={loading}
+                    />
+                  </div>
+                  <div>
+                    <label style={styles.label}>KG</label>
+                    <input 
+                      style={styles.input} 
+                      type="number" 
+                      value={weight} 
+                      onChange={e=>setWeight(e.target.value)} 
+                      disabled={loading}
+                    />
+                  </div>
                </div>
-               <button style={styles.mainBtn} onClick={finishWorkout}>Save Workout</button>
+               <button 
+                 style={styles.mainBtn} 
+                 onClick={finishWorkout}
+                 disabled={loading}
+               >
+                 {loading ? 'Saving...' : 'Save Workout'}
+               </button>
             </div>
          </div>
       )}
@@ -170,7 +405,40 @@ const Dashboard = () => {
   );
 };
 
+// Add new styles for error/loading states
+const additionalStyles = {
+  error: { color: '#ef4444', fontSize: '14px', marginBottom: '15px', textAlign: 'center' },
+  errorBanner: { 
+    background: 'rgba(239, 68, 68, 0.1)', 
+    color: '#ef4444', 
+    padding: '12px', 
+    borderRadius: '12px', 
+    marginBottom: '20px',
+    textAlign: 'center'
+  },
+  loadingBanner: { 
+    background: 'rgba(99, 102, 241, 0.1)', 
+    color: '#6366f1', 
+    padding: '12px', 
+    borderRadius: '12px', 
+    marginBottom: '20px',
+    textAlign: 'center'
+  },
+  emptyState: { 
+    textAlign: 'center', 
+    color: '#94a3b8', 
+    padding: '40px 20px', 
+    fontSize: '14px' 
+  }
+};
+
+// Merge styles
 const styles = {
+  ...originalStyles,
+  ...additionalStyles
+};
+
+const originalStyles = {
   container: { minHeight: '100vh', background: '#0a0f1d', color: '#f8fafc', padding: '40px', fontFamily: 'sans-serif' },
   header: { display:'flex', justifyContent:'space-between', marginBottom:'40px', alignItems:'center' },
   brandTitle: { color:'#6366f1', margin:0, fontWeight:'900', fontSize:'28px' },
