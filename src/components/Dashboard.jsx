@@ -1,7 +1,8 @@
-// Dashboard.jsx - Restored with Fixes
+// Dashboard.jsx - Enhanced error handling and debugging for database issues
 import React, { useState, useEffect, useCallback } from 'react';
 import { Activity, Dumbbell, TrendingUp, Calendar, Heart, Sparkles } from 'lucide-react';
 
+// Move EXERCISES outside component to avoid re-declaration
 const EXERCISES = {
   strength: {
     'Bench Press': { group: 'Chest', icon: '💪' },
@@ -33,22 +34,49 @@ const EXERCISES = {
   }
 };
 
+// Separate component for authentication
 const AuthForm = ({ email, setEmail, password, setPassword, isRegistering, setIsRegistering, handleAuth, loading }) => (
   <div style={styles.authCard}>
     <div style={styles.authHeader}>
-      <div style={styles.logoContainer}><Sparkles size={40} color="#6366f1" /></div>
+      <div style={styles.logoContainer}>
+        <Sparkles size={40} color="#6366f1" />
+      </div>
       <h1 style={styles.authTitle}>Fit as a Fiddle</h1>
       <p style={styles.authSubtitle}>Your Personal Fitness Journey</p>
     </div>
     <div style={styles.authForm}>
-      <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} style={styles.authInput} disabled={loading} />
-      <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} onKeyPress={e => e.key === 'Enter' && !loading && handleAuth()} style={styles.authInput} disabled={loading} />
-      <button onClick={handleAuth} style={styles.authButton} disabled={loading}>{loading ? 'Loading...' : (isRegistering ? 'Create Account' : 'Sign In')}</button>
-      <button onClick={() => setIsRegistering(!isRegistering)} style={styles.toggleButton} disabled={loading}>{isRegistering ? 'Already have an account? Sign in' : "Don't have an account? Register"}</button>
+      <input
+        type="email"
+        placeholder="Email"
+        value={email}
+        onChange={e => setEmail(e.target.value)}
+        style={styles.authInput}
+        disabled={loading}
+      />
+      <input
+        type="password"
+        placeholder="Password"
+        value={password}
+        onChange={e => setPassword(e.target.value)}
+        onKeyPress={e => e.key === 'Enter' && !loading && handleAuth()}
+        style={styles.authInput}
+        disabled={loading}
+      />
+      <button onClick={handleAuth} style={styles.authButton} disabled={loading}>
+        {loading ? 'Loading...' : (isRegistering ? 'Create Account' : 'Sign In')}
+      </button>
+      <button
+        onClick={() => setIsRegistering(!isRegistering)}
+        style={styles.toggleButton}
+        disabled={loading}
+      >
+        {isRegistering ? 'Already have an account? Sign in' : "Don't have an account? Register"}
+      </button>
     </div>
   </div>
 );
 
+// Separate workout panel component
 const WorkoutPanel = ({ workoutType, setIsLoggingWorkout, setWorkoutType, currentExercises, setCurrentExercises, finishWorkout, loading }) => {
   const [selectedExercise, setSelectedExercise] = useState('');
   const [sets, setSets] = useState('');
@@ -59,26 +87,61 @@ const WorkoutPanel = ({ workoutType, setIsLoggingWorkout, setWorkoutType, curren
   useEffect(() => {
     if (workoutType && EXERCISES[workoutType]) {
       const exercises = Object.keys(EXERCISES[workoutType]);
-      if (exercises.length > 0) setSelectedExercise(exercises[0]);
+      if (exercises.length > 0) {
+        setSelectedExercise(exercises[0]);
+      }
     }
   }, [workoutType]);
 
   const addExercise = () => {
     if (!workoutType || !selectedExercise) return;
+    
     const exercises = EXERCISES[workoutType];
     const exerciseData = exercises[selectedExercise];
+    
     if (!exerciseData) return;
     
     let newExercise;
+    
     if (workoutType === 'cardio' || workoutType === 'stretch') {
-      if (!duration || isNaN(duration) || parseInt(duration) <= 0) { alert('Please enter valid duration'); return; }
-      newExercise = { exercise_name: selectedExercise, sets: 1, reps: parseInt(duration), weight: 0, group: exerciseData.group, type: workoutType };
+      if (!duration || isNaN(duration) || parseInt(duration) <= 0) {
+        alert('Please enter a valid duration (minutes)');
+        return;
+      }
+      
+      newExercise = {
+        exercise_name: selectedExercise,
+        sets: 1,
+        reps: parseInt(duration),
+        weight: 0,
+        group: exerciseData.group,
+        type: workoutType
+      };
+      
+      setDuration('');
     } else {
-      if (!sets || !reps || isNaN(sets) || isNaN(reps)) { alert('Please enter valid sets and reps'); return; }
-      newExercise = { exercise_name: selectedExercise, sets: parseInt(sets), reps: parseInt(reps), weight: parseFloat(weight) || 0, group: exerciseData.group, type: workoutType };
+      if (!sets || !reps || isNaN(sets) || isNaN(reps) || parseInt(sets) <= 0 || parseInt(reps) <= 0) {
+        alert('Please enter valid sets and reps');
+        return;
+      }
+      
+      const weightValue = parseFloat(weight) || 0;
+      
+      newExercise = {
+        exercise_name: selectedExercise,
+        sets: parseInt(sets),
+        reps: parseInt(reps),
+        weight: weightValue,
+        group: exerciseData.group,
+        type: workoutType
+      };
+      
+      setSets('');
+      setReps('');
+      setWeight('');
     }
+    
     setCurrentExercises(prev => [...prev, newExercise]);
-    setSets(''); setReps(''); setWeight(''); setDuration('');
   };
 
   return (
@@ -89,42 +152,73 @@ const WorkoutPanel = ({ workoutType, setIsLoggingWorkout, setWorkoutType, curren
         </h3>
         <button onClick={() => {setIsLoggingWorkout(false); setWorkoutType(null); setCurrentExercises([]);}} style={styles.closeBtn}>✕</button>
       </div>
+      
       <div style={styles.inputGrid}>
         <div style={styles.inputGroup}>
           <label style={styles.label}>Exercise</label>
           <select value={selectedExercise} onChange={e => setSelectedExercise(e.target.value)} style={styles.select}>
             {Object.keys(EXERCISES[workoutType] || {}).map(name => (
-              <option key={name} value={name}>{EXERCISES[workoutType][name]?.icon} {name}</option>
+              <option key={name} value={name}>
+                {EXERCISES[workoutType][name]?.icon} {name}
+              </option>
             ))}
           </select>
         </div>
+        
         {workoutType === 'strength' ? (
           <div style={styles.inputRow}>
-            <div style={styles.inputGroup}><label style={styles.label}>Sets</label><input type="number" value={sets} onChange={e => setSets(e.target.value)} style={styles.input} placeholder="0" /></div>
-            <div style={styles.inputGroup}><label style={styles.label}>Reps</label><input type="number" value={reps} onChange={e => setReps(e.target.value)} style={styles.input} placeholder="0" /></div>
-            <div style={styles.inputGroup}><label style={styles.label}>Weight</label><input type="number" value={weight} onChange={e => setWeight(e.target.value)} style={styles.input} placeholder="0" /></div>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>Sets</label>
+              <input type="number" value={sets} onChange={e => setSets(e.target.value)} style={styles.input} min="1" placeholder="0" />
+            </div>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>Reps</label>
+              <input type="number" value={reps} onChange={e => setReps(e.target.value)} style={styles.input} min="1" placeholder="0" />
+            </div>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>Weight (kg)</label>
+              <input type="number" value={weight} onChange={e => setWeight(e.target.value)} style={styles.input} step="0.5" min="0" placeholder="0" />
+            </div>
           </div>
         ) : (
-          <div style={styles.inputGroup}><label style={styles.label}>Duration (min)</label><input type="number" value={duration} onChange={e => setDuration(e.target.value)} style={styles.input} placeholder="0" /></div>
+          <div style={styles.inputGroup}>
+            <label style={styles.label}>Duration (minutes)</label>
+            <input type="number" value={duration} onChange={e => setDuration(e.target.value)} style={styles.input} min="1" placeholder="0" />
+          </div>
         )}
+        
         <button onClick={addExercise} style={styles.addButton}>+ Add Exercise</button>
       </div>
+
       {currentExercises.length > 0 && (
         <div style={styles.exerciseList}>
           <h4 style={styles.listTitle}>Current Session</h4>
-          {currentExercises.map((ex, i) => (
+          {currentExercises.map((exercise, i) => (
             <div key={i} style={styles.exerciseItem}>
-              <span>{EXERCISES[ex.type]?.[ex.exercise_name]?.icon} {ex.exercise_name}</span>
-              <span style={styles.exerciseDetails}>{ex.type === 'strength' ? `${ex.sets} × ${ex.reps} @ ${ex.weight}kg` : `${ex.reps} min`}</span>
+              <span>{EXERCISES[exercise.type]?.[exercise.exercise_name]?.icon} {exercise.exercise_name}</span>
+              <span style={styles.exerciseDetails}>
+                {exercise.type === 'strength' 
+                  ? `${exercise.sets} × ${exercise.reps}${exercise.weight > 0 ? ` @ ${exercise.weight}kg` : ''}`
+                  : `${exercise.reps} min`
+                }
+              </span>
             </div>
           ))}
-          <button onClick={finishWorkout} disabled={loading} style={styles.finishButton}>{loading ? 'Saving...' : '✓ Finish Workout'}</button>
+          {workoutType === 'strength' && (
+            <div style={styles.totalVolume}>
+              Total: {currentExercises.reduce((sum, e) => sum + (e.sets * e.reps * e.weight), 0).toFixed(1)}kg
+            </div>
+          )}
+          <button onClick={finishWorkout} disabled={loading} style={styles.finishButton}>
+            {loading ? 'Saving...' : '✓ Finish Workout'}
+          </button>
         </div>
       )}
     </div>
   );
 };
 
+// Main component 
 const Dashboard = () => {
   const [user, setUser] = useState(null);
   const [workouts, setWorkouts] = useState([]);
@@ -139,57 +233,80 @@ const Dashboard = () => {
   const [saveError, setSaveError] = useState(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem('fitnessUser');
-    if (saved) setUser(JSON.parse(saved));
+    const loadUser = async () => {
+      try {
+        const savedUser = localStorage.getItem('fitnessUser');
+        if (savedUser) {
+          const parsedUser = JSON.parse(savedUser);
+          if (parsedUser?.email) setUser(parsedUser);
+        }
+      } catch (err) {
+        localStorage.removeItem('fitnessUser');
+      }
+    };
+    loadUser();
   }, []);
+
+  useEffect(() => {
+    if (user?.email) loadWorkouts();
+  }, [user]);
 
   const loadWorkouts = useCallback(async () => {
     if (!user?.email) return;
     setLoading(true);
     try {
       const res = await fetch(`/.netlify/functions/database?user=${encodeURIComponent(user.email)}`);
+      if (!res.ok) throw new Error('Failed to load');
       const data = await res.json();
       setWorkouts(Array.isArray(data.workouts) ? data.workouts : []);
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
-  useEffect(() => { if (user) loadWorkouts(); }, [user, loadWorkouts]);
-
   const handleAuth = async () => {
+    if (!email?.trim() || !password?.trim()) return alert('Enter credentials');
     setLoading(true);
     try {
       const res = await fetch('/.netlify/functions/database', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'auth', email, password, isRegistering })
+        body: JSON.stringify({ action: 'auth', email: email.trim(), password, isRegistering })
       });
       const data = await res.json();
-      if (res.ok) { setUser(data); localStorage.setItem('fitnessUser', JSON.stringify(data)); }
-      else { alert(data.error); }
-    } catch (err) { alert('Auth failed'); }
-    finally { setLoading(false); }
+      if (res.ok && data?.email) {
+        setUser({ email: data.email });
+        localStorage.setItem('fitnessUser', JSON.stringify({ email: data.email }));
+      } else {
+        alert(data.error || 'Auth failed');
+      }
+    } catch (err) {
+      alert('Network error');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const startWorkout = (type) => { setWorkoutType(type); setIsLoggingWorkout(true); setCurrentExercises([]); setSaveError(null); };
+  const startWorkout = (type) => {
+    setWorkoutType(type);
+    setIsLoggingWorkout(true);
+    setCurrentExercises([]);
+    setSaveError(null);
+  };
 
   const finishWorkout = async () => {
     if (!user?.email || currentExercises.length === 0) return;
     setLoading(true);
     setSaveError(null);
     try {
-      // THE FIX: Included 'action' and ensured strict data types
       const workoutData = {
-        action: 'saveWorkout', 
+        action: 'saveWorkout', // Essential for the handler to route correctly
         userEmail: user.email,
-        exercises: currentExercises.map(ex => ({
-          ...ex,
-          sets: Number(ex.sets),
-          reps: Number(ex.reps),
-          weight: Number(ex.weight)
-        })),
-        type: workoutType,
-        created_at: new Date().toISOString()
+        exercises: currentExercises,
+        created_at: new Date().toISOString(),
+        type: workoutType
       };
 
       const res = await fetch('/.netlify/functions/database', {
@@ -199,36 +316,40 @@ const Dashboard = () => {
       });
 
       if (res.ok) {
-        setIsLoggingWorkout(false);
         setCurrentExercises([]);
+        setIsLoggingWorkout(false);
         await loadWorkouts();
       } else {
         const data = await res.json();
-        setSaveError(data.error || "Failed to save");
+        throw new Error(data.error || 'Save failed');
       }
-    } catch (err) { setSaveError(err.message); }
-    finally { setLoading(false); }
+    } catch (err) {
+      setSaveError(err.message);
+      alert(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const calculateStats = useCallback(() => {
+    if (!Array.isArray(workouts)) return { totalSessions: 0, totalVolume: 0, currentStreak: 0 };
     const totalSessions = workouts.length;
-    const totalVolume = workouts.reduce((sum, w) => sum + (w.exercises?.reduce((s, e) => s + (e.sets * e.reps * e.weight), 0) || 0), 0);
+    const totalVolume = workouts.reduce((sum, w) => sum + (w.exercises?.reduce((s, e) => s + (e.sets * e.reps * (e.weight || 0)), 0) || 0), 0);
     
-    // Streak logic
+    // Simple Streak Calculation
     let currentStreak = 0;
-    const uniqueDates = [...new Set(workouts.map(w => new Date(w.created_at).toDateString()))];
+    const dates = [...new Set(workouts.map(w => new Date(w.created_at).toDateString()))];
     const today = new Date().toDateString();
-    if (uniqueDates.includes(today)) {
-        // simplified streak count for example
-        currentStreak = uniqueDates.length; 
-    }
+    if (dates.includes(today)) currentStreak = dates.length; // Simplified for this view
 
     return { totalSessions, totalVolume, currentStreak };
   }, [workouts]);
 
   const getWorkoutInfo = (workout) => {
     const type = workout.type || 'strength';
-    const firstEx = workout.exercises?.[0]?.exercise_name || 'Workout';
+    const exercises = workout.exercises || [];
+    if (exercises.length === 0) return { name: 'Workout', icon: '💪', color: '#6366f1' };
+    const firstEx = exercises[0].exercise_name || 'Workout';
     const icon = EXERCISES[type]?.[firstEx]?.icon || '💪';
     return { name: firstEx, icon, color: type === 'strength' ? '#6366f1' : '#ec4899' };
   };
@@ -250,21 +371,24 @@ const Dashboard = () => {
       </div>
 
       <div style={styles.statsGrid}>
-        <div style={styles.statCard}><div style={styles.statIcon}><Dumbbell /></div><div><div style={styles.statValue}>{stats.totalSessions}</div><div style={styles.statLabel}>Sessions</div></div></div>
-        <div style={styles.statCard}><div style={{...styles.statIcon, background: '#10b981'}}><Activity /></div><div><div style={styles.statValue}>{stats.currentStreak}</div><div style={styles.statLabel}>Streak</div></div></div>
+        <div style={styles.statCard}><div style={styles.statIcon}><Dumbbell size={24} color="#fff" /></div><div><div style={styles.statValue}>{stats.totalSessions}</div><div style={styles.statLabel}>Sessions</div></div></div>
+        <div style={styles.statCard}><div style={{...styles.statIcon, background: '#10b981'}}>🔥</div><div><div style={styles.statValue}>{Math.round(stats.totalVolume)}kg</div><div style={styles.statLabel}>Volume</div></div></div>
+        <div style={styles.statCard}><div style={{...styles.statIcon, background: '#6366f1'}}><Activity size={24} color="#fff" /></div><div><div style={styles.statValue}>{stats.currentStreak}</div><div style={styles.statLabel}>Streak</div></div></div>
       </div>
 
       <div style={styles.mainGrid}>
-         <div style={styles.card}>
-            <h3 style={styles.cardTitle}>🔥 Day Streak</h3>
-            <div style={styles.streakBar}>
-                {Array.from({length: 15}).map((_, i) => (
-                    <div key={i} style={{...styles.streakDay, background: i < stats.currentStreak ? '#6366f1' : 'rgba(255,255,255,0.1)'}}></div>
-                ))}
+        <div style={styles.card}>
+            <h3 style={styles.cardTitle}>🔥 Streak</h3>
+            <div style={styles.streakBarContainer}>
+                <div style={styles.streakBar}>
+                    {Array.from({length: 15}).map((_, i) => (
+                        <div key={i} style={{...styles.streakDay, background: i < stats.currentStreak ? '#6366f1' : 'rgba(255,255,255,0.1)'}}></div>
+                    ))}
+                </div>
             </div>
-         </div>
+        </div>
 
-         <div style={styles.card}>
+        <div style={styles.card}>
             <h3 style={styles.cardTitle}>📅 Recent Sessions</h3>
             <div style={styles.sessionList}>
                 {workouts.slice(0, 4).map((w, i) => {
@@ -277,10 +401,10 @@ const Dashboard = () => {
                                 <div style={styles.sessionDate}>{new Date(w.created_at).toLocaleDateString()}</div>
                             </div>
                         </div>
-                    )
+                    );
                 })}
             </div>
-         </div>
+        </div>
       </div>
 
       {!isLoggingWorkout ? (
@@ -304,43 +428,36 @@ const styles = {
   authSubtitle: { color: '#94a3b8' },
   authForm: { display: 'flex', flexDirection: 'column', gap: '16px' },
   authInput: { padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' },
-  authButton: { padding: '14px', background: '#6366f1', border: 'none', borderRadius: '12px', color: '#fff', fontWeight: 'bold', cursor: 'pointer' },
+  authButton: { padding: '14px', background: '#6366f1', borderRadius: '12px', color: '#fff', border: 'none', cursor: 'pointer' },
   toggleButton: { background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer' },
   header: { display: 'flex', justifyContent: 'space-between', marginBottom: '32px' },
   brandContainer: { display: 'flex', alignItems: 'center', gap: '8px' },
-  brandTitle: { fontSize: '24px', fontWeight: 'bold', color: '#6366f1' },
-  logoutBtn: { padding: '8px 16px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#94a3b8', cursor: 'pointer' },
+  brandTitle: { fontSize: '24px', color: '#6366f1', margin: 0 },
+  greeting: { margin: '4px 0', fontSize: '18px' },
+  logoutBtn: { padding: '8px 16px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#94a3b8' },
   statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' },
-  statCard: { background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '16px', border: '1px solid rgba(255,255,255,0.1)' },
+  statCard: { background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '20px', display: 'flex', gap: '16px', alignItems: 'center' },
   statIcon: { width: '48px', height: '48px', borderRadius: '12px', background: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  statValue: { fontSize: '24px', fontWeight: 'bold' },
+  statValue: { fontSize: '22px', fontWeight: '700' },
   statLabel: { fontSize: '12px', color: '#94a3b8' },
-  mainGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginBottom: '100px' },
-  card: { background: 'rgba(255,255,255,0.05)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)' },
-  cardTitle: { fontSize: '18px', marginBottom: '16px' },
-  streakBar: { display: 'flex', gap: '4px', marginTop: '12px' },
-  streakDay: { flex: 1, height: '8px', borderRadius: '4px' },
-  sessionList: { display: 'flex', flexDirection: 'column', gap: '12px' },
-  sessionItem: { display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.03)' },
+  mainGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginBottom: '80px' },
+  card: { background: 'rgba(255,255,255,0.05)', padding: '24px', borderRadius: '24px' },
+  streakBar: { display: 'flex', gap: '4px', height: '10px' },
+  streakDay: { flex: 1, borderRadius: '4px' },
+  sessionItem: { display: 'flex', gap: '12px', padding: '12px', borderBottom: '1px solid rgba(255,255,255,0.1)' },
   sessionIcon: { width: '40px', height: '40px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  sessionWorkoutName: { fontWeight: 'bold' },
-  sessionDate: { fontSize: '12px', color: '#94a3b8' },
-  fabContainer: { position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '12px', zIndex: 100 },
-  fabButton: { padding: '12px 24px', borderRadius: '30px', border: 'none', color: '#fff', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.3)' },
-  workoutPanel: { position: 'fixed', bottom: 0, left: 0, right: 0, background: '#1e1b4b', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', zIndex: 101, boxShadow: '0 -10px 40px rgba(0,0,0,0.5)' },
-  workoutHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '20px' },
-  closeBtn: { background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer' },
-  inputGrid: { display: 'flex', flexDirection: 'column', gap: '16px' },
-  inputRow: { display: 'flex', gap: '12px' },
-  inputGroup: { flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' },
-  label: { fontSize: '12px', color: '#94a3b8' },
+  fabContainer: { position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '12px' },
+  fabButton: { padding: '12px 24px', borderRadius: '30px', color: '#fff', border: 'none', fontWeight: 'bold', display: 'flex', alignItems: 'center' },
+  workoutPanel: { position: 'fixed', bottom: 0, left: 0, right: 0, background: '#1e1b4b', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', zIndex: 100 },
+  workoutHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '16px' },
+  inputGrid: { display: 'flex', flexDirection: 'column', gap: '12px' },
+  inputRow: { display: 'flex', gap: '8px' },
+  inputGroup: { flex: 1, display: 'flex', flexDirection: 'column' },
   input: { padding: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' },
-  select: { padding: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' },
-  addButton: { padding: '12px', background: '#6366f1', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 'bold' },
-  exerciseList: { marginTop: '20px', maxHeight: '200px', overflowY: 'auto' },
-  exerciseItem: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' },
-  finishButton: { width: '100%', padding: '14px', background: '#10b981', border: 'none', borderRadius: '12px', color: '#fff', fontWeight: 'bold', marginTop: '16px' },
-  errorBanner: { background: 'rgba(239, 68, 68, 0.1)', padding: '12px', borderRadius: '12px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between' }
+  select: { padding: '10px', background: 'rgba(255,255,255,0.05)', color: '#fff', borderRadius: '8px' },
+  addButton: { padding: '12px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '8px' },
+  finishButton: { width: '100%', padding: '14px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '12px', marginTop: '12px' },
+  errorBanner: { background: 'rgba(239,68,68,0.2)', padding: '12px', borderRadius: '8px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }
 };
 
 export default Dashboard;
