@@ -11,24 +11,22 @@ export const handler = async (event) => {
       return {
         statusCode: 200,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workouts, users }),
+        body: JSON.stringify({ workouts: workouts || [], users: users || [] }),
       };
     }
 
     if (method === 'POST') {
       const body = JSON.parse(event.body || '{}');
 
-      // Update Profile Logic
       if (body.action === 'update_profile') {
         await sql`
           UPDATE users 
           SET display_name = ${body.displayName}, profile_pic = ${body.profilePic} 
           WHERE email = ${body.email}
         `;
-        return { statusCode: 200, body: JSON.stringify({ message: "Profile updated" }) };
+        return { statusCode: 200, body: JSON.stringify({ success: true }) };
       }
 
-      // Auth Logic
       if (body.action === 'auth') {
         const { email, password, isRegistering } = body;
         const users = await sql`SELECT * FROM users WHERE email = ${email}`;
@@ -44,7 +42,6 @@ export const handler = async (event) => {
         }
       }
 
-      // Workout Save Logic
       if (body.userEmail && body.exercises) {
         await sql`INSERT INTO workouts (user_email, exercises) VALUES (${body.userEmail}, ${JSON.stringify(body.exercises)})`;
         return { statusCode: 200, body: JSON.stringify({ message: "Saved" }) };
