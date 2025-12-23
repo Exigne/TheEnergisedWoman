@@ -1,4 +1,4 @@
-// Dashboard.jsx - Updated with workout names and day streak
+// Dashboard.jsx - Fixed to show actual exercise names
 import React, { useState, useEffect, useCallback } from 'react';
 import { Activity, Dumbbell, TrendingUp, Calendar, Heart, Sparkles } from 'lucide-react';
 
@@ -453,7 +453,7 @@ const Dashboard = () => {
   const stats = calculateStats();
   const avgVolume = stats.totalSessions > 0 ? Math.round(stats.totalVolume / stats.totalSessions) : 0;
 
-  // Helper function to get workout type name and icon
+  // FIXED: Helper function to get workout name and icon - NOW SHOWS EXERCISE NAMES
   const getWorkoutInfo = (workout) => {
     const type = workout.type || 'strength';
     const exercises = workout.exercises || [];
@@ -462,19 +462,24 @@ const Dashboard = () => {
       return { name: 'Workout', icon: '💪', color: '#6366f1' };
     }
     
-    // Get the first exercise to determine the workout type
+    // Get the first exercise to determine the workout name and icon
     const firstExercise = exercises[0];
     const exerciseData = EXERCISES[type]?.[firstExercise.name];
     
+    // If multiple exercises, show the first one with count
+    const workoutName = exercises.length === 1 
+      ? firstExercise.name 
+      : `${firstExercise.name} +${exercises.length - 1}`;
+    
     if (exerciseData) {
       return { 
-        name: firstExercise.name, 
+        name: workoutName, 
         icon: exerciseData.icon, 
         color: type === 'strength' ? '#6366f1' : type === 'cardio' ? '#ec4899' : '#10b981' 
       };
     }
     
-    return { name: firstExercise.name, icon: '💪', color: '#6366f1' };
+    return { name: workoutName, icon: '💪', color: '#6366f1' };
   };
 
   return (
