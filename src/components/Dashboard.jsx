@@ -1,6 +1,8 @@
+// Fixed FitnessDashboard.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { Activity, Dumbbell, TrendingUp, Calendar, Heart, Sparkles } from 'lucide-react';
 
+// Move EXERCISES outside component to avoid re-declaration
 const EXERCISES = {
   strength: {
     'Bench Press': { group: 'Chest', icon: '💪' },
@@ -32,47 +34,56 @@ const EXERCISES = {
   }
 };
 
-const FitnessDashboard = () => {
-  const [user, setUser] = useState(null);
-  const [workouts, setWorkouts] = useState([]);
-  const [isLoggingWorkout, setIsLoggingWorkout] = useState(false);
-  const [workoutType, setWorkoutType] = useState(null);
-  const [currentExercises, setCurrentExercises] = useState([]);
+// Separate component for authentication to avoid circular issues
+const AuthForm = ({ email, setEmail, password, setPassword, isRegistering, setIsRegistering, handleAuth, loading }) => (
+  <div style={styles.authCard}>
+    <div style={styles.authHeader}>
+      <div style={styles.logoContainer}>
+        <Sparkles size={40} color="#6366f1" />
+      </div>
+      <h1 style={styles.authTitle}>Fit as a Fiddle</h1>
+      <p style={styles.authSubtitle}>Your Personal Fitness Journey</p>
+    </div>
+    <div style={styles.authForm}>
+      <input
+        type="email"
+        placeholder="Email"
+        value={email}
+        onChange={e => setEmail(e.target.value)}
+        style={styles.authInput}
+        disabled={loading}
+      />
+      <input
+        type="password"
+        placeholder="Password"
+        value={password}
+        onChange={e => setPassword(e.target.value)}
+        onKeyPress={e => e.key === 'Enter' && !loading && handleAuth()}
+        style={styles.authInput}
+        disabled={loading}
+      />
+      <button onClick={handleAuth} style={styles.authButton} disabled={loading}>
+        {loading ? 'Loading...' : (isRegistering ? 'Create Account' : 'Sign In')}
+      </button>
+      <button
+        onClick={() => setIsRegistering(!isRegistering)}
+        style={styles.toggleButton}
+        disabled={loading}
+      >
+        {isRegistering ? 'Already have an account? Sign in' : "Don't have an account? Register"}
+      </button>
+    </div>
+  </div>
+);
+
+// Separate workout panel component
+const WorkoutPanel = ({ workoutType, setIsLoggingWorkout, currentExercises, setCurrentExercises, finishWorkout, loading }) => {
   const [selectedExercise, setSelectedExercise] = useState('');
   const [sets, setSets] = useState('');
   const [reps, setReps] = useState('');
   const [weight, setWeight] = useState('');
   const [duration, setDuration] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
 
-  // Load user from localStorage
-  useEffect(() => {
-    try {
-      const savedUser = localStorage.getItem('fitnessUser');
-      if (savedUser) {
-        const parsedUser = JSON.parse(savedUser);
-        if (parsedUser?.email) {
-          setUser(parsedUser);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to parse saved user data:', err);
-      localStorage.removeItem('fitnessUser');
-    }
-  }, []);
-
-  // Load workouts when user is available
-  useEffect(() => {
-    if (user?.email) {
-      loadWorkouts();
-    }
-  }, [user]);
-
-  // Set default exercise when workout type changes
   useEffect(() => {
     if (workoutType && EXERCISES[workoutType]) {
       const exercises = Object.keys(EXERCISES[workoutType]);
@@ -81,86 +92,6 @@ const FitnessDashboard = () => {
       }
     }
   }, [workoutType]);
-
-  const loadWorkouts = useCallback(async () => {
-    if (!user?.email) return;
-    
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      
-      const res = await fetch(`/.netlify/functions/database?user=${encodeURIComponent(user.email)}`, {
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-      
-      const data = await res.json();
-      setWorkouts(Array.isArray(data.workouts) ? data.workouts : []);
-    } catch (err) {
-      console.error('Failed to load workouts:', err);
-      setError(err.message);
-      setWorkouts([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
-
-  const handleAuth = async () => {
-    if (!email?.trim() || !password?.trim()) {
-      alert('Please enter both email and password');
-      return;
-    }
-    
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const res = await fetch('/.netlify/functions/database', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action: 'auth', 
-          email: email.trim(), 
-          password, 
-          isRegistering 
-        })
-      });
-      
-      const data = await res.json();
-      
-      if (res.ok && data?.email) {
-        const userData = { email: data.email };
-        setUser(userData);
-        localStorage.setItem('fitnessUser', JSON.stringify(userData));
-        setEmail('');
-        setPassword('');
-      } else {
-        alert(data.error || 'Authentication failed');
-      }
-    } catch (err) {
-      console.error('Authentication error:', err);
-      alert('Authentication failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const startWorkout = (type) => {
-    if (!EXERCISES[type]) return;
-    
-    setWorkoutType(type);
-    setIsLoggingWorkout(true);
-    setCurrentExercises([]);
-    setError(null);
-  };
 
   const addExercise = () => {
     if (!workoutType || !selectedExercise) return;
@@ -213,11 +144,199 @@ const FitnessDashboard = () => {
     setCurrentExercises(prev => [...prev, newExercise]);
   };
 
+  return (
+    <div style={styles.workoutPanel}>
+      <div style={styles.workoutHeader}>
+        <h3 style={styles.workoutTitle}>
+          {workoutType === 'strength' ? '💪 Strength Training' : workoutType === 'cardio' ? '❤️ Cardio Session' : '🧘 Stretch & Recovery'}
+        </h3>
+        <button onClick={() => {setIsLoggingWorkout(false); setWorkoutType(null); setCurrentExercises([]);}} style={styles.closeBtn}>✕</button>
+      </div>
+      
+      <div style={styles.inputGrid}>
+        <div style={styles.inputGroup}>
+          <label style={styles.label}>Exercise</label>
+          <select value={selectedExercise} onChange={e => setSelectedExercise(e.target.value)} style={styles.select}>
+            {Object.keys(EXERCISES[workoutType] || {}).map(name => (
+              <option key={name} value={name}>
+                {EXERCISES[workoutType][name]?.icon} {name}
+              </option>
+            ))}
+          </select>
+        </div>
+        
+        {workoutType === 'strength' ? (
+          <div style={styles.inputRow}>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>Sets</label>
+              <input type="number" value={sets} onChange={e => setSets(e.target.value)} style={styles.input} min="1" placeholder="0" />
+            </div>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>Reps</label>
+              <input type="number" value={reps} onChange={e => setReps(e.target.value)} style={styles.input} min="1" placeholder="0" />
+            </div>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>Weight (kg)</label>
+              <input type="number" value={weight} onChange={e => setWeight(e.target.value)} style={styles.input} step="0.5" min="0" placeholder="0" />
+            </div>
+          </div>
+        ) : (
+          <div style={styles.inputGroup}>
+            <label style={styles.label}>Duration (minutes)</label>
+            <input type="number" value={duration} onChange={e => setDuration(e.target.value)} style={styles.input} min="1" placeholder="0" />
+          </div>
+        )}
+        
+        <button onClick={addExercise} style={styles.addButton}>+ Add Exercise</button>
+      </div>
+
+      {currentExercises.length > 0 && (
+        <div style={styles.exerciseList}>
+          <h4 style={styles.listTitle}>Current Session</h4>
+          {currentExercises.map((exercise, i) => (
+            <div key={i} style={styles.exerciseItem}>
+              <span>{EXERCISES[exercise.type]?.[exercise.name]?.icon} {exercise.name}</span>
+              <span style={styles.exerciseDetails}>
+                {exercise.type === 'strength' 
+                  ? `${exercise.sets} × ${exercise.reps}${exercise.weight > 0 ? ` @ ${exercise.weight}kg` : ''}`
+                  : `${exercise.reps} min`
+                }
+              </span>
+            </div>
+          ))}
+          {workoutType === 'strength' && (
+            <div style={styles.totalVolume}>
+              Total: {currentExercises.reduce((sum, e) => sum + (e.sets * e.reps * e.weight), 0).toFixed(1)}kg
+            </div>
+          )}
+          <button onClick={finishWorkout} disabled={loading} style={styles.finishButton}>
+            {loading ? 'Saving...' : '✓ Finish Workout'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Main component with proper initialization order
+const FitnessDashboard = () => {
+  const [user, setUser] = useState(null);
+  const [workouts, setWorkouts] = useState([]);
+  const [isLoggingWorkout, setIsLoggingWorkout] = useState(false);
+  const [workoutType, setWorkoutType] = useState(null);
+  const [currentExercises, setCurrentExercises] = useState([]);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Fixed useEffect with proper async handling
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const savedUser = localStorage.getItem('fitnessUser');
+        if (savedUser) {
+          const parsedUser = JSON.parse(savedUser);
+          if (parsedUser?.email) {
+            setUser(parsedUser);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to parse saved user data:', err);
+        localStorage.removeItem('fitnessUser');
+      }
+    };
+    
+    loadUser();
+  }, []);
+
+  useEffect(() => {
+    if (user?.email) {
+      loadWorkouts();
+    }
+  }, [user]);
+
+  const loadWorkouts = useCallback(async () => {
+    if (!user?.email) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      
+      const res = await fetch(`/.netlify/functions/database?user=${encodeURIComponent(user.email)}`, {
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      
+      const data = await res.json();
+      setWorkouts(Array.isArray(data.workouts) ? data.workouts : []);
+    } catch (err) {
+      console.error('Failed to load workouts:', err);
+      setError(err.message);
+      setWorkouts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  const handleAuth = async () => {
+    if (!email?.trim() || !password?.trim()) {
+      alert('Please enter both email and password');
+      return;
+    }
+    
+    setLoading(true);
+    
+    try {
+      const res = await fetch('/.netlify/functions/database', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          action: 'auth', 
+          email: email.trim(), 
+          password, 
+          isRegistering 
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok && data?.email) {
+        const userData = { email: data.email };
+        setUser(userData);
+        localStorage.setItem('fitnessUser', JSON.stringify(userData));
+        setEmail('');
+        setPassword('');
+      } else {
+        alert(data.error || 'Authentication failed');
+      }
+    } catch (err) {
+      console.error('Authentication error:', err);
+      alert('Authentication failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startWorkout = (type) => {
+    if (!EXERCISES[type]) return;
+    setWorkoutType(type);
+    setIsLoggingWorkout(true);
+    setCurrentExercises([]);
+    setError(null);
+  };
+
   const finishWorkout = async () => {
     if (!user?.email || currentExercises.length === 0) return;
     
     setLoading(true);
-    setError(null);
     
     try {
       const workoutData = {
@@ -234,12 +353,9 @@ const FitnessDashboard = () => {
       });
       
       if (res.ok) {
-        // Reset workout state
         setCurrentExercises([]);
         setIsLoggingWorkout(false);
         setWorkoutType(null);
-        
-        // Reload workouts
         await loadWorkouts();
       } else {
         throw new Error('Failed to save workout');
@@ -294,67 +410,19 @@ const FitnessDashboard = () => {
     return { totalSessions, totalVolume, last7Days };
   }, [workouts]);
 
-  const handleLogout = () => {
-    setUser(null);
-    setWorkouts([]);
-    localStorage.removeItem('fitnessUser');
-  };
-
-  // Show loading state
-  if (loading && !user) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.loadingContainer}>
-          <div style={styles.loadingSpinner}></div>
-          <p>Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show authentication form
   if (!user) {
     return (
       <div style={styles.container}>
-        <div style={styles.authCard}>
-          <div style={styles.authHeader}>
-            <div style={styles.logoContainer}>
-              <Sparkles size={40} color="#6366f1" />
-            </div>
-            <h1 style={styles.authTitle}>Fit as a Fiddle</h1>
-            <p style={styles.authSubtitle}>Your Personal Fitness Journey</p>
-          </div>
-          <div style={styles.authForm}>
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              style={styles.authInput}
-              disabled={loading}
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              onKeyPress={e => e.key === 'Enter' && !loading && handleAuth()}
-              style={styles.authInput}
-              disabled={loading}
-            />
-            {error && <div style={styles.errorMessage}>{error}</div>}
-            <button onClick={handleAuth} style={styles.authButton} disabled={loading}>
-              {loading ? 'Loading...' : (isRegistering ? 'Create Account' : 'Sign In')}
-            </button>
-            <button
-              onClick={() => setIsRegistering(!isRegistering)}
-              style={styles.toggleButton}
-              disabled={loading}
-            >
-              {isRegistering ? 'Already have an account? Sign in' : "Don't have an account? Register"}
-            </button>
-          </div>
-        </div>
+        <AuthForm 
+          email={email}
+          setEmail={setEmail}
+          password={password}
+          setPassword={setPassword}
+          isRegistering={isRegistering}
+          setIsRegistering={setIsRegistering}
+          handleAuth={handleAuth}
+          loading={loading}
+        />
       </div>
     );
   }
@@ -376,7 +444,7 @@ const FitnessDashboard = () => {
             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
           </p>
         </div>
-        <button onClick={handleLogout} style={styles.logoutBtn}>
+        <button onClick={() => { setUser(null); localStorage.removeItem('fitnessUser'); }} style={styles.logoutBtn}>
           Sign Out
         </button>
       </div>
@@ -510,111 +578,20 @@ const FitnessDashboard = () => {
           </button>
         </div>
       ) : (
-        <div style={styles.workoutPanel}>
-          <div style={styles.workoutHeader}>
-            <h3 style={styles.workoutTitle}>
-              {workoutType === 'strength' ? '💪 Strength Training' : workoutType === 'cardio' ? '❤️ Cardio Session' : '🧘 Stretch & Recovery'}
-            </h3>
-            <button onClick={() => {setIsLoggingWorkout(false); setWorkoutType(null); setCurrentExercises([]);}} style={styles.closeBtn}>✕</button>
-          </div>
-          
-          <div style={styles.inputGrid}>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Exercise</label>
-              <select value={selectedExercise} onChange={e => setSelectedExercise(e.target.value)} style={styles.select}>
-                {Object.keys(EXERCISES[workoutType] || {}).map(name => (
-                  <option key={name} value={name}>
-                    {EXERCISES[workoutType][name]?.icon} {name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            
-            {workoutType === 'strength' ? (
-              <div style={styles.inputRow}>
-                <div style={styles.inputGroup}>
-                  <label style={styles.label}>Sets</label>
-                  <input 
-                    type="number" 
-                    value={sets} 
-                    onChange={e => setSets(e.target.value)} 
-                    style={styles.input}
-                    min="1"
-                    placeholder="0"
-                  />
-                </div>
-                <div style={styles.inputGroup}>
-                  <label style={styles.label}>Reps</label>
-                  <input 
-                    type="number" 
-                    value={reps} 
-                    onChange={e => setReps(e.target.value)} 
-                    style={styles.input}
-                    min="1"
-                    placeholder="0"
-                  />
-                </div>
-                <div style={styles.inputGroup}>
-                  <label style={styles.label}>Weight (kg)</label>
-                  <input 
-                    type="number" 
-                    value={weight} 
-                    onChange={e => setWeight(e.target.value)} 
-                    style={styles.input} 
-                    step="0.5"
-                    min="0"
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-            ) : (
-              <div style={styles.inputGroup}>
-                <label style={styles.label}>Duration (minutes)</label>
-                <input 
-                  type="number" 
-                  value={duration} 
-                  onChange={e => setDuration(e.target.value)} 
-                  style={styles.input}
-                  min="1"
-                  placeholder="0"
-                />
-              </div>
-            )}
-            
-            <button onClick={addExercise} style={styles.addButton}>+ Add Exercise</button>
-          </div>
-
-          {currentExercises.length > 0 && (
-            <div style={styles.exerciseList}>
-              <h4 style={styles.listTitle}>Current Session</h4>
-              {currentExercises.map((exercise, i) => (
-                <div key={i} style={styles.exerciseItem}>
-                  <span>{EXERCISES[exercise.type]?.[exercise.name]?.icon} {exercise.name}</span>
-                  <span style={styles.exerciseDetails}>
-                    {exercise.type === 'strength' 
-                      ? `${exercise.sets} × ${exercise.reps}${exercise.weight > 0 ? ` @ ${exercise.weight}kg` : ''}`
-                      : `${exercise.reps} min`
-                    }
-                  </span>
-                </div>
-              ))}
-              {workoutType === 'strength' && (
-                <div style={styles.totalVolume}>
-                  Total: {currentExercises.reduce((sum, e) => sum + (e.sets * e.reps * e.weight), 0).toFixed(1)}kg
-                </div>
-              )}
-              <button onClick={finishWorkout} disabled={loading} style={styles.finishButton}>
-                {loading ? 'Saving...' : '✓ Finish Workout'}
-              </button>
-            </div>
-          )}
-        </div>
+        <WorkoutPanel
+          workoutType={workoutType}
+          setIsLoggingWorkout={setIsLoggingWorkout}
+          currentExercises={currentExercises}
+          setCurrentExercises={setCurrentExercises}
+          finishWorkout={finishWorkout}
+          loading={loading}
+        />
       )}
     </div>
   );
 };
 
-// Add these new styles to your existing styles object
+// Add these additional styles
 const additionalStyles = {
   loadingContainer: {
     display: 'flex',
@@ -662,10 +639,14 @@ const additionalStyles = {
   }
 };
 
-// Merge with existing styles
-const styles = {
-  ...styles,
-  ...additionalStyles
-};
+// Add keyframes for animation
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+document.head.appendChild(style);
 
 export default FitnessDashboard;
