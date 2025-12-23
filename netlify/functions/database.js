@@ -33,7 +33,7 @@ export const handler = async (event) => {
       }
 
       if (body.userEmail && body.exercises) {
-        // Explicitly saving the full exercise object so name isn't lost
+        // Fix: Save as a flattened JSON string to ensure data structure is consistent
         await sql`
           INSERT INTO workouts (user_email, exercises, created_at) 
           VALUES (${body.userEmail}, ${JSON.stringify(body.exercises)}, NOW())
