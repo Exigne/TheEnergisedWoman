@@ -9,18 +9,20 @@ export const handler = async (event) => {
       const workouts = await sql`SELECT * FROM workouts ORDER BY created_at DESC`;
       const users = await sql`SELECT email, display_name, profile_pic FROM users`;
       
-      // DEEP PARSE: Ensures exercises are objects, not strings
+      // PRE-PARSING: We fix the "Workout" name issue here before sending to UI
       const cleanedWorkouts = workouts.map(w => {
-        let parsedEx = w.exercises;
+        let parsed = w.exercises;
         if (typeof w.exercises === 'string') {
-          try { parsedEx = JSON.parse(w.exercises); } catch (e) { parsedEx = []; }
+          try { parsed = JSON.parse(w.exercises); } catch (e) { parsed = []; }
         }
-        return { ...w, exercises: Array.isArray(parsedEx) ? parsedEx : [parsedEx] };
+        // Ensure it's always an array for the frontend .map()
+        const finalEx = Array.isArray(parsed) ? parsed : [parsed];
+        return { ...w, exercises: finalEx };
       });
 
       return {
         statusCode: 200,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
         body: JSON.stringify({ workouts: cleanedWorkouts, users }),
       };
     }
@@ -28,27 +30,32 @@ export const handler = async (event) => {
     if (method === 'POST') {
       const body = JSON.parse(event.body || '{}');
 
+      // AUTH logic
       if (body.action === 'auth') {
-        const users = await sql`SELECT * FROM users WHERE email = ${body.email}`;
-        if (users.length === 0) {
+        const results = await sql`SELECT * FROM users WHERE email = ${body.email}`;
+        if (results.length === 0) {
           await sql`INSERT INTO users (email, password, display_name) VALUES (${body.email}, ${body.password}, ${body.email.split('@')[0]})`;
           return { statusCode: 200, body: JSON.stringify({ email: body.email }) };
         }
-        return { statusCode: 200, body: JSON.stringify(users[0]) };
+        return { statusCode: 200, body: JSON.stringify(results[0]) };
       }
 
+      // SAVING logic
       if (body.userEmail && body.exercises) {
-        // Save as strict JSONB
-        await sql`INSERT INTO workouts (user_email, exercises) VALUES (${body.userEmail}, ${JSON.stringify(body.exercises)}::jsonb)`;
+        // We stringify the payload and cast to jsonb to satisfy Neon
+        const jsonPayload = JSON.stringify(body.exercises);
+        await sql`INSERT INTO workouts (user_email, exercises, created_at) VALUES (${body.userEmail}, ${jsonPayload}::jsonb, NOW())`;
         return { statusCode: 200, body: JSON.stringify({ success: true }) };
       }
     }
 
     if (method === 'DELETE') {
-      await sql`DELETE FROM workouts WHERE id = ${event.queryStringParameters.workoutId}`;
+      const { workoutId } = event.queryStringParameters;
+      await sql`DELETE FROM workouts WHERE id = ${workoutId}`;
       return { statusCode: 200, body: JSON.stringify({ success: true }) };
     }
   } catch (err) {
+    console.error("Backend Error:", err);
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
