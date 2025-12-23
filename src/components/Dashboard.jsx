@@ -1,4 +1,4 @@
-// Dashboard.jsx - Fixed to use exercise_name from Neon.tech database
+// Dashboard.jsx - Enhanced error handling and debugging for database issues
 import React, { useState, useEffect, useCallback } from 'react';
 import { Activity, Dumbbell, TrendingUp, Calendar, Heart, Sparkles } from 'lucide-react';
 
@@ -110,7 +110,7 @@ const WorkoutPanel = ({ workoutType, setIsLoggingWorkout, setWorkoutType, curren
       }
       
       newExercise = {
-        exercise_name: selectedExercise,  // FIXED: Use exercise_name to match database
+        exercise_name: selectedExercise,
         sets: 1,
         reps: parseInt(duration),
         weight: 0,
@@ -128,7 +128,7 @@ const WorkoutPanel = ({ workoutType, setIsLoggingWorkout, setWorkoutType, curren
       const weightValue = parseFloat(weight) || 0;
       
       newExercise = {
-        exercise_name: selectedExercise,  // FIXED: Use exercise_name to match database
+        exercise_name: selectedExercise,
         sets: parseInt(sets),
         reps: parseInt(reps),
         weight: weightValue,
@@ -230,6 +230,23 @@ const Dashboard = () => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [saveError, setSaveError] = useState(null); // NEW: Specific save error state
+
+  // Enhanced debugging for workout data
+  useEffect(() => {
+    console.log('=== WORKOUT DATA DEBUG ===');
+    console.log('Workouts array:', workouts);
+    console.log('Workouts length:', workouts.length);
+    
+    if (workouts.length > 0) {
+      workouts.forEach((workout, index) => {
+        console.log(`Workout ${index}:`, workout);
+        console.log(`Workout ${index} exercises:`, workout.exercises);
+        console.log(`Workout ${index} type:`, workout.type);
+        console.log(`Workout ${index} created_at:`, workout.created_at);
+      });
+    }
+  }, [workouts]);
 
   // Fixed useEffect with proper async handling
   useEffect(() => {
@@ -276,6 +293,10 @@ const Dashboard = () => {
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       
       const data = await res.json();
+      console.log('=== LOAD WORKOUTS RESPONSE ===');
+      console.log('Full response data:', data);
+      console.log('Workouts from response:', data.workouts);
+      
       setWorkouts(Array.isArray(data.workouts) ? data.workouts : []);
     } catch (err) {
       console.error('Failed to load workouts:', err);
@@ -331,38 +352,108 @@ const Dashboard = () => {
     setIsLoggingWorkout(true);
     setCurrentExercises([]);
     setError(null);
+    setSaveError(null); // Clear any previous save errors
   };
 
+  // ENHANCED: Better error handling for workout saving
   const finishWorkout = async () => {
-    if (!user?.email || currentExercises.length === 0) return;
+    if (!user?.email || currentExercises.length === 0) {
+      console.log('Cannot save workout - missing user or exercises');
+      return;
+    }
+    
+    console.log('=== SAVING WORKOUT DEBUG ===');
+    console.log('User email:', user.email);
+    console.log('Current exercises:', currentExercises);
+    console.log('Workout type:', workoutType);
     
     setLoading(true);
+    setSaveError(null);
     
     try {
+      // Validate exercise data before sending
+      const validatedExercises = currentExercises.map((exercise, index) => {
+        console.log(`Exercise ${index}:`, exercise);
+        
+        // Ensure all required fields are present
+        const validatedExercise = {
+          exercise_name: exercise.exercise_name || exercise.name || 'Unknown Exercise',
+          sets: exercise.sets || 0,
+          reps: exercise.reps || 0,
+          weight: exercise.weight || 0,
+          group: exercise.group || 'Unknown',
+          type: exercise.type || workoutType || 'strength'
+        };
+        
+        console.log(`Validated exercise ${index}:`, validatedExercise);
+        return validatedExercise;
+      });
+      
       const workoutData = {
         userEmail: user.email,
-        exercises: currentExercises,
+        exercises: validatedExercises,
         created_at: new Date().toISOString(),
         type: workoutType
       };
       
+      console.log('=== SENDING WORKOUT DATA ===');
+      console.log('Full workout data:', workoutData);
+      console.log('JSON stringified:', JSON.stringify(workoutData));
+      
       const res = await fetch('/.netlify/functions/database', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify(workoutData)
       });
       
+      console.log('=== SAVE RESPONSE ===');
+      console.log('Response status:', res.status);
+      console.log('Response status text:', res.statusText);
+      
+      const responseText = await res.text();
+      console.log('Raw response text:', responseText);
+      
+      let data;
+      try {
+        data = JSON.parse(responseText);
+        console.log('Parsed response data:', data);
+      } catch (parseError) {
+        console.error('Failed to parse response as JSON:', parseError);
+        console.log('Response was not JSON:', responseText);
+        throw new Error(`Server returned non-JSON response: ${responseText.substring(0, 200)}`);
+      }
+      
       if (res.ok) {
+        console.log('Workout saved successfully!');
         setCurrentExercises([]);
         setIsLoggingWorkout(false);
         setWorkoutType(null);
         await loadWorkouts();
       } else {
-        throw new Error('Failed to save workout');
+        console.error('Server error response:', data);
+        throw new Error(data.error || `Server error: ${res.status} ${res.statusText}`);
       }
     } catch (err) {
-      console.error('Failed to save workout:', err);
-      alert('Failed to save workout. Please try again.');
+      console.error('=== SAVE WORKOUT ERROR ===');
+      console.error('Error details:', err);
+      console.error('Error message:', err.message);
+      console.error('Error stack:', err.stack);
+      
+      setSaveError(err.message);
+      
+      // More specific error messages
+      if (err.message.includes('NetworkError') || err.message.includes('Failed to fetch')) {
+        alert('Network error: Please check your internet connection and try again.');
+      } else if (err.message.includes('non-JSON')) {
+        alert('Server error: The database returned an unexpected response. Please try again.');
+      } else if (err.message.includes('Server error')) {
+        alert(`Database error: ${err.message}. Please try again.`);
+      } else {
+        alert(`Failed to save workout: ${err.message}. Please try again.`);
+      }
     } finally {
       setLoading(false);
     }
@@ -453,7 +544,7 @@ const Dashboard = () => {
   const stats = calculateStats();
   const avgVolume = stats.totalSessions > 0 ? Math.round(stats.totalVolume / stats.totalSessions) : 0;
 
-  // FIXED: Helper function to get workout name and icon - NOW USES exercise_name
+  // FIXED: Helper function to get workout name and icon - WITH BETTER ERROR HANDLING
   const getWorkoutInfo = (workout) => {
     const type = workout.type || 'strength';
     const exercises = workout.exercises || [];
@@ -487,6 +578,14 @@ const Dashboard = () => {
 
   return (
     <div style={styles.container}>
+      {/* NEW: Show save errors if they occur */}
+      {saveError && (
+        <div style={styles.errorBanner}>
+          <span>Save Error: {saveError}</span>
+          <button onClick={() => setSaveError(null)} style={styles.closeError}>✕</button>
+        </div>
+      )}
+      
       <div style={styles.header}>
         <div>
           <div style={styles.brandContainer}>
