@@ -154,7 +154,6 @@ const Dashboard = () => {
     const pbs = {};
 
     myLogs.forEach(w => {
-      // Use ex_name which is the flattened field from your function
       const group = EXERCISES.strength[w.ex_name] || EXERCISES.cardio[w.ex_name] || EXERCISES.stretch[w.ex_name];
       if (group) muscleSplit[group]++;
       if (w.ex_weight > (pbs[w.ex_name] || 0)) pbs[w.ex_name] = w.ex_weight;
@@ -170,6 +169,61 @@ const Dashboard = () => {
 
     return { myLogs, muscleSplit, pbs, league };
   })();
+
+  // Define styles BEFORE using them in JSX
+  const styles = {
+    container: { minHeight: '100vh', background: '#0a0f1d', color: '#f8fafc', padding: '40px', fontFamily: 'sans-serif' },
+    header: { display:'flex', justifyContent:'space-between', marginBottom:'40px', alignItems:'center' },
+    brandTitle: { color:'#6366f1', margin:0, fontWeight:'900', fontSize:'28px' },
+    gridTop: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'25px', marginBottom:'25px' },
+    gridBottom: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'25px', paddingBottom:'100px' },
+    card: { background:'#161d2f', padding:'25px', borderRadius:'24px', border:'1px solid rgba(255,255,255,0.05)' },
+    cardHeader: { display:'flex', gap:'10px', alignItems:'center', marginBottom:'20px' },
+    row: { display:'flex', justifyContent:'space-between', padding:'12px', background:'rgba(255,255,255,0.02)', borderRadius:'12px', marginBottom:'8px' },
+    balanceRow: { display:'flex', alignItems:'center', gap:'15px', marginBottom:'12px' },
+    groupLabel: { width:'80px', fontSize:'11px', color:'#94a3b8' },
+    barBg: { flex:1, height:'8px', background:'#0a0f1d', borderRadius:'10px' },
+    barFill: { height:'100%', background:'#6366f1', borderRadius:'10px' },
+    scrollArea: { maxHeight:'400px', overflowY:'auto' },
+    historyItem: { display:'flex', padding:'18px', background:'rgba(255,255,255,0.03)', borderRadius:'18px', marginBottom:'12px', alignItems:'center' },
+    dateText: { color:'#6366f1', fontWeight:'bold', width:'65px', fontSize:'12px' },
+    leagueItem: { display:'flex', alignItems:'center', gap:'15px', padding:'14px', background:'rgba(255,255,255,0.02)', borderRadius:'14px', marginBottom:'10px' },
+    rankCircle: { width:'24px', height:'24px', background:'#0a0f1d', borderRadius:'50%', textAlign:'center', fontSize:'11px', lineHeight:'24px' },
+    fabContainer: { position:'fixed', bottom:'30px', left:'50%', transform:'translateX(-50%)', display:'flex', gap:'15px', zIndex: 100 },
+    fab: { padding:'16px 28px', borderRadius:'22px', color:'#fff', border:'none', cursor:'pointer', display:'flex', gap:'10px', fontWeight:'bold' },
+    modalOverlay: { position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', backdropFilter:'blur(5px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200 },
+    modalContent: { background:'#161d2f', padding:'35px', borderRadius:'32px', width:'90%', maxWidth:'420px' },
+    modalHeader: { display:'flex', justifyContent:'space-between', marginBottom:'25px', alignItems:'center' },
+    label: { fontSize:'10px', color:'#94a3b8', marginBottom:'5px', display:'block' },
+    inputGrid: { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'15px' },
+    input: { width:'100%', padding:'16px', borderRadius:'16px', background:'#0a0f1d', color:'#fff', border:'1px solid #1e293b', marginBottom:'20px', boxSizing:'border-box' },
+    mainBtn: { width:'100%', padding:'18px', background:'#6366f1', color:'#fff', border:'none', borderRadius:'18px', fontWeight:'bold', cursor:'pointer' },
+    logoutBtn: { background:'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px 18px', borderRadius: '12px', border: '1px solid rgba(239, 68, 68, 0.2)', cursor: 'pointer', display:'flex', alignItems:'center', gap:'8px', fontSize:'14px', fontWeight:'bold' },
+    authCard: { maxWidth:'400px', margin:'100px auto', background:'#161d2f', padding:'50px', borderRadius:'40px', textAlign:'center' },
+    error: { color: '#ef4444', fontSize: '14px', marginBottom: '15px', textAlign: 'center' },
+    errorBanner: { 
+      background: 'rgba(239, 68, 68, 0.1)', 
+      color: '#ef4444', 
+      padding: '12px', 
+      borderRadius: '12px', 
+      marginBottom: '20px',
+      textAlign: 'center'
+    },
+    loadingBanner: { 
+      background: 'rgba(99, 102, 241, 0.1)', 
+      color: '#6366f1', 
+      padding: '12px', 
+      borderRadius: '12px', 
+      marginBottom: '20px',
+      textAlign: 'center'
+    },
+    emptyState: { 
+      textAlign: 'center', 
+      color: '#94a3b8', 
+      padding: '40px 20px', 
+      fontSize: '14px' 
+    }
+  };
 
   if (!user) return (
     <div style={styles.container}>
@@ -403,70 +457,6 @@ const Dashboard = () => {
       )}
     </div>
   );
-};
-
-// Add new styles for error/loading states
-const additionalStyles = {
-  error: { color: '#ef4444', fontSize: '14px', marginBottom: '15px', textAlign: 'center' },
-  errorBanner: { 
-    background: 'rgba(239, 68, 68, 0.1)', 
-    color: '#ef4444', 
-    padding: '12px', 
-    borderRadius: '12px', 
-    marginBottom: '20px',
-    textAlign: 'center'
-  },
-  loadingBanner: { 
-    background: 'rgba(99, 102, 241, 0.1)', 
-    color: '#6366f1', 
-    padding: '12px', 
-    borderRadius: '12px', 
-    marginBottom: '20px',
-    textAlign: 'center'
-  },
-  emptyState: { 
-    textAlign: 'center', 
-    color: '#94a3b8', 
-    padding: '40px 20px', 
-    fontSize: '14px' 
-  }
-};
-
-// Merge styles
-const styles = {
-  ...originalStyles,
-  ...additionalStyles
-};
-
-const originalStyles = {
-  container: { minHeight: '100vh', background: '#0a0f1d', color: '#f8fafc', padding: '40px', fontFamily: 'sans-serif' },
-  header: { display:'flex', justifyContent:'space-between', marginBottom:'40px', alignItems:'center' },
-  brandTitle: { color:'#6366f1', margin:0, fontWeight:'900', fontSize:'28px' },
-  gridTop: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'25px', marginBottom:'25px' },
-  gridBottom: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'25px', paddingBottom:'100px' },
-  card: { background:'#161d2f', padding:'25px', borderRadius:'24px', border:'1px solid rgba(255,255,255,0.05)' },
-  cardHeader: { display:'flex', gap:'10px', alignItems:'center', marginBottom:'20px' },
-  row: { display:'flex', justifyContent:'space-between', padding:'12px', background:'rgba(255,255,255,0.02)', borderRadius:'12px', marginBottom:'8px' },
-  balanceRow: { display:'flex', alignItems:'center', gap:'15px', marginBottom:'12px' },
-  groupLabel: { width:'80px', fontSize:'11px', color:'#94a3b8' },
-  barBg: { flex:1, height:'8px', background:'#0a0f1d', borderRadius:'10px' },
-  barFill: { height:'100%', background:'#6366f1', borderRadius:'10px' },
-  scrollArea: { maxHeight:'400px', overflowY:'auto' },
-  historyItem: { display:'flex', padding:'18px', background:'rgba(255,255,255,0.03)', borderRadius:'18px', marginBottom:'12px', alignItems:'center' },
-  dateText: { color:'#6366f1', fontWeight:'bold', width:'65px', fontSize:'12px' },
-  leagueItem: { display:'flex', alignItems:'center', gap:'15px', padding:'14px', background:'rgba(255,255,255,0.02)', borderRadius:'14px', marginBottom:'10px' },
-  rankCircle: { width:'24px', height:'24px', background:'#0a0f1d', borderRadius:'50%', textAlign:'center', fontSize:'11px', lineHeight:'24px' },
-  fabContainer: { position:'fixed', bottom:'30px', left:'50%', transform:'translateX(-50%)', display:'flex', gap:'15px', zIndex: 100 },
-  fab: { padding:'16px 28px', borderRadius:'22px', color:'#fff', border:'none', cursor:'pointer', display:'flex', gap:'10px', fontWeight:'bold' },
-  modalOverlay: { position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', backdropFilter:'blur(5px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200 },
-  modalContent: { background:'#161d2f', padding:'35px', borderRadius:'32px', width:'90%', maxWidth:'420px' },
-  modalHeader: { display:'flex', justifyContent:'space-between', marginBottom:'25px', alignItems:'center' },
-  label: { fontSize:'10px', color:'#94a3b8', marginBottom:'5px', display:'block' },
-  inputGrid: { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'15px' },
-  input: { width:'100%', padding:'16px', borderRadius:'16px', background:'#0a0f1d', color:'#fff', border:'1px solid #1e293b', marginBottom:'20px', boxSizing:'border-box' },
-  mainBtn: { width:'100%', padding:'18px', background:'#6366f1', color:'#fff', border:'none', borderRadius:'18px', fontWeight:'bold', cursor:'pointer' },
-  logoutBtn: { background:'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px 18px', borderRadius: '12px', border: '1px solid rgba(239, 68, 68, 0.2)', cursor: 'pointer', display:'flex', alignItems:'center', gap:'8px', fontSize:'14px', fontWeight:'bold' },
-  authCard: { maxWidth:'400px', margin:'100px auto', background:'#161d2f', padding:'50px', borderRadius:'40px', textAlign:'center' }
 };
 
 export default Dashboard;
