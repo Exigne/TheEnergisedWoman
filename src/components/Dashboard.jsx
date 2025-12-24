@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Dumbbell, Calendar, Heart, Sparkles, Trash2, X, Trophy, User, Target, Zap, Wind, LogOut, Settings, Camera } from 'lucide-react';
+import { Dumbbell, Calendar, Heart, Sparkles, Trash2, X, Trophy, User, Target, Zap, Wind, LogOut, Settings, Plus, Edit3, Clock } from 'lucide-react';
 
 const EXERCISES = {
   strength: { 'Bench Press': 'Chest', 'Squat': 'Legs', 'Deadlift': 'Back', 'Overhead Press': 'Shoulders', 'Rows': 'Back', 'Bicep Curls': 'Arms' },
@@ -25,6 +25,115 @@ const WORKOUT_CONFIGS = {
   }
 };
 
+const WorkoutPlanner = () => {
+  const [plannedWorkouts, setPlannedWorkouts] = useState([]);
+  const [showAddPlan, setShowAddPlan] = useState(false);
+  const [planForm, setPlanForm] = useState({
+    name: '',
+    date: '',
+    exercises: [],
+    notes: ''
+  });
+
+  return (
+    <div style={styles.plannerContainer}>
+      <div style={styles.plannerHeader}>
+        <h2>Workout Planner</h2>
+        <button 
+          onClick={() => setShowAddPlan(true)}
+          style={styles.addPlanBtn}
+        >
+          <Plus size={16} /> Add Workout Plan
+        </button>
+      </div>
+      
+      <div style={styles.plannerGrid}>
+        {plannedWorkouts.length === 0 ? (
+          <div style={styles.emptyPlanner}>
+            <Calendar size={48} color="#6366f1" />
+            <h3>No workout plans yet</h3>
+            <p>Start planning your workouts to stay on track!</p>
+          </div>
+        ) : (
+          plannedWorkouts.map((plan, index) => (
+            <div key={index} style={styles.planCard}>
+              <div style={styles.planHeader}>
+                <h4>{plan.name}</h4>
+                <span style={styles.planDate}>{plan.date}</span>
+              </div>
+              <div style={styles.planExercises}>
+                {plan.exercises.map((exercise, i) => (
+                  <div key={i} style={styles.planExercise}>
+                    {exercise}
+                  </div>
+                ))}
+              </div>
+              {plan.notes && <p style={styles.planNotes}>{plan.notes}</p>}
+              <div style={styles.planActions}>
+                <button style={styles.editBtn}>
+                  <Edit3 size={14} /> Edit
+                </button>
+                <button style={styles.deletePlanBtn}>
+                  <Trash2 size={14} /> Delete
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {showAddPlan && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <div style={styles.modalHeader}>
+              <h3>Add Workout Plan</h3>
+              <X onClick={() => setShowAddPlan(false)} style={{cursor:'pointer'}}/>
+            </div>
+            <label style={styles.label}>Workout Name</label>
+            <input 
+              style={styles.input} 
+              value={planForm.name}
+              onChange={e => setPlanForm(prev => ({...prev, name: e.target.value}))}
+              placeholder="e.g., Upper Body Day"
+            />
+            <label style={styles.label}>Date</label>
+            <input 
+              style={styles.input} 
+              type="date"
+              value={planForm.date}
+              onChange={e => setPlanForm(prev => ({...prev, date: e.target.value}))}
+            />
+            <label style={styles.label}>Exercises (one per line)</label>
+            <textarea 
+              style={{...styles.input, height: '100px', resize: 'vertical'}}
+              value={planForm.exercises.join('\n')}
+              onChange={e => setPlanForm(prev => ({...prev, exercises: e.target.value.split('\n').filter(ex => ex.trim())}))}
+              placeholder="Bench Press&#10;Squats&#10;Deadlifts"
+            />
+            <label style={styles.label}>Notes (optional)</label>
+            <textarea 
+              style={{...styles.input, height: '60px', resize: 'vertical'}}
+              value={planForm.notes}
+              onChange={e => setPlanForm(prev => ({...prev, notes: e.target.value}))}
+              placeholder="Any additional notes..."
+            />
+            <button 
+              style={styles.mainBtn}
+              onClick={() => {
+                setPlannedWorkouts(prev => [...prev, planForm]);
+                setPlanForm({ name: '', date: '', exercises: [], notes: '' });
+                setShowAddPlan(false);
+              }}
+            >
+              Save Plan
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Dashboard = () => {
   const [user, setUser] = useState(null);
   const [allData, setAllData] = useState({ workouts: [], workoutLogs: [], users: [] });
@@ -38,6 +147,7 @@ const Dashboard = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -60,13 +170,7 @@ const Dashboard = () => {
       console.log('Raw data received:', data);
       console.log('WorkoutLogs received:', data.workoutLogs);
       console.log('WorkoutLogs length:', data.workoutLogs?.length);
-      console.log('Users received:', data.users);
-      console.log('Users length:', data.users?.length);
-      
-      // Filter for current user
-      const userWorkouts = data.workoutLogs?.filter(log => log.user_email === user.email) || [];
-      console.log('Filtered workouts for current user:', userWorkouts.length);
-      console.log('First user workout:', userWorkouts[0]);
+      console.log('First workout log:', data.workoutLogs?.[0]);
       
       setAllData({
         workouts: data.workouts || [],
@@ -97,7 +201,6 @@ const Dashboard = () => {
   }, []);
 
   useEffect(() => { 
-    console.log('User changed, loading data...');
     if (user) loadData(); 
   }, [user, loadData]);
 
@@ -174,38 +277,27 @@ const Dashboard = () => {
     setError(null);
     
     try {
-      console.log('=== AUTH START ===');
-      console.log('Attempting auth for:', email);
-      
       const res = await fetch('/.netlify/functions/database', { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'auth', email, password }) 
       });
       
-      console.log('Auth response status:', res.status);
-      
       if (!res.ok) throw new Error('Authentication failed');
       
       const data = await res.json();
-      console.log('Auth response data:', data);
-      
       const userData = { 
         email: data.email,
         display_name: data.display_name || email.split('@')[0],
         profile_pic: data.profile_pic || ''
       };
       
-      console.log('Setting user data:', userData);
       setUser(userData);
       localStorage.setItem('fitnessUser', JSON.stringify(userData));
-      
       setProfileForm({
         displayName: userData.display_name,
         profilePic: userData.profile_pic
       });
-      
-      console.log('=== AUTH END ===');
       
     } catch (e) {
       console.error('Auth error', e);
@@ -258,7 +350,6 @@ const Dashboard = () => {
     setError(null);
     
     try {
-      console.log('Deleting workout with id:', workoutId);
       const res = await fetch(`/.netlify/functions/database?workoutId=${workoutId}`, { 
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' }
@@ -266,7 +357,6 @@ const Dashboard = () => {
       
       if (!res.ok) throw new Error('Failed to delete workout');
       
-      console.log('Workout deleted successfully');
       await loadData();
       
     } catch (e) {
@@ -278,44 +368,29 @@ const Dashboard = () => {
   };
 
   const stats = (() => {
-    console.log('=== STATS CALCULATION START ===');
-    console.log('Input data - workoutLogs:', allData.workoutLogs?.length);
-    console.log('Input data - user:', user?.email);
-    
     if (!user || !allData?.workoutLogs) {
-      console.log('Stats returning empty - missing user or workoutLogs');
-      return { myLogs: [], muscleSplit: {}, pbs: {}, league: [], profile: null };
+      return { myLogs: [], muscleSplit: {}, pbs: {}, league: [], profile: { totalWorkouts: 0, thisWeek: 0, favoriteExercise: {}, totalWeight: 0 } };
     }
 
     const myLogs = allData.workoutLogs.filter(log => log.user_email === user.email) || [];
-    console.log('Filtered myLogs:', myLogs.length);
-    console.log('First few myLogs:', myLogs.slice(0, 3));
-    
     const muscleSplit = { Chest: 0, Legs: 0, Back: 0, Shoulders: 0, Arms: 0, Cardio: 0, Flexibility: 0 };
     const pbs = {};
 
-    myLogs.forEach((log, index) => {
-      console.log(`Processing log ${index}:`, log);
-      
-      const exerciseName = log.exercise_name || log.ex_name || 'Unknown';
+    myLogs.forEach(log => {
+      const exerciseName = log.exercise_name || 'Unknown';
       const muscleGroup = log.muscle_group || 'Other';
       
-      console.log(`Exercise: ${exerciseName}, Muscle Group: ${muscleGroup}`);
-      
-      if (muscleGroup) {
+      if (muscleGroup && muscleSplit.hasOwnProperty(muscleGroup)) {
         muscleSplit[muscleGroup] = (muscleSplit[muscleGroup] || 0) + 1;
       }
       
-      const weight = log.weight || log.ex_weight || 0;
+      const weight = log.weight || 0;
       if (weight > 0 && muscleGroup !== 'Cardio' && muscleGroup !== 'Flexibility') {
         if (weight > (pbs[exerciseName] || 0)) {
           pbs[exerciseName] = weight;
         }
       }
     });
-
-    console.log('Muscle split:', muscleSplit);
-    console.log('Personal bests:', pbs);
 
     const league = Object.entries((allData.workoutLogs || []).reduce((acc, log) => {
       acc[log.user_email] = (acc[log.user_email] || 0) + 1;
@@ -334,47 +409,21 @@ const Dashboard = () => {
         return logDate >= weekAgo;
       }).length,
       favoriteExercise: myLogs.reduce((acc, log) => {
-        const exercise = log.exercise_name || log.ex_name || 'Unknown';
+        const exercise = log.exercise_name || 'Unknown';
         acc[exercise] = (acc[exercise] || 0) + 1;
         return acc;
       }, {}),
-      totalWeight: myLogs.reduce((sum, log) => sum + (log.weight || log.ex_weight || 0), 0)
+      totalWeight: myLogs.reduce((sum, log) => sum + (log.weight || 0), 0)
     };
-
-    console.log('Profile stats:', profile);
-    console.log('=== STATS CALCULATION END ===');
 
     return { myLogs, muscleSplit, pbs, league, profile };
   })();
-
-  // Add debug panel for development
-  const DebugPanel = () => {
-    if (process.env.NODE_ENV !== 'development') return null;
-    
-    return (
-      <div style={styles.debugPanel}>
-        <h3>🐛 Debug Info</h3>
-        <div><strong>User:</strong> {user?.email || 'none'}</div>
-        <div><strong>WorkoutLogs:</strong> {allData.workoutLogs?.length || 0}</div>
-        <div><strong>My Logs:</strong> {stats.myLogs?.length || 0}</div>
-        <div><strong>Users:</strong> {allData.users?.length || 0}</div>
-        <div><strong>Stats Profile:</strong> {stats.profile ? 'exists' : 'null'}</div>
-        <button 
-          onClick={loadData} 
-          disabled={loading}
-          style={styles.debugButton}
-        >
-          {loading ? 'Loading...' : 'Force Reload'}
-        </button>
-      </div>
-    );
-  };
 
   if (!user) return (
     <div style={styles.container}>
       <div style={styles.authCard}>
         <Sparkles size={40} color="#6366f1" />
-        <h2 style={{margin:'20px 0'}}>Fit As A Fiddle</h2>
+        <h2 style={{margin:'20px 0'}}>Fit as a Fiddle</h2>
         {error && <div style={styles.error}>{error}</div>}
         <input 
           style={styles.input} 
@@ -382,6 +431,7 @@ const Dashboard = () => {
           value={email}
           onChange={e => setEmail(e.target.value)} 
           disabled={loading}
+          onKeyPress={e => e.key === 'Enter' && handleAuth()}
         />
         <input 
           style={styles.input} 
@@ -390,13 +440,14 @@ const Dashboard = () => {
           value={password}
           onChange={e => setPassword(e.target.value)} 
           disabled={loading}
+          onKeyPress={e => e.key === 'Enter' && handleAuth()}
         />
         <button 
           style={styles.mainBtn} 
           onClick={handleAuth}
           disabled={loading}
         >
-          {loading ? 'Loading...' : 'Enter Dashboard'}
+          {loading ? 'Loading...' : 'Sign In / Register'}
         </button>
         <p style={{marginTop:'20px', color:'#94a3b8', fontSize:'13px'}}>
           Don't have an account? Just enter your email and password to create one!
@@ -409,6 +460,26 @@ const Dashboard = () => {
     <div style={styles.container}>
       <div style={styles.header}>
         <h1 style={styles.brandTitle}>Fit as a Fiddle</h1>
+        <div style={styles.tabContainer}>
+          <button 
+            onClick={() => setActiveTab('dashboard')} 
+            style={{
+              ...styles.tabButton,
+              ...(activeTab === 'dashboard' ? styles.activeTab : {})
+            }}
+          >
+            Dashboard
+          </button>
+          <button 
+            onClick={() => setActiveTab('planner')} 
+            style={{
+              ...styles.tabButton,
+              ...(activeTab === 'planner' ? styles.activeTab : {})
+            }}
+          >
+            Workout Planner
+          </button>
+        </div>
         <div style={{display:'flex', gap:'10px'}}>
           <button 
             onClick={() => setShowProfile(true)} 
@@ -427,184 +498,177 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Debug Panel - Only shows in development */}
-      <DebugPanel />
-
       {error && <div style={styles.errorBanner}>{error}</div>}
-      {loading && <div style={styles.loadingBanner}>Loading...</div>}
 
-      <div style={styles.profileSection}>
-        <div style={styles.profileCard}>
-          <div style={styles.profileHeader}>
-            <User size={24} color="#6366f1" />
-            <h2>Profile Details</h2>
-          </div>
-          <div style={styles.profileStats}>
-            <div style={styles.statItem}>
-              <div style={styles.statValue}>{stats.profile.totalWorkouts}</div>
-              <div style={styles.statLabel}>Total Workouts</div>
-            </div>
-            <div style={styles.statItem}>
-              <div style={styles.statValue}>{stats.profile.thisWeek}</div>
-              <div style={styles.statLabel}>This Week</div>
-            </div>
-            <div style={styles.statItem}>
-              <div style={styles.statValue}>{Object.keys(stats.profile.favoriteExercise).length}</div>
-              <div style={styles.statLabel}>Exercises</div>
-            </div>
-            <div style={styles.statItem}>
-              <div style={styles.statValue}>{Math.round(stats.profile.totalWeight)}kg</div>
-              <div style={styles.statLabel}>Total Weight</div>
-            </div>
-          </div>
-          {Object.keys(stats.profile.favoriteExercise).length > 0 && (
-            <div style={styles.favoriteExercise}>
-              <strong>Favorite:</strong> {Object.entries(stats.profile.favoriteExercise).sort((a,b) => b[1] - a[1])[0][0]}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div style={styles.gridTop}>
-        <div style={styles.card}>
-          <div style={styles.cardHeader}>
-            <Target size={18} color="#6366f1" />
-            <h3>Personal Bests</h3>
-          </div>
-          {Object.entries(stats.pbs).length === 0 ? (
-            <div style={styles.emptyState}>No personal bests yet</div>
-          ) : (
-            Object.entries(stats.pbs).map(([name, val]) => (
-              <div key={name} style={styles.row}>
-                <span>{name}</span>
-                <span style={{color:'#6366f1', fontWeight:'bold'}}>{val}kg</span>
+      {activeTab === 'dashboard' ? (
+        <>
+          <div style={styles.profileSection}>
+            <div style={styles.profileCard}>
+              <div style={styles.profileHeader}>
+                <User size={24} color="#6366f1" />
+                <h2>Profile Details</h2>
               </div>
-            ))
-          )}
-        </div>
-
-        <div style={styles.card}>
-          <div style={styles.cardHeader}>
-            <Zap size={18} color="#fbbf24" />
-            <h3>Muscle Balance</h3>
-          </div>
-          {Object.entries(stats.muscleSplit).map(([group, count]) => (
-            <div key={group} style={styles.balanceRow}>
-              <span style={styles.groupLabel}>{group}</span>
-              <div style={styles.barBg}>
-                <div style={{...styles.barFill, width: `${Math.min(100, count * 20)}%`}} />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={styles.gridBottom}>
-        <div style={styles.card}>
-          <div style={styles.cardHeader}>
-            <Calendar size={18} color="#6366f1" />
-            <h3>Workout History</h3>
-          </div>
-          <div style={styles.scrollArea}>
-            {stats.myLogs.length === 0 ? (
-              <div style={styles.emptyState}>No workouts logged yet</div>
-            ) : (
-              stats.myLogs.map((log, i) => {
-                const exerciseName = log.exercise_name || log.ex_name || 'Unknown Exercise';
-                const muscleGroup = log.muscle_group || 'Other';
-                const weight = log.weight || log.ex_weight || 0;
-                const sets = log.sets || log.ex_sets || 0;
-                const reps = log.reps || log.ex_reps || 0;
-                
-                return (
-                  <div key={i} style={styles.historyItem}>
-                    <span style={styles.dateText}>
-                      {new Date(log.created_at).toLocaleDateString(undefined, {day:'numeric', month:'short'})}
-                    </span>
-                    <span style={{flex:1, fontWeight:'600'}}>
-                      {exerciseName}
-                    </span>
-                    <div style={{textAlign:'right', marginRight:'15px'}}>
-                      {muscleGroup === 'Cardio' ? (
-                        <>
-                          <div style={{fontWeight:'bold', color:'#ec4899'}}>{reps} min</div>
-                          {weight > 0 && <div style={{fontSize:'10px', color:'#94a3b8'}}>{weight} km</div>}
-                        </>
-                      ) : muscleGroup === 'Flexibility' ? (
-                        <div style={{fontWeight:'bold', color:'#10b981'}}>{reps} min</div>
-                      ) : (
-                        <>
-                          <div style={{fontWeight:'bold', color:'#6366f1'}}>{weight}kg</div>
-                          <div style={{fontSize:'10px', color:'#94a3b8'}}>{sets} x {reps}</div>
-                        </>
-                      )}
-                    </div>
-                    <Trash2 
-                      size={16} 
-                      color="#ef4444" 
-                      style={{cursor:'pointer', opacity: loading ? 0.5 : 1}} 
-                      onClick={() => deleteWorkout(log.id)}
-                    />
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        <div style={styles.card}>
-          <div style={styles.cardHeader}>
-            <Trophy size={18} color="#fbbf24" />
-            <h3>League Standings</h3>
-          </div>
-          <div style={styles.scrollArea}>
-            {stats.league.length === 0 ? (
-              <div style={styles.emptyState}>No league data available</div>
-            ) : (
-              stats.league.map((entry, i) => (
-                <div key={i} style={styles.leagueItem}>
-                  <div style={styles.rankCircle}>{i+1}</div>
-                  <div style={{flex:1}}>{entry.name}</div>
-                  <div style={{fontSize:'12px', fontWeight:'bold', color:'#fbbf24'}}>{entry.count} sessions</div>
+              <div style={styles.profileStats}>
+                <div style={styles.statItem}>
+                  <div style={styles.statValue}>{stats.profile.totalWorkouts}</div>
+                  <div style={styles.statLabel}>Total Workouts</div>
                 </div>
-              ))
-            )}
+                <div style={styles.statItem}>
+                  <div style={styles.statValue}>{stats.profile.thisWeek}</div>
+                  <div style={styles.statLabel}>This Week</div>
+                </div>
+                <div style={styles.statItem}>
+                  <div style={styles.statValue}>{Object.keys(stats.profile.favoriteExercise).length}</div>
+                  <div style={styles.statLabel}>Exercises</div>
+                </div>
+                <div style={styles.statItem}>
+                  <div style={styles.statValue}>{Math.round(stats.profile.totalWeight)}kg</div>
+                  <div style={styles.statLabel}>Total Weight</div>
+                </div>
+              </div>
+              {Object.keys(stats.profile.favoriteExercise).length > 0 && (
+                <div style={styles.favoriteExercise}>
+                  <strong>Favorite:</strong> {Object.entries(stats.profile.favoriteExercise).sort((a,b) => b[1] - a[1])[0][0]}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      </div>
 
-      <div style={styles.fabContainer}>
-        <button 
-          onClick={() => {
-            setWorkoutType('strength'); 
-            setIsLogging(true); 
-          }} 
-          style={{...styles.fab, background:'#6366f1'}}
-          disabled={loading}
-        >
-          <Dumbbell size={18}/> Strength
-        </button>
-        <button 
-          onClick={() => {
-            setWorkoutType('cardio'); 
-            setIsLogging(true); 
-          }} 
-          style={{...styles.fab, background:'#ec4899'}}
-          disabled={loading}
-        >
-          <Heart size={18}/> Cardio
-        </button>
-        <button 
-          onClick={() => {
-            setWorkoutType('stretch'); 
-            setIsLogging(true); 
-          }} 
-          style={{...styles.fab, background:'#10b981'}}
-          disabled={loading}
-        >
-          <Wind size={18}/> Stretch
-        </button>
-      </div>
+          <div style={styles.gridTop}>
+            <div style={styles.card}>
+              <div style={styles.cardHeader}>
+                <Target size={18} color="#6366f1" />
+                <h3>Personal Bests</h3>
+              </div>
+              {Object.entries(stats.pbs).length === 0 ? (
+                <div style={styles.emptyState}>No personal bests yet</div>
+              ) : (
+                Object.entries(stats.pbs).map(([name, val]) => (
+                  <div key={name} style={styles.row}>
+                    <span>{name}</span>
+                    <span style={{color:'#6366f1', fontWeight:'bold'}}>{val}kg</span>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div style={styles.card}>
+              <div style={styles.cardHeader}>
+                <Zap size={18} color="#fbbf24" />
+                <h3>Muscle Balance</h3>
+              </div>
+              {Object.entries(stats.muscleSplit).map(([group, count]) => (
+                <div key={group} style={styles.balanceRow}>
+                  <span style={styles.groupLabel}>{group}</span>
+                  <div style={styles.barBg}>
+                    <div style={{...styles.barFill, width: `${Math.min(100, count * 20)}%`}} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={styles.gridBottom}>
+            <div style={styles.card}>
+              <div style={styles.cardHeader}>
+                <Calendar size={18} color="#6366f1" />
+                <h3>Workout History</h3>
+              </div>
+              <div style={styles.scrollArea}>
+                {stats.myLogs.length === 0 ? (
+                  <div style={styles.emptyState}>No workouts logged yet</div>
+                ) : (
+                  stats.myLogs.map((log, i) => {
+                    const exerciseName = log.exercise_name || 'Unknown Exercise';
+                    const muscleGroup = log.muscle_group || 'Other';
+                    const weight = log.weight || 0;
+                    const sets = log.sets || 0;
+                    const reps = log.reps || 0;
+                    
+                    return (
+                      <div key={i} style={styles.historyItem}>
+                        <span style={styles.dateText}>
+                          {new Date(log.created_at).toLocaleDateString(undefined, {day:'numeric', month:'short'})}
+                        </span>
+                        <span style={{flex:1, fontWeight:'600'}}>
+                          {exerciseName}
+                        </span>
+                        <div style={{textAlign:'right', marginRight:'15px'}}>
+                          {muscleGroup === 'Cardio' ? (
+                            <>
+                              <div style={{fontWeight:'bold', color:'#ec4899'}}>{reps} min</div>
+                              {weight > 0 && <div style={{fontSize:'10px', color:'#94a3b8'}}>{weight} km</div>}
+                            </>
+                          ) : muscleGroup === 'Flexibility' ? (
+                            <div style={{fontWeight:'bold', color:'#10b981'}}>{reps} min</div>
+                          ) : (
+                            <>
+                              <div style={{fontWeight:'bold', color:'#6366f1'}}>{weight}kg</div>
+                              <div style={{fontSize:'10px', color:'#94a3b8'}}>{sets} x {reps}</div>
+                            </>
+                          )}
+                        </div>
+                        <Trash2 
+                          size={16} 
+                          color="#ef4444" 
+                          style={{cursor:'pointer', opacity: loading ? 0.5 : 1}} 
+                          onClick={() => deleteWorkout(log.id)}
+                        />
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div style={styles.card}>
+              <div style={styles.cardHeader}>
+                <Trophy size={18} color="#fbbf24" />
+                <h3>League Standings</h3>
+              </div>
+              <div style={styles.scrollArea}>
+                {stats.league.length === 0 ? (
+                  <div style={styles.emptyState}>No league data available</div>
+                ) : (
+                  stats.league.map((entry, i) => (
+                    <div key={i} style={styles.leagueItem}>
+                      <div style={styles.rankCircle}>{i+1}</div>
+                      <div style={{flex:1}}>{entry.name}</div>
+                      <div style={{fontSize:'12px', fontWeight:'bold', color:'#fbbf24'}}>{entry.count} sessions</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div style={styles.fabContainer}>
+            <button 
+              onClick={() => {setWorkoutType('strength'); setIsLogging(true);}} 
+              style={{...styles.fab, background:'#6366f1'}}
+              disabled={loading}
+            >
+              <Dumbbell size={18}/> Strength
+            </button>
+            <button 
+              onClick={() => {setWorkoutType('cardio'); setIsLogging(true);}} 
+              style={{...styles.fab, background:'#ec4899'}}
+              disabled={loading}
+            >
+              <Heart size={18}/> Cardio
+            </button>
+            <button 
+              onClick={() => {setWorkoutType('stretch'); setIsLogging(true);}} 
+              style={{...styles.fab, background:'#10b981'}}
+              disabled={loading}
+            >
+              <Wind size={18}/> Stretch
+            </button>
+          </div>
+        </>
+      ) : (
+        <WorkoutPlanner />
+      )}
 
       {isLogging && (
          <div style={styles.modalOverlay}>
@@ -701,29 +765,21 @@ const styles = {
   container: { minHeight: '100vh', background: '#0a0f1d', color: '#f8fafc', padding: '40px', fontFamily: 'sans-serif' },
   header: { display:'flex', justifyContent:'space-between', marginBottom:'40px', alignItems:'center' },
   brandTitle: { color:'#6366f1', margin:0, fontWeight:'900', fontSize:'28px' },
-  
-  // Debug Panel Styles
-  debugPanel: { 
-    background: 'rgba(255, 255, 0, 0.1)', 
-    border: '2px solid yellow', 
-    padding: '15px', 
-    marginBottom: '20px',
+  tabContainer: { display: 'flex', gap: '10px', background: '#161d2f', padding: '5px', borderRadius: '12px' },
+  tabButton: { 
+    padding: '10px 20px', 
+    border: 'none', 
+    background: 'transparent', 
+    color: '#94a3b8', 
+    cursor: 'pointer', 
     borderRadius: '8px',
-    fontSize: '12px',
-    color: 'yellow'
+    fontWeight: 'bold',
+    transition: 'all 0.2s ease'
   },
-  debugButton: {
-    background: 'yellow',
-    color: 'black',
-    border: 'none',
-    padding: '5px 10px',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    marginTop: '10px',
-    fontSize: '11px'
+  activeTab: { 
+    background: '#6366f1', 
+    color: '#fff'
   },
-  
-  // Profile Section Styles
   profileSection: { marginBottom: '25px' },
   profileCard: { background:'#161d2f', padding:'30px', borderRadius:'24px', border:'1px solid rgba(255,255,255,0.05)' },
   profileHeader: { display:'flex', gap:'15px', alignItems:'center', marginBottom:'25px' },
@@ -732,7 +788,6 @@ const styles = {
   statValue: { fontSize:'24px', fontWeight:'bold', color:'#6366f1', marginBottom:'5px' },
   statLabel: { fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' },
   favoriteExercise: { textAlign:'center', color:'#94a3b8', fontSize:'14px', marginTop:'10px' },
-  
   gridTop: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'25px', marginBottom:'25px' },
   gridBottom: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'25px', paddingBottom:'100px' },
   card: { background:'#161d2f', padding:'25px', borderRadius:'24px', border:'1px solid rgba(255,255,255,0.05)' },
@@ -761,27 +816,83 @@ const styles = {
   authCard: { maxWidth:'400px', margin:'100px auto', background:'#161d2f', padding:'50px', borderRadius:'40px', textAlign:'center' },
   avatarCircle: { width:'100px', height:'100px', borderRadius:'50%', background:'rgba(99, 102, 241, 0.1)', margin:'0 auto', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', border:'3px solid #6366f1' },
   error: { color: '#ef4444', fontSize: '14px', marginBottom: '15px', textAlign: 'center' },
-  errorBanner: { 
-    background: 'rgba(239, 68, 68, 0.1)', 
-    color: '#ef4444', 
-    padding: '12px', 
+  errorBanner: { background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '12px', borderRadius: '12px', marginBottom: '20px', textAlign: 'center' },
+  emptyState: { textAlign: 'center', color: '#94a3b8', padding: '40px 20px', fontSize: '14px' },
+  
+  // Workout Planner Styles
+  plannerContainer: { padding: '20px 0' },
+  plannerHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' },
+  addPlanBtn: { 
+    background: '#6366f1', 
+    color: '#fff', 
+    padding: '12px 24px', 
+    border: 'none', 
     borderRadius: '12px', 
-    marginBottom: '20px',
-    textAlign: 'center'
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontWeight: 'bold'
   },
-  loadingBanner: { 
+  plannerGrid: { 
+    display: 'grid', 
+    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', 
+    gap: '20px' 
+  },
+  emptyPlanner: { 
+    textAlign: 'center', 
+    padding: '60px', 
+    background: '#161d2f', 
+    borderRadius: '24px',
+    border: '1px solid rgba(255,255,255,0.05)'
+  },
+  planCard: { 
+    background: '#161d2f', 
+    padding: '25px', 
+    borderRadius: '24px', 
+    border: '1px solid rgba(255,255,255,0.05)',
+    transition: 'transform 0.2s ease'
+  },
+  planHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
+  planDate: { color: '#94a3b8', fontSize: '14px' },
+  planExercises: { marginBottom: '15px' },
+  planExercise: { 
+    background: 'rgba(255,255,255,0.03)', 
+    padding: '8px 12px', 
+    borderRadius: '8px', 
+    marginBottom: '5px',
+    fontSize: '14px'
+  },
+  planNotes: { 
+    color: '#94a3b8', 
+    fontSize: '13px', 
+    fontStyle: 'italic',
+    marginBottom: '15px'
+  },
+  planActions: { display: 'flex', gap: '10px' },
+  editBtn: { 
     background: 'rgba(99, 102, 241, 0.1)', 
     color: '#6366f1', 
-    padding: '12px', 
-    borderRadius: '12px', 
-    marginBottom: '20px',
-    textAlign: 'center'
+    padding: '8px 16px', 
+    border: '1px solid rgba(99, 102, 241, 0.2)',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px',
+    fontSize: '12px'
   },
-  emptyState: { 
-    textAlign: 'center', 
-    color: '#94a3b8', 
-    padding: '40px 20px', 
-    fontSize: '14px' 
+  deletePlanBtn: { 
+    background: 'rgba(239, 68, 68, 0.1)', 
+    color: '#ef4444', 
+    padding: '8px 16px', 
+    border: '1px solid rgba(239, 68, 68, 0.2)',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px',
+    fontSize: '12px'
   }
 };
 
