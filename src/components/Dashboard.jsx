@@ -28,17 +28,7 @@ const WORKOUT_CONFIGS = {
   }
 };
 
-const WorkoutPlanner = ({ userEmail, workoutLogs = [] }) => {
-  const [weekPlan, setWeekPlan] = useState({
-    Monday: { workout: false, exercises: [], type: 'strength' },
-    Tuesday: { workout: false, exercises: [], type: 'strength' },
-    Wednesday: { workout: false, exercises: [], type: 'strength' },
-    Thursday: { workout: false, exercises: [], type: 'strength' },
-    Friday: { workout: false, exercises: [], type: 'strength' },
-    Saturday: { workout: false, exercises: [], type: 'strength' },
-    Sunday: { workout: false, exercises: [], type: 'strength' }
-  });
-
+const WorkoutPlanner = ({ userEmail, workoutLogs = [], weekPlan, setWeekPlan }) => {
   const [availableExercises, setAvailableExercises] = useState({
     strength: [],
     cardio: [],
@@ -146,6 +136,7 @@ const WorkoutPlanner = ({ userEmail, workoutLogs = [] }) => {
 
   const saveWeekPlan = async () => {
     console.log('Saving week plan:', weekPlan);
+    localStorage.setItem('weekPlan', JSON.stringify(weekPlan));
     alert('Week plan saved successfully!');
   };
 
@@ -357,6 +348,16 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [weekPlan, setWeekPlan] = useState({
+    Monday: { workout: false, exercises: [], type: 'strength' },
+    Tuesday: { workout: false, exercises: [], type: 'strength' },
+    Wednesday: { workout: false, exercises: [], type: 'strength' },
+    Thursday: { workout: false, exercises: [], type: 'strength' },
+    Friday: { workout: false, exercises: [], type: 'strength' },
+    Saturday: { workout: false, exercises: [], type: 'strength' },
+    Sunday: { workout: false, exercises: [], type: 'strength' }
+  });
+  const [coins, setCoins] = useState(0);
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -406,6 +407,18 @@ const Dashboard = () => {
         displayName: userData.display_name || userData.email.split('@')[0],
         profilePic: userData.profile_pic || ''
       });
+    }
+
+    // Load week plan from localStorage
+    const savedPlan = localStorage.getItem('weekPlan');
+    if (savedPlan) {
+      setWeekPlan(JSON.parse(savedPlan));
+    }
+
+    // Load coins from localStorage
+    const savedCoins = localStorage.getItem('fitnessCoins');
+    if (savedCoins) {
+      setCoins(parseInt(savedCoins));
     }
   }, []);
 
@@ -466,6 +479,12 @@ const Dashboard = () => {
       
       setIsLogging(false);
       setFormData({ sets: '', reps: '', weight: '', minutes: '', distance: '' });
+      
+      // Award coins for completing workout
+      const newCoins = coins + 10;
+      setCoins(newCoins);
+      localStorage.setItem('fitnessCoins', newCoins.toString());
+      
       await loadData();
       
     } catch (e) {
@@ -628,6 +647,15 @@ const Dashboard = () => {
     return { myLogs, muscleSplit, pbs, league, profile };
   })();
 
+  // Get today's workout plan
+  const getTodaysWorkout = () => {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const today = days[new Date().getDay()];
+    return weekPlan[today];
+  };
+
+  const todaysWorkout = getTodaysWorkout();
+
   if (!user) return (
     <div style={styles.container}>
       <div style={styles.authCard}>
@@ -689,7 +717,14 @@ const Dashboard = () => {
             Weekly Planner
           </button>
         </div>
-        <div style={{display:'flex', gap:'10px'}}>
+        <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
+          {user.profile_pic && (
+            <img 
+              src={user.profile_pic} 
+              alt="Profile" 
+              style={{width:'32px', height:'32px', borderRadius:'50%', objectFit:'cover'}}
+            />
+          )}
           <button 
             onClick={() => setShowProfile(true)} 
             style={styles.profileBtn}
@@ -712,34 +747,78 @@ const Dashboard = () => {
       {activeTab === 'dashboard' ? (
         <>
           <div style={styles.profileSection}>
-            <div style={styles.profileCard}>
-              <div style={styles.profileHeader}>
-                <User size={24} color="#6366f1" />
-                <h2>Profile Details</h2>
+            <div style={styles.profileCardContainer}>
+              <div style={styles.profileCard}>
+                <div style={styles.profileHeader}>
+                  <User size={24} color="#6366f1" />
+                  <h2>Profile Details</h2>
+                </div>
+                <div style={styles.profileStats}>
+                  <div style={styles.statItem}>
+                    <div style={styles.statValue}>{stats.profile.totalWorkouts}</div>
+                    <div style={styles.statLabel}>Total Workouts</div>
+                  </div>
+                  <div style={styles.statItem}>
+                    <div style={styles.statValue}>{stats.profile.thisWeek}</div>
+                    <div style={styles.statLabel}>This Week</div>
+                  </div>
+                  <div style={styles.statItem}>
+                    <div style={styles.statValue}>{Object.keys(stats.profile.favoriteExercise).length}</div>
+                    <div style={styles.statLabel}>Exercises</div>
+                  </div>
+                  <div style={styles.statItem}>
+                    <div style={styles.statValue}>{Math.round(stats.profile.totalWeight)}kg</div>
+                    <div style={styles.statLabel}>Total Weight</div>
+                  </div>
+                </div>
+                {Object.keys(stats.profile.favoriteExercise).length > 0 && (
+                  <div style={styles.favoriteExercise}>
+                    <strong>Favorite:</strong> {Object.entries(stats.profile.favoriteExercise).sort((a,b) => b[1] - a[1])[0][0]}
+                  </div>
+                )}
               </div>
-              <div style={styles.profileStats}>
-                <div style={styles.statItem}>
-                  <div style={styles.statValue}>{stats.profile.totalWorkouts}</div>
-                  <div style={styles.statLabel}>Total Workouts</div>
+
+              <div style={styles.todayCard}>
+                <div style={styles.profileHeader}>
+                  <Calendar size={24} color="#10b981" />
+                  <h2>Today's Plan</h2>
                 </div>
-                <div style={styles.statItem}>
-                  <div style={styles.statValue}>{stats.profile.thisWeek}</div>
-                  <div style={styles.statLabel}>This Week</div>
-                </div>
-                <div style={styles.statItem}>
-                  <div style={styles.statValue}>{Object.keys(stats.profile.favoriteExercise).length}</div>
-                  <div style={styles.statLabel}>Exercises</div>
-                </div>
-                <div style={styles.statItem}>
-                  <div style={styles.statValue}>{Math.round(stats.profile.totalWeight)}kg</div>
-                  <div style={styles.statLabel}>Total Weight</div>
+                {todaysWorkout.workout ? (
+                  <div>
+                    <div style={styles.workoutTypeIndicator}>
+                      {todaysWorkout.type === 'strength' && <Dumbbell size={20} color="#6366f1" />}
+                      {todaysWorkout.type === 'cardio' && <Heart size={20} color="#ec4899" />}
+                      {todaysWorkout.type === 'stretch' && <Wind size={20} color="#10b981" />}
+                      <span style={{textTransform:'capitalize', fontWeight:'bold'}}>{todaysWorkout.type}</span>
+                    </div>
+                    {todaysWorkout.exercises.length > 0 ? (
+                      <div style={styles.todayExercisesList}>
+                        {todaysWorkout.exercises.map((ex, i) => (
+                          <div key={i} style={styles.todayExerciseItem}>
+                            • {ex.name}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={styles.emptyState}>No exercises planned</div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={styles.restDayIndicator}>
+                    <div style={{fontSize:'40px', marginBottom:'10px'}}>😴</div>
+                    <div>Rest Day</div>
+                  </div>
+                )}
+
+                <div style={styles.coinsSection}>
+                  <div style={styles.coinsHeader}>
+                    <Sparkles size={20} color="#fbbf24" />
+                    <span style={{fontWeight:'bold'}}>Fitness Coins</span>
+                  </div>
+                  <div style={styles.coinsValue}>{coins}</div>
+                  <div style={styles.coinsNote}>+10 coins per workout</div>
                 </div>
               </div>
-              {Object.keys(stats.profile.favoriteExercise).length > 0 && (
-                <div style={styles.favoriteExercise}>
-                  <strong>Favorite:</strong> {Object.entries(stats.profile.favoriteExercise).sort((a,b) => b[1] - a[1])[0][0]}
-                </div>
-              )}
             </div>
           </div>
 
@@ -839,13 +918,29 @@ const Dashboard = () => {
                 {stats.league.length === 0 ? (
                   <div style={styles.emptyState}>No league data available</div>
                 ) : (
-                  stats.league.map((entry, i) => (
-                    <div key={i} style={styles.leagueItem}>
-                      <div style={styles.rankCircle}>{i+1}</div>
-                      <div style={{flex:1}}>{entry.name}</div>
-                      <div style={{fontSize:'12px', fontWeight:'bold', color:'#fbbf24'}}>{entry.count} sessions</div>
-                    </div>
-                  ))
+                  stats.league.map((entry, i) => {
+                    const userInfo = allData.users?.find(u => 
+                      (u.display_name === entry.name || u.email.split('@')[0] === entry.name)
+                    );
+                    return (
+                      <div key={i} style={styles.leagueItem}>
+                        <div style={styles.rankCircle}>{i+1}</div>
+                        {userInfo?.profile_pic ? (
+                          <img 
+                            src={userInfo.profile_pic} 
+                            alt={entry.name}
+                            style={styles.leagueAvatar}
+                          />
+                        ) : (
+                          <div style={styles.leagueAvatarPlaceholder}>
+                            <User size={16} color="#6366f1" />
+                          </div>
+                        )}
+                        <div style={{flex:1}}>{entry.name}</div>
+                        <div style={{fontSize:'12px', fontWeight:'bold', color:'#fbbf24'}}>{entry.count} sessions</div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -876,10 +971,14 @@ const Dashboard = () => {
           </div>
         </>
       ) : (
-        <WorkoutPlanner userEmail={user?.email} workoutLogs={allData.workoutLogs} />
+        <WorkoutPlanner 
+          userEmail={user?.email} 
+          workoutLogs={allData.workoutLogs}
+          weekPlan={weekPlan}
+          setWeekPlan={setWeekPlan}
+        />
       )}
 
-      {/* Keep your existing modals for logging workouts and profile */}
       {isLogging && (
          <div style={styles.modalOverlay}>
             <div style={styles.modalContent}>
@@ -954,7 +1053,7 @@ const Dashboard = () => {
               style={styles.input}
               value={profileForm.profilePic}
               onChange={e => setProfileForm(prev => ({...prev, profilePic: e.target.value}))}
-              placeholder="https://example.com/avatar.jpg "
+              placeholder="https://example.com/avatar.jpg"
               disabled={loading}
             />
             <button 
@@ -971,13 +1070,17 @@ const Dashboard = () => {
   );
 };
 
-// Styles object - you'll need to merge this with your existing styles
 const styles = {
   container: { minHeight: '100vh', background: '#0a0f1d', color: '#f8fafc', padding: '40px', fontFamily: 'sans-serif' },
   header: { display:'flex', justifyContent:'space-between', marginBottom:'40px', alignItems:'center' },
   brandTitle: { color:'#6366f1', margin:0, fontWeight:'900', fontSize:'28px' },
+  tabContainer: { display:'flex', gap:'10px' },
+  tabButton: { padding:'10px 20px', background:'transparent', color:'#94a3b8', border:'none', borderRadius:'12px', cursor:'pointer', fontWeight:'bold', fontSize:'14px' },
+  activeTab: { background:'rgba(99, 102, 241, 0.1)', color:'#6366f1' },
   profileSection: { marginBottom: '25px' },
+  profileCardContainer: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px' },
   profileCard: { background:'#161d2f', padding:'30px', borderRadius:'24px', border:'1px solid rgba(255,255,255,0.05)' },
+  todayCard: { background:'#161d2f', padding:'30px', borderRadius:'24px', border:'1px solid rgba(255,255,255,0.05)' },
   profileHeader: { display:'flex', gap:'15px', alignItems:'center', marginBottom:'25px' },
   profileStats: { display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'20px', marginBottom:'20px' },
   statItem: { textAlign:'center', padding:'15px', background:'rgba(255,255,255,0.03)', borderRadius:'12px' },
@@ -997,6 +1100,8 @@ const styles = {
   historyItem: { display:'flex', padding:'18px', background:'rgba(255,255,255,0.03)', borderRadius:'18px', marginBottom:'12px', alignItems:'center' },
   dateText: { color:'#6366f1', fontWeight:'bold', width:'65px', fontSize:'12px' },
   leagueItem: { display:'flex', alignItems:'center', gap:'15px', padding:'14px', background:'rgba(255,255,255,0.02)', borderRadius:'14px', marginBottom:'10px' },
+  leagueAvatar: { width:'32px', height:'32px', borderRadius:'50%', objectFit:'cover', border:'2px solid #6366f1' },
+  leagueAvatarPlaceholder: { width:'32px', height:'32px', borderRadius:'50%', background:'rgba(99, 102, 241, 0.1)', display:'flex', alignItems:'center', justifyContent:'center', border:'2px solid #6366f1' },
   rankCircle: { width:'24px', height:'24px', background:'#0a0f1d', borderRadius:'50%', textAlign:'center', fontSize:'11px', lineHeight:'24px' },
   fabContainer: { position:'fixed', bottom:'30px', left:'50%', transform:'translateX(-50%)', display:'flex', gap:'15px', zIndex: 100 },
   fab: { padding:'16px 28px', borderRadius:'22px', color:'#fff', border:'none', cursor:'pointer', display:'flex', gap:'10px', fontWeight:'bold' },
@@ -1013,7 +1118,16 @@ const styles = {
   avatarCircle: { width:'100px', height:'100px', borderRadius:'50%', background:'rgba(99, 102, 241, 0.1)', margin:'0 auto', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', border:'3px solid #6366f1' },
   error: { color: '#ef4444', fontSize: '14px', marginBottom: '15px', textAlign: 'center' },
   errorBanner: { background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '12px', borderRadius: '12px', marginBottom: '20px', textAlign: 'center' },
-    
+  workoutTypeIndicator: { display:'flex', alignItems:'center', gap:'10px', padding:'15px', background:'rgba(99, 102, 241, 0.1)', borderRadius:'12px', marginBottom:'15px', fontSize:'16px' },
+  todayExercisesList: { marginBottom:'20px' },
+  todayExerciseItem: { padding:'10px', background:'rgba(255,255,255,0.03)', borderRadius:'8px', marginBottom:'8px', fontSize:'14px' },
+  restDayIndicator: { textAlign:'center', padding:'40px 20px', color:'#94a3b8', fontSize:'18px' },
+  coinsSection: { marginTop:'25px', padding:'20px', background:'rgba(251, 191, 36, 0.05)', borderRadius:'12px', border:'1px solid rgba(251, 191, 36, 0.2)' },
+  coinsHeader: { display:'flex', alignItems:'center', gap:'10px', marginBottom:'15px', color:'#fbbf24' },
+  coinsValue: { fontSize:'48px', fontWeight:'bold', color:'#fbbf24', textAlign:'center', marginBottom:'5px' },
+  coinsNote: { fontSize:'12px', color:'#94a3b8', textAlign:'center' },
+  emptyState: { textAlign:'center', color:'#94a3b8', padding:'20px' },
+  
   plannerContainer: { padding: '20px 0' },
   plannerHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' },
   savePlanBtn: {
