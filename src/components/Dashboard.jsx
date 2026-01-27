@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  X, MessageSquare, LogOut, Crown, Plus, Music, 
-  Upload, FileText, ExternalLink, Clock, User, 
-  Trash2, Lock, Mail, Hash, Send, Heart, Zap, MessageCircle,
-  Play, Pause
+  X, LogOut, Crown, Plus, Video, 
+  Upload, FileText, User, Trash2, Hash, Send, MessageCircle,
+  PlayCircle
 } from 'lucide-react';
 
 const GROUPS = ['All Discussions', 'General', 'Mental Health', 'Self Care', 'Relationships', 'Career', 'Motherhood', 'Fitness', 'Nutrition'];
@@ -14,29 +13,25 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('community'); 
   const [activeGroup, setActiveGroup] = useState('All Discussions');
   const [showModal, setShowModal] = useState(null); 
+  
+  // Selection States
   const [selectedPost, setSelectedPost] = useState(null);
   const [viewingDoc, setViewingDoc] = useState(null);
-  const [selectedAudio, setSelectedAudio] = useState(null);
+  const [selectedVideo, setSelectedVideo] = useState(null);
   
-  // Login State (New)
+  // Login State
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   
+  // Data States
   const [discussions, setDiscussions] = useState([]);
-  const [audios, setAudios] = useState([]);
+  const [videos, setVideos] = useState([]); // Renamed from audios
   const [resources, setResources] = useState([]);
   
+  // Forms
   const [postForm, setPostForm] = useState({ title: '', content: '', category: 'General' });
-  const [audioForm, setAudioForm] = useState({ title: '', url: '', description: '' });
-  const [libraryForm, setLibraryForm] = useState({ title: '', url: '', type: 'PDF' });
+  const [videoForm, setVideoForm] = useState({ title: '', url: '', description: '' });
   const [commentText, setCommentText] = useState('');
-  
-  // Audio player state
-  const [currentAudio, setCurrentAudio] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [audioElement, setAudioElement] = useState(null);
 
   useEffect(() => {
     document.title = "The Energised Woman | Dashboard";
@@ -51,90 +46,76 @@ const Dashboard = () => {
 
   const loadAllData = async () => {
     try {
-      const [dRes, rRes, aRes] = await Promise.all([
+      // Changed type=audio to type=video
+      const [dRes, rRes, vRes] = await Promise.all([
         fetch('/.netlify/functions/database?type=discussions'),
         fetch('/.netlify/functions/database?type=resources'),
-        fetch('/.netlify/functions/database?type=audio')
+        fetch('/.netlify/functions/database?type=video') 
       ]);
       if (dRes.ok) setDiscussions(await dRes.json());
       if (rRes.ok) setResources(await rRes.json());
-      if (aRes.ok) setAudios(await aRes.json());
+      if (vRes.ok) setVideos(await vRes.json());
     } catch (err) { 
       console.error("Data load error", err);
     }
   };
 
-  // --- NEW LOGIN HANDLER ---
   const handleLogin = (e) => {
     e.preventDefault();
-    // Simulate login - in a real app, send to backend here
     const userData = {
       email: loginEmail,
       display_name: loginEmail.split('@')[0],
-      isAdmin: loginEmail.toLowerCase().includes('admin'), // Simple check for admin
+      isAdmin: loginEmail.toLowerCase().includes('admin'),
       token: 'mock-token-' + Date.now()
     };
-    
     localStorage.setItem('wellnessUser', JSON.stringify(userData));
     setUser(userData);
     setIsAdmin(userData.isAdmin);
     loadAllData();
   };
 
-  // Audio player functions
-  const handlePlayAudio = (audio) => {
-    if (currentAudio?.id === audio.id && isPlaying) {
-      audioElement?.pause();
-      setIsPlaying(false);
-    } else {
-      if (currentAudio?.id !== audio.id) {
-        audioElement?.pause();
-        const newAudio = new Audio(getDirectAudioUrl(audio.url));
-        newAudio.addEventListener('timeupdate', () => setCurrentTime(newAudio.currentTime));
-        newAudio.addEventListener('loadedmetadata', () => setDuration(newAudio.duration));
-        newAudio.addEventListener('ended', () => setIsPlaying(false));
-        setAudioElement(newAudio);
-        setCurrentAudio(audio);
-        newAudio.play();
-        setIsPlaying(true);
-      } else {
-        audioElement?.play();
-        setIsPlaying(true);
-      }
+  // --- NEW: Post Creation Function (Fixed Issue 1) ---
+  const handleCreatePost = async () => {
+    if (!postForm.title || !postForm.content) return alert("Please fill in title and content");
+    
+    const newPost = {
+      id: Date.now(),
+      author: user.display_name,
+      ...postForm,
+      comments: [],
+      created_at: new Date().toISOString()
+    };
+
+    // Optimistic UI Update
+    setDiscussions([newPost, ...discussions]);
+    setShowModal(null);
+    setPostForm({ title: '', content: '', category: 'General' });
+
+    try {
+      await fetch('/.netlify/functions/database?type=discussion', { 
+        method: 'POST', 
+        body: JSON.stringify(newPost) 
+      });
+    } catch (err) {
+      console.error("Post save error", err);
     }
   };
 
-  const getDirectAudioUrl = (url) => {
-    // Handle Google Drive URLs
-    if (url.includes('drive.google.com')) {
-      const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-      if (fileIdMatch) {
-        return `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
+  // --- NEW: Video Helper (Fixed Issue 2) ---
+  const getVideoEmbedUrl = (url) => {
+    if (!url) return '';
+    // Handle YouTube
+    if (url.includes('youtube.com') || url.includes('youtu.be')) {
+      let videoId = '';
+      if (url.includes('youtu.be')) {
+        videoId = url.split('/').pop();
+      } else if (url.includes('v=')) {
+        videoId = url.split('v=')[1].split('&')[0];
       }
+      return `https://www.youtube.com/embed/${videoId}`;
     }
-    // Handle Proton Drive URLs
-    if (url.includes('proton.me') || url.includes('drive.proton')) {
-      return url;
-    }
+    // Return original for direct MP4 links or other generic embeds
     return url;
-  };
-
-  const handleSeek = (e) => {
-    if (audioElement && duration) {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const percentage = x / rect.width;
-      const newTime = percentage * duration;
-      audioElement.currentTime = newTime;
-      setCurrentTime(newTime);
-    }
-  };
-
-  const formatTime = (seconds) => {
-    if (!seconds || isNaN(seconds)) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const handleAddComment = async () => {
@@ -146,68 +127,49 @@ const Dashboard = () => {
     setDiscussions(discussions.map(d => d.id === selectedPost.id ? updatedPost : d));
     try {
       await fetch(`/.netlify/functions/database?id=${selectedPost.id}&type=discussion`, { method: 'PUT', body: JSON.stringify(updatedPost) });
-    } catch (err) {
-      console.error("Comment save error", err);
-    }
+    } catch (err) { console.error(err); }
   };
 
-  const handleAddAudioComment = async () => {
+  const handleAddVideoComment = async () => {
     if (!commentText.trim()) return;
     const newComment = { id: Date.now(), author: user.display_name, text: commentText, created_at: new Date().toISOString() };
-    const updatedAudio = { ...selectedAudio, comments: [...(selectedAudio.comments || []), newComment] };
-    setSelectedAudio(updatedAudio);
+    const updatedVideo = { ...selectedVideo, comments: [...(selectedVideo.comments || []), newComment] };
+    setSelectedVideo(updatedVideo);
     setCommentText('');
-    setAudios(audios.map(a => a.id === selectedAudio.id ? updatedAudio : a));
+    setVideos(videos.map(v => v.id === selectedVideo.id ? updatedVideo : v));
     try {
-      await fetch(`/.netlify/functions/database?id=${selectedAudio.id}&type=audio`, { method: 'PUT', body: JSON.stringify(updatedAudio) });
-    } catch (err) {
-      console.error("Comment save error", err);
-    }
+      await fetch(`/.netlify/functions/database?id=${selectedVideo.id}&type=video`, { method: 'PUT', body: JSON.stringify(updatedVideo) });
+    } catch (err) { console.error(err); }
   };
 
-  const handleAudioUpload = async () => {
-    if (!audioForm.title || !audioForm.url) return alert("Title and URL required");
-    const newAudio = {
+  const handleVideoUpload = async () => {
+    if (!videoForm.title || !videoForm.url) return alert("Title and URL required");
+    const newVideo = {
       id: Date.now(),
-      ...audioForm,
+      ...videoForm,
       comments: []
     };
     
-    try {
-      const res = await fetch('/.netlify/functions/database?type=audio', { method: 'POST', body: JSON.stringify(newAudio) });
-      if (res.ok) {
-        const savedAudio = await res.json();
-        setAudios([savedAudio, ...audios]);
-      } else {
-        setAudios([newAudio, ...audios]);
-      }
-    } catch (err) {
-      setAudios([newAudio, ...audios]);
-    }
-    
+    setVideos([newVideo, ...videos]);
     setShowModal(null); 
-    setAudioForm({title:'', url:'', description:''});
+    setVideoForm({title:'', url:'', description:''});
+
+    try {
+      await fetch('/.netlify/functions/database?type=video', { method: 'POST', body: JSON.stringify(newVideo) });
+    } catch (err) { console.error(err); }
   };
 
   const handleDelete = async (id, type) => {
     if (!window.confirm(`Delete this ${type}?`)) return;
+    if (type === 'discussion') setDiscussions(discussions.filter(i => i.id !== id));
+    if (type === 'video') setVideos(videos.filter(i => i.id !== id));
+    if (type === 'resource') setResources(resources.filter(i => i.id !== id));
+    setShowModal(null);
     try {
-      const res = await fetch(`/.netlify/functions/database?id=${id}&type=${type}`, { method: 'DELETE' });
-      if (res.ok || true) {
-        if (type === 'discussion') setDiscussions(discussions.filter(i => i.id !== id));
-        if (type === 'audio') setAudios(audios.filter(i => i.id !== id));
-        if (type === 'resource') setResources(resources.filter(i => i.id !== id));
-        setShowModal(null);
-      }
-    } catch (err) {
-      if (type === 'discussion') setDiscussions(discussions.filter(i => i.id !== id));
-      if (type === 'audio') setAudios(audios.filter(i => i.id !== id));
-      if (type === 'resource') setResources(resources.filter(i => i.id !== id));
-      setShowModal(null);
-    }
+      await fetch(`/.netlify/functions/database?id=${id}&type=${type}`, { method: 'DELETE' });
+    } catch (err) { console.error(err); }
   };
 
-  // --- REPLACED: Login View ---
   if (!user) {
     return (
       <div style={styles.loginContainer}>
@@ -219,33 +181,12 @@ const Dashboard = () => {
             <h1 style={{fontSize: '24px', fontWeight: '800', color: '#1e293b', margin: '0 0 8px 0'}}>The Energised Woman</h1>
             <p style={{color: '#64748b', fontSize: '14px', margin: 0}}>Sign in to access your wellness hub</p>
           </div>
-          
           <form onSubmit={handleLogin}>
-            <div style={{marginBottom: '15px'}}>
-               <input 
-                 style={styles.input} 
-                 type="email" 
-                 placeholder="Email address" 
-                 value={loginEmail}
-                 onChange={(e) => setLoginEmail(e.target.value)}
-                 required
-               />
-            </div>
-            <div style={{marginBottom: '25px'}}>
-               <input 
-                 style={styles.input} 
-                 type="password" 
-                 placeholder="Password" 
-                 value={loginPassword}
-                 onChange={(e) => setLoginPassword(e.target.value)}
-                 required
-               />
-            </div>
+            <input style={styles.input} type="email" placeholder="Email address" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} required />
+            <input style={styles.input} type="password" placeholder="Password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required />
             <button type="submit" style={styles.primaryButtonFull}>Sign In</button>
           </form>
-          <div style={{marginTop: '20px', textAlign: 'center', fontSize: '12px', color: '#94a3b8'}}>
-            Use any email to test. Use 'admin@...' for admin features.
-          </div>
+          <div style={{marginTop: '20px', textAlign: 'center', fontSize: '12px', color: '#94a3b8'}}>Use any email to test. Use 'admin@...' for admin features.</div>
         </div>
       </div>
     );
@@ -257,13 +198,14 @@ const Dashboard = () => {
         <div style={styles.brand}><Crown size={22} color="#ec4899" /><h1 style={styles.brandText}>The Energised Woman</h1></div>
         <nav style={styles.centerNav}>
           <button onClick={() => setActiveTab('community')} style={{...styles.navBtn, ...(activeTab === 'community' && styles.navBtnActive)}}>Community</button>
-          <button onClick={() => setActiveTab('audio')} style={{...styles.navBtn, ...(activeTab === 'audio' && styles.navBtnActive)}}>Audio Hub</button>
+          <button onClick={() => setActiveTab('video')} style={{...styles.navBtn, ...(activeTab === 'video' && styles.navBtnActive)}}>Video Hub</button>
           <button onClick={() => setActiveTab('resources')} style={{...styles.navBtn, ...(activeTab === 'resources' && styles.navBtnActive)}}>Library</button>
         </nav>
         <div style={styles.userSection}><button style={styles.iconBtn} onClick={() => {setUser(null); localStorage.clear();}}><LogOut size={18}/></button></div>
       </header>
 
       <main style={styles.main}>
+        {/* --- COMMUNITY TAB --- */}
         {activeTab === 'community' && (
           <div style={styles.communityLayout}>
             <aside style={styles.sidebar}>
@@ -285,58 +227,45 @@ const Dashboard = () => {
           </div>
         )}
 
-        {activeTab === 'audio' && (
+        {/* --- VIDEO HUB TAB (Updated) --- */}
+        {activeTab === 'video' && (
           <div>
-            <div style={styles.sectionHeader}><h2>Audio Hub</h2>{isAdmin && <button style={styles.primaryButton} onClick={() => setShowModal('audio')}><Upload size={18}/> Add Audio</button>}</div>
-            {audios.map(audio => (
-              <div key={audio.id} style={styles.audioCard}>
-                <div style={{flex: 1}}>
-                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
-                    <h4 style={{margin: 0}}>{audio.title}</h4>
-                    <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
-                      <button 
-                        style={styles.commentBtn}
-                        onClick={() => {setSelectedAudio(audio); setShowModal('audioDetail');}}
-                      >
-                        <MessageCircle size={14}/> {audio.comments?.length || 0}
-                      </button>
-                      {isAdmin && <button onClick={() => handleDelete(audio.id, 'audio')} style={styles.delBtn}><Trash2 size={16}/></button>}
-                    </div>
+            <div style={styles.sectionHeader}><h2>Video Hub</h2>{isAdmin && <button style={styles.primaryButton} onClick={() => setShowModal('addVideo')}><Upload size={18}/> Add Video</button>}</div>
+            <div style={styles.videoGrid}>
+              {videos.map(video => (
+                <div key={video.id} style={styles.videoCard}>
+                  {/* Video Player Embed */}
+                  <div style={styles.videoFrameWrapper}>
+                     <iframe 
+                        src={getVideoEmbedUrl(video.url)} 
+                        title={video.title}
+                        style={styles.iframe} 
+                        frameBorder="0" 
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                        allowFullScreen
+                     ></iframe>
                   </div>
-                  <p style={{margin: '4px 0 12px 0', fontSize: '13px', color: '#64748b'}}>{audio.description}</p>
                   
-                  <div style={styles.audioPlayerWrapper}>
+                  <div style={styles.videoContent}>
+                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+                      <h4 style={{margin: '0 0 8px 0', fontSize: '16px'}}>{video.title}</h4>
+                      {isAdmin && <button onClick={() => handleDelete(video.id, 'video')} style={styles.delBtn}><Trash2 size={16}/></button>}
+                    </div>
+                    <p style={{margin: '0 0 12px 0', fontSize: '13px', color: '#64748b', lineHeight: '1.4'}}>{video.description}</p>
                     <button 
-                      style={styles.playBtn}
-                      onClick={() => handlePlayAudio(audio)}
+                      style={styles.commentBtn}
+                      onClick={() => {setSelectedVideo(video); setShowModal('videoDetail');}}
                     >
-                      {currentAudio?.id === audio.id && isPlaying ? <Pause size={16} /> : <Play size={16} />}
+                      <MessageCircle size={14}/> {video.comments?.length || 0} Comments
                     </button>
-                    
-                    {currentAudio?.id === audio.id && (
-                      <>
-                        <span style={styles.timeText}>{formatTime(currentTime)}</span>
-                        <div 
-                          style={styles.progressBar}
-                          onClick={handleSeek}
-                        >
-                          <div 
-                            style={{
-                              ...styles.progressFill,
-                              width: `${(currentTime / duration) * 100}%`
-                            }}
-                          />
-                        </div>
-                        <span style={styles.timeText}>{formatTime(duration)}</span>
-                      </>
-                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
 
+        {/* --- LIBRARY TAB --- */}
         {activeTab === 'resources' && (
           <div>
             <div style={styles.sectionHeader}><h2>Library</h2>{isAdmin && <button style={styles.primaryButton} onClick={() => setShowModal('library')}><Plus size={18}/> Add Resource</button>}</div>
@@ -354,6 +283,50 @@ const Dashboard = () => {
       </main>
 
       {/* --- MODALS --- */}
+      
+      {/* 1. New Post Modal (Added Fix) */}
+      {showModal === 'post' && (
+        <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
+          <div style={styles.modal} onClick={e => e.stopPropagation()}>
+            <h3>Create New Post</h3>
+            <input 
+              style={styles.input} 
+              placeholder="Title" 
+              value={postForm.title} 
+              onChange={e => setPostForm({...postForm, title: e.target.value})} 
+            />
+            <select 
+              style={styles.input} 
+              value={postForm.category} 
+              onChange={e => setPostForm({...postForm, category: e.target.value})}
+            >
+              {GROUPS.filter(g => g !== 'All Discussions').map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
+            <textarea 
+              style={{...styles.input, height: '150px'}} 
+              placeholder="What's on your mind?" 
+              value={postForm.content} 
+              onChange={e => setPostForm({...postForm, content: e.target.value})} 
+            />
+            <button style={styles.primaryButtonFull} onClick={handleCreatePost}>Post to Community</button>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Add Video Modal (Updated) */}
+      {showModal === 'addVideo' && (
+        <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
+          <div style={styles.modal} onClick={e => e.stopPropagation()}>
+            <h3>Add Video</h3>
+            <input style={styles.input} placeholder="Video Title" value={videoForm.title} onChange={e => setVideoForm({...videoForm, title: e.target.value})} />
+            <input style={styles.input} placeholder="YouTube URL or Video Link" value={videoForm.url} onChange={e => setVideoForm({...videoForm, url: e.target.value})} />
+            <textarea style={styles.input} placeholder="Description" value={videoForm.description} onChange={e => setVideoForm({...videoForm, description: e.target.value})} />
+            <button style={styles.primaryButtonFull} onClick={handleVideoUpload}>Save Video</button>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Post Detail Modal */}
       {showModal === 'detail' && selectedPost && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.popOutContent} onClick={e => e.stopPropagation()}>
@@ -377,46 +350,42 @@ const Dashboard = () => {
         </div>
       )}
 
-      {showModal === 'audioDetail' && selectedAudio && (
+      {/* 4. Video Detail Modal (Comments) */}
+      {showModal === 'videoDetail' && selectedVideo && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.popOutContent} onClick={e => e.stopPropagation()}>
             <button onClick={() => setShowModal(null)} style={styles.closeBtn}><X size={18}/></button>
-            <h2 style={styles.popOutTitle}>{selectedAudio.title}</h2>
-            <div style={styles.popOutBody}>{selectedAudio.description}</div>
+            <h2 style={styles.popOutTitle}>{selectedVideo.title}</h2>
+            
+            {/* Embedded player in modal too */}
+            <div style={{...styles.videoFrameWrapper, marginBottom: '20px'}}>
+               <iframe src={getVideoEmbedUrl(selectedVideo.url)} style={styles.iframe} frameBorder="0" allowFullScreen></iframe>
+            </div>
+
+            <div style={styles.popOutBody}>{selectedVideo.description}</div>
             <hr style={styles.divider} />
             <div style={styles.commentSection}>
-              <h4>Comments ({selectedAudio.comments?.length || 0})</h4>
+              <h4>Comments ({selectedVideo.comments?.length || 0})</h4>
               <div style={styles.commentList}>
-                {(selectedAudio.comments || []).map(c => (
+                {(selectedVideo.comments || []).map(c => (
                   <div key={c.id} style={styles.commentItem}><strong>{c.author}</strong>: {c.text}</div>
                 ))}
               </div>
               <div style={styles.commentInputWrap}>
-                <input style={styles.commentInput} placeholder="Add comment..." value={commentText} onChange={e => setCommentText(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAddAudioComment()} />
-                <button style={styles.sendBtn} onClick={handleAddAudioComment}><Send size={18}/></button>
+                <input style={styles.commentInput} placeholder="Add comment..." value={commentText} onChange={e => setCommentText(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAddVideoComment()} />
+                <button style={styles.sendBtn} onClick={handleAddVideoComment}><Send size={18}/></button>
               </div>
             </div>
           </div>
         </div>
       )}
 
+      {/* 5. Doc Viewer */}
       {showModal === 'docViewer' && viewingDoc && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.docViewerContent} onClick={e => e.stopPropagation()}>
             <div style={styles.viewerHeader}><h3>{viewingDoc.title}</h3><button onClick={() => setShowModal(null)}><X size={18}/></button></div>
             <iframe src={viewingDoc.url.includes('docs.google.com') ? viewingDoc.url.replace('/edit', '/preview') : viewingDoc.url} style={styles.iframe} frameBorder="0"></iframe>
-          </div>
-        </div>
-      )}
-
-      {showModal === 'audio' && (
-        <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
-          <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <h3>Add Audio</h3>
-            <input style={styles.input} placeholder="Title" value={audioForm.title} onChange={e => setAudioForm({...audioForm, title: e.target.value})} />
-            <input style={styles.input} placeholder="URL (Google Drive or direct link)" value={audioForm.url} onChange={e => setAudioForm({...audioForm, url: e.target.value})} />
-            <textarea style={styles.input} placeholder="Description" value={audioForm.description} onChange={e => setAudioForm({...audioForm, description: e.target.value})} />
-            <button style={styles.primaryButtonFull} onClick={handleAudioUpload}>Save Track</button>
           </div>
         </div>
       )}
@@ -426,10 +395,8 @@ const Dashboard = () => {
 
 const styles = {
   container: { minHeight: '100vh', background: '#f8fafc', fontFamily: 'Inter, sans-serif' },
-  // --- NEW LOGIN STYLES ---
   loginContainer: { minHeight: '100vh', background: '#f8fafc', fontFamily: 'Inter, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' },
-  loginCard: { background: 'white', padding: '40px', borderRadius: '24px', width: '100%', maxWidth: '400px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' },
-  // ------------------------
+  loginCard: { background: 'white', padding: '40px', borderRadius: '24px', width: '100%', maxWidth: '400px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' },
   header: { background: 'white', padding: '0 40px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 100 },
   brand: { display: 'flex', alignItems: 'center', gap: '8px' },
   brandText: { fontSize: '18px', fontWeight: '800', color: '#1e293b' },
@@ -465,23 +432,23 @@ const styles = {
   sendBtn: { background: '#ec4899', color: 'white', border: 'none', borderRadius: '10px', padding: '0 15px', cursor: 'pointer' },
   docViewerContent: { background: 'white', width: '90%', height: '90vh', borderRadius: '24px', overflow: 'hidden', display: 'flex', flexDirection: 'column' },
   viewerHeader: { padding: '20px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0' },
-  iframe: { flex: 1, width: '100%' },
-  audioCard: { background: 'white', padding: '20px', borderRadius: '16px', marginBottom: '12px', border: '1px solid #e2e8f0', display: 'flex' },
-  audioPlayerWrapper: { display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' },
-  playBtn: { background: '#ec4899', color: 'white', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 },
-  progressBar: { flex: 1, height: '6px', background: '#f1f5f9', borderRadius: '10px', cursor: 'pointer', position: 'relative' },
-  progressFill: { height: '100%', background: '#ec4899', borderRadius: '10px' },
-  timeText: { fontSize: '12px', color: '#64748b', minWidth: '35px', textAlign: 'center' },
+  iframe: { flex: 1, width: '100%', height: '100%' },
+  
+  // --- Video Styles ---
+  videoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' },
+  videoCard: { background: 'white', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' },
+  videoFrameWrapper: { position: 'relative', paddingTop: '56.25%', background: 'black' },
+  videoContent: { padding: '16px', flex: 1 },
   commentBtn: { background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' },
+  
   resourceGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' },
   resourceCard: { display: 'flex', alignItems: 'center', gap: '12px', background: 'white', padding: '15px', borderRadius: '16px', border: '1px solid #e2e8f0' },
   viewBtnInternal: { background: '#fdf2f8', color: '#ec4899', border: 'none', padding: '6px 12px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
-  input: { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '10px', fontFamily: 'inherit' },
-  modal: { background: 'white', padding: '30px', borderRadius: '20px', width: '400px' },
+  input: { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '10px', fontFamily: 'inherit', boxSizing: 'border-box' },
+  modal: { background: 'white', padding: '30px', borderRadius: '20px', width: '400px', maxWidth: '90vw' },
   closeBtn: { position: 'absolute', top: '20px', right: '20px', background: '#f1f5f9', border: 'none', borderRadius: '50%', padding: '6px', cursor: 'pointer' },
   iconBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' },
   delBtn: { background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' },
-  feed: {}
 };
 
 export default Dashboard;
