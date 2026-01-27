@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   MessageCircle, User, LogOut, Search, X, ThumbsUp, 
   MessageSquare, Send, Trash2, Shield, ChevronLeft, Flag, 
-  Loader2, Sparkles, Upload, FileText, Music, Crown, Female
+  Loader2, Sparkles, Upload, FileText, Music, Crown, Venus
 } from 'lucide-react';
 
 const CATEGORIES = {
@@ -311,7 +311,7 @@ const Dashboard = () => {
             {/* Changed from Heart to Sparkles/Crown motif */}
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginBottom: 16 }}>
               <Crown size={40} color="#ec4899" />
-              <Female size={48} color="#ec4899" />
+              <Venus size={48} color="#ec4899" />
             </div>
             <h1 style={styles.loginTitle}>The Energised Woman</h1>
             <p style={styles.loginSubtitle}>Empowerment, wellness & community</p>
@@ -342,7 +342,7 @@ const Dashboard = () => {
       <header style={styles.header}>
         <div style={styles.brand}>
           {/* Woman motif instead of heart */}
-          <Female size={32} color="#ec4899" />
+          <Venus size={32} color="#ec4899" />
           <h1 style={styles.brandText}>The Energised Woman</h1>
           {isAdmin && <span style={styles.adminBadge}><Shield size={14} /> Admin</span>}
         </div>
