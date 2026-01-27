@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   MessageCircle, 
   BookOpen, 
@@ -13,19 +13,18 @@ import {
   Play, 
   Pause, 
   Download, 
-  MoreVertical, 
+  X, 
   ThumbsUp, 
   MessageSquare, 
   Share2, 
   Filter,
   Clock,
-  Calendar,
-  X,
-  ChevronRight,
-  FileText,
-  Headphones,
-  Users,
-  Bookmark
+  Send,
+  Trash2,
+  Shield,
+  MoreHorizontal,
+  ChevronLeft,
+  Flag
 } from 'lucide-react';
 
 // Categories for organization
@@ -35,42 +34,76 @@ const CATEGORIES = {
   audio: ['Meditations', 'Affirmations', 'Sleep Stories', 'Podcasts', 'Soundscapes']
 };
 
+// Enhanced sample data with comments
 const SAMPLE_DISCUSSIONS = [
   {
     id: 1,
     author: "Sarah M.",
+    authorId: "user1",
     avatar: "",
     category: "Self Care",
     title: "Morning routine tips for busy moms?",
-    content: "I'm struggling to find time for myself in the mornings. Would love to hear what works for you all!",
+    content: "I'm struggling to find time for myself in the mornings between getting the kids ready and starting work. Would love to hear what works for you all! I've tried waking up at 5am but I'm not a morning person. Does anyone have practical tips for carving out even just 15 minutes of 'me time'?",
     likes: 24,
-    comments: 8,
+    likedBy: ["user2", "user3"],
+    comments: [
+      {
+        id: 101,
+        author: "Jessica T.",
+        content: "I prep everything the night before - clothes, lunches, etc. That gives me 20 minutes in the morning!",
+        timestamp: "1 hour ago",
+        likes: 5
+      },
+      {
+        id: 102,
+        author: "Emma L.",
+        content: "I do a 10-minute meditation while my coffee brews. It's not much but it centers me.",
+        timestamp: "45 minutes ago",
+        likes: 8
+      }
+    ],
     timestamp: "2 hours ago",
-    tags: ["routine", "wellness", "morning"]
+    tags: ["routine", "wellness", "morning"],
+    isPinned: false
   },
   {
     id: 2,
     author: "Jessica T.",
+    authorId: "user2",
     avatar: "",
     category: "Mental Health",
     title: "Dealing with burnout - sharing my journey",
-    content: "After 6 months of feeling overwhelmed, I've learned a few things about setting boundaries...",
+    content: "After 6 months of feeling overwhelmed, I've learned a few things about setting boundaries. The biggest game-changer was learning to say 'no' without guilt. I used to agree to everything and ended up resentful and exhausted. Has anyone else struggled with people-pleasing tendencies? How did you overcome them?",
     likes: 56,
-    comments: 12,
+    likedBy: ["user1", "user4", "user5"],
+    comments: [
+      {
+        id: 201,
+        author: "Admin",
+        content: "Thank you for sharing this vulnerability. It's so important to normalize these conversations.",
+        timestamp: "4 hours ago",
+        likes: 12,
+        isAdmin: true
+      }
+    ],
     timestamp: "5 hours ago",
-    tags: ["burnout", "boundaries", "healing"]
+    tags: ["burnout", "boundaries", "healing"],
+    isPinned: true
   },
   {
     id: 3,
     author: "Emma L.",
+    authorId: "user3",
     avatar: "",
     category: "Career",
     title: "Negotiating remote work for better balance",
     content: "Just successfully negotiated 3 days remote! Here's how I approached the conversation...",
     likes: 89,
-    comments: 23,
+    likedBy: [],
+    comments: [],
     timestamp: "1 day ago",
-    tags: ["career", "work-life-balance", "remote"]
+    tags: ["career", "work-life-balance", "remote"],
+    isPinned: false
   }
 ];
 
@@ -96,17 +129,6 @@ const SAMPLE_RESOURCES = [
     description: "Essential steps for improving sleep quality naturally",
     fileSize: "850 KB",
     format: "PDF"
-  },
-  {
-    id: 3,
-    title: "Setting Boundaries Workbook",
-    type: "E-book",
-    category: "Mental Health",
-    author: "Therapy Center",
-    downloads: 2103,
-    description: "Interactive worksheets for healthy relationship boundaries",
-    fileSize: "5.1 MB",
-    format: "PDF"
   }
 ];
 
@@ -130,16 +152,6 @@ const SAMPLE_AUDIO = [
     plays: 8901,
     description: "Guided meditation to help you fall into deep, restful sleep",
     thumbnail: "purple"
-  },
-  {
-    id: 3,
-    title: "Rainy Day Ambience",
-    type: "Soundscapes",
-    duration: "60:00",
-    author: "Nature Sounds",
-    plays: 1205,
-    description: "Gentle rain sounds for focus and relaxation",
-    thumbnail: "blue"
   }
 ];
 
@@ -151,11 +163,19 @@ const WellnessPortal = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
+  // Admin check - in real app, this would come from backend
+  const isAdmin = user?.email?.includes('admin') || false;
+  
   // Community state
   const [discussions, setDiscussions] = useState(SAMPLE_DISCUSSIONS);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showNewPost, setShowNewPost] = useState(false);
   const [newPostData, setNewPostData] = useState({ title: '', content: '', category: 'General' });
+  
+  // Post detail modal state
+  const [selectedPost, setSelectedPost] = useState(null);
+  const [commentText, setCommentText] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   
   // Resources state
   const [resources, setResources] = useState(SAMPLE_RESOURCES);
@@ -196,7 +216,6 @@ const WellnessPortal = () => {
     }
     setLoading(true);
     try {
-      // Simulated auth
       const userData = { 
         email, 
         display_name: email.split('@')[0],
@@ -213,20 +232,104 @@ const WellnessPortal = () => {
     }
   };
 
+  // Like functionality
+  const handleLike = (postId, e) => {
+    if (e) e.stopPropagation();
+    if (!user) return;
+    
+    setDiscussions(prev => prev.map(post => {
+      if (post.id === postId) {
+        const hasLiked = post.likedBy.includes(user.email);
+        return {
+          ...post,
+          likes: hasLiked ? post.likes - 1 : post.likes + 1,
+          likedBy: hasLiked 
+            ? post.likedBy.filter(id => id !== user.email)
+            : [...post.likedBy, user.email]
+        };
+      }
+      return post;
+    }));
+  };
+
+  // Add comment
+  const handleAddComment = () => {
+    if (!commentText.trim() || !user || !selectedPost) return;
+    
+    const newComment = {
+      id: Date.now(),
+      author: user.display_name || user.email.split('@')[0],
+      authorId: user.email,
+      content: commentText,
+      timestamp: "Just now",
+      likes: 0
+    };
+    
+    setDiscussions(prev => prev.map(post => {
+      if (post.id === selectedPost.id) {
+        return {
+          ...post,
+          comments: [...post.comments, newComment]
+        };
+      }
+      return post;
+    }));
+    
+    setSelectedPost(prev => ({
+      ...prev,
+      comments: [...prev.comments, newComment]
+    }));
+    
+    setCommentText('');
+  };
+
+  // Delete post (admin only)
+  const handleDeletePost = (postId) => {
+    if (!isAdmin) return;
+    setDiscussions(prev => prev.filter(post => post.id !== postId));
+    setSelectedPost(null);
+    setShowDeleteConfirm(null);
+  };
+
+  // Delete comment (admin only)
+  const handleDeleteComment = (postId, commentId) => {
+    if (!isAdmin) return;
+    
+    setDiscussions(prev => prev.map(post => {
+      if (post.id === postId) {
+        return {
+          ...post,
+          comments: post.comments.filter(c => c.id !== commentId)
+        };
+      }
+      return post;
+    }));
+    
+    if (selectedPost) {
+      setSelectedPost(prev => ({
+        ...prev,
+        comments: prev.comments.filter(c => c.id !== commentId)
+      }));
+    }
+  };
+
   const handleNewPost = () => {
     if (!newPostData.title || !newPostData.content) return;
     
     const post = {
       id: Date.now(),
       author: user.display_name || user.email.split('@')[0],
+      authorId: user.email,
       avatar: "",
       category: newPostData.category,
       title: newPostData.title,
       content: newPostData.content,
       likes: 0,
-      comments: 0,
+      likedBy: [],
+      comments: [],
       timestamp: "Just now",
-      tags: []
+      tags: [],
+      isPinned: false
     };
     
     setDiscussions([post, ...discussions]);
@@ -266,57 +369,6 @@ const WellnessPortal = () => {
     ? discussions 
     : discussions.filter(d => d.category === selectedCategory);
 
-  const filteredResources = resourceFilter === 'All'
-    ? resources
-    : resources.filter(r => r.category === resourceFilter);
-
-  if (!user) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.authCard}>
-          <div style={styles.authHeader}>
-            <Sparkles size={32} color="#ec4899" />
-            <h1 style={styles.authTitle}>Serenity Space</h1>
-            <p style={styles.authSubtitle}>A wellness community for women</p>
-          </div>
-          
-          {error && <div style={styles.error}>{error}</div>}
-          
-          <div style={styles.inputGroup}>
-            <input 
-              style={styles.input} 
-              placeholder="Email address" 
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)} 
-              onKeyPress={e => e.key === 'Enter' && handleAuth()}
-            />
-            <input 
-              style={styles.input} 
-              type="password" 
-              placeholder="Password" 
-              value={password}
-              onChange={e => setPassword(e.target.value)} 
-              onKeyPress={e => e.key === 'Enter' && handleAuth()}
-            />
-          </div>
-          
-          <button 
-            style={styles.primaryButton} 
-            onClick={handleAuth}
-            disabled={loading}
-          >
-            {loading ? 'Signing in...' : 'Sign In or Join'}
-          </button>
-          
-          <p style={styles.authNote}>
-            New here? Enter your details above to create your sanctuary
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div style={styles.container}>
       {/* Header */}
@@ -324,6 +376,12 @@ const WellnessPortal = () => {
         <div style={styles.brand}>
           <Heart size={28} color="#ec4899" fill="#fce7f3" />
           <h1 style={styles.brandText}>Serenity Space</h1>
+          {isAdmin && (
+            <span style={styles.adminBadge}>
+              <Shield size={14} />
+              Admin
+            </span>
+          )}
         </div>
         
         <nav style={styles.nav}>
@@ -388,7 +446,7 @@ const WellnessPortal = () => {
                 style={styles.primaryButtonSmall}
                 onClick={() => setShowNewPost(true)}
               >
-                <MoreVertical size={16} />
+                <MessageSquare size={16} />
                 New Discussion
               </button>
             </div>
@@ -423,7 +481,20 @@ const WellnessPortal = () => {
             {/* Discussion List */}
             <div style={styles.cardList}>
               {filteredDiscussions.map(post => (
-                <article key={post.id} style={styles.discussionCard}>
+                <article 
+                  key={post.id} 
+                  style={{
+                    ...styles.discussionCard,
+                    ...(post.isPinned ? styles.pinnedCard : {})
+                  }}
+                  onClick={() => setSelectedPost(post)}
+                >
+                  {post.isPinned && (
+                    <div style={styles.pinnedBadge}>
+                      <Sparkles size={12} />
+                      Featured
+                    </div>
+                  )}
                   <div style={styles.cardMeta}>
                     <span style={styles.categoryTag}>{post.category}</span>
                     <span style={styles.timestamp}>{post.timestamp}</span>
@@ -440,18 +511,35 @@ const WellnessPortal = () => {
                       <span style={styles.authorName}>{post.author}</span>
                     </div>
                     
-                    <div style={styles.cardStats}>
-                      <button style={styles.statButton}>
-                        <ThumbsUp size={16} />
+                    <div style={styles.cardStats} onClick={e => e.stopPropagation()}>
+                      <button 
+                        style={{
+                          ...styles.statButton,
+                          ...(post.likedBy.includes(user?.email) ? styles.statButtonActive : {})
+                        }}
+                        onClick={(e) => handleLike(post.id, e)}
+                      >
+                        <ThumbsUp size={16} fill={post.likedBy.includes(user?.email) ? "#ec4899" : "none"} />
                         {post.likes}
                       </button>
                       <button style={styles.statButton}>
                         <MessageSquare size={16} />
-                        {post.comments}
+                        {post.comments.length}
                       </button>
                       <button style={styles.iconButtonGhost}>
                         <Share2 size={16} />
                       </button>
+                      {isAdmin && (
+                        <button 
+                          style={styles.deleteButtonSmall}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowDeleteConfirm(post.id);
+                          }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </article>
@@ -467,18 +555,9 @@ const WellnessPortal = () => {
                 <h2 style={styles.sectionTitle}>Resource Library</h2>
                 <p style={styles.sectionSubtitle}>Curated guides and tools for your journey</p>
               </div>
-              <div style={styles.searchBox}>
-                <Search size={18} color="#94a3b8" />
-                <input 
-                  type="text" 
-                  placeholder="Search resources..." 
-                  style={styles.searchInput}
-                />
-              </div>
             </div>
-
             <div style={styles.resourceGrid}>
-              {filteredResources.map(resource => (
+              {resources.map(resource => (
                 <div key={resource.id} style={styles.resourceCard}>
                   <div style={styles.resourceIcon}>
                     <FileText size={32} color="#ec4899" />
@@ -487,13 +566,9 @@ const WellnessPortal = () => {
                     <span style={styles.resourceType}>{resource.type}</span>
                     <h3 style={styles.resourceTitle}>{resource.title}</h3>
                     <p style={styles.resourceDesc}>{resource.description}</p>
-                    <div style={styles.resourceMeta}>
-                      <span style={styles.resourceAuthor}>{resource.author}</span>
-                      <span style={styles.resourceStats}>{resource.downloads} downloads</span>
-                    </div>
                     <button style={styles.downloadButton}>
                       <Download size={16} />
-                      Download {resource.format}
+                      Download
                     </button>
                   </div>
                 </div>
@@ -518,65 +593,30 @@ const WellnessPortal = () => {
               </button>
             </div>
 
-            {/* Currently Playing Bar */}
             {currentlyPlaying && (
               <div style={styles.playerBar}>
                 <div style={styles.playerInfo}>
-                  <button 
-                    style={styles.playButton}
-                    onClick={() => togglePlay(currentlyPlaying)}
-                  >
+                  <button style={styles.playButton} onClick={() => togglePlay(currentlyPlaying)}>
                     {isPlaying ? <Pause size={20} fill="white" /> : <Play size={20} fill="white" />}
                   </button>
                   <div>
                     <div style={styles.playerTitle}>
                       {audioLibrary.find(a => a.id === currentlyPlaying)?.title}
                     </div>
-                    <div style={styles.playerMeta}>
-                      {audioLibrary.find(a => a.id === currentlyPlaying)?.author}
-                    </div>
                   </div>
-                </div>
-                <div style={styles.progressBar}>
-                  <div style={styles.progressFill}></div>
                 </div>
               </div>
             )}
 
             <div style={styles.audioGrid}>
               {audioLibrary.map(audio => (
-                <div key={audio.id} style={styles.audioCard}>
-                  <div style={{
-                    ...styles.audioThumbnail,
-                    background: audio.thumbnail === 'pink' ? '#fce7f3' : 
-                               audio.thumbnail === 'purple' ? '#e0e7ff' : '#dbeafe'
-                  }}>
-                    <Headphones size={32} color={audio.thumbnail === 'pink' ? '#ec4899' : 
-                                                      audio.thumbnail === 'purple' ? '#6366f1' : '#3b82f6'} />
-                    <button 
-                      style={styles.audioPlayOverlay}
-                      onClick={() => togglePlay(audio.id)}
-                    >
-                      {currentlyPlaying === audio.id && isPlaying ? (
-                        <Pause size={24} fill="white" />
-                      ) : (
-                        <Play size={24} fill="white" />
-                      )}
-                    </button>
+                <div key={audio.id} style={styles.audioCard} onClick={() => togglePlay(audio.id)}>
+                  <div style={styles.audioThumbnail}>
+                    <Headphones size={32} color="#ec4899" />
                   </div>
                   <div style={styles.audioInfo}>
                     <span style={styles.audioType}>{audio.type}</span>
                     <h3 style={styles.audioTitle}>{audio.title}</h3>
-                    <p style={styles.audioDesc}>{audio.description}</p>
-                    <div style={styles.audioMeta}>
-                      <span style={styles.audioDuration}>
-                        <Clock size={14} />
-                        {audio.duration}
-                      </span>
-                      <span style={styles.audioPlays}>
-                        {audio.plays} plays
-                      </span>
-                    </div>
                   </div>
                 </div>
               ))}
@@ -584,6 +624,192 @@ const WellnessPortal = () => {
           </div>
         )}
       </main>
+
+      {/* Post Detail Modal */}
+      {selectedPost && (
+        <div style={styles.modalOverlay} onClick={() => setSelectedPost(null)}>
+          <div style={styles.detailModal} onClick={e => e.stopPropagation()}>
+            {/* Post Header */}
+            <div style={styles.detailHeader}>
+              <button 
+                style={styles.backButton}
+                onClick={() => setSelectedPost(null)}
+              >
+                <ChevronLeft size={20} />
+                Back
+              </button>
+              <div style={styles.detailMeta}>
+                <span style={styles.categoryTagLarge}>{selectedPost.category}</span>
+                <span style={styles.timestamp}>{selectedPost.timestamp}</span>
+              </div>
+              {isAdmin && (
+                <button 
+                  style={styles.adminDeleteBtn}
+                  onClick={() => setShowDeleteConfirm(selectedPost.id)}
+                >
+                  <Trash2 size={18} />
+                  Delete Post
+                </button>
+              )}
+            </div>
+
+            {/* Post Content */}
+            <div style={styles.detailContent}>
+              <h2 style={styles.detailTitle}>{selectedPost.title}</h2>
+              
+              <div style={styles.detailAuthor}>
+                <div style={styles.avatarLarge}>
+                  <User size={24} color="#94a3b8" />
+                </div>
+                <div>
+                  <div style={styles.detailAuthorName}>{selectedPost.author}</div>
+                  <div style={styles.detailAuthorMeta}>Community Member</div>
+                </div>
+              </div>
+
+              <div style={styles.detailBody}>
+                {selectedPost.content}
+              </div>
+
+              {/* Tags */}
+              {selectedPost.tags.length > 0 && (
+                <div style={styles.tagsContainer}>
+                  {selectedPost.tags.map(tag => (
+                    <span key={tag} style={styles.tag}>#{tag}</span>
+                  ))}
+                </div>
+              )}
+
+              {/* Action Bar */}
+              <div style={styles.detailActions}>
+                <button 
+                  style={{
+                    ...styles.actionButton,
+                    ...(selectedPost.likedBy.includes(user?.email) ? styles.actionButtonActive : {})
+                  }}
+                  onClick={() => handleLike(selectedPost.id)}
+                >
+                  <ThumbsUp size={20} fill={selectedPost.likedBy.includes(user?.email) ? "#ec4899" : "none"} />
+                  {selectedPost.likes} likes
+                </button>
+                <button style={styles.actionButton}>
+                  <MessageSquare size={20} />
+                  {selectedPost.comments.length} comments
+                </button>
+                <button style={styles.actionButton}>
+                  <Share2 size={20} />
+                  Share
+                </button>
+                <button style={styles.actionButton}>
+                  <Flag size={20} />
+                  Report
+                </button>
+              </div>
+            </div>
+
+            {/* Comments Section */}
+            <div style={styles.commentsSection}>
+              <h3 style={styles.commentsTitle}>
+                Discussion ({selectedPost.comments.length})
+              </h3>
+
+              {/* Comment Input */}
+              <div style={styles.commentInputArea}>
+                <div style={styles.avatarSmall}>
+                  <User size={16} color="#94a3b8" />
+                </div>
+                <div style={styles.commentInputWrapper}>
+                  <input
+                    type="text"
+                    placeholder="Add to the discussion..."
+                    style={styles.commentInput}
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleAddComment()}
+                  />
+                  <button 
+                    style={styles.sendButton}
+                    onClick={handleAddComment}
+                    disabled={!commentText.trim()}
+                  >
+                    <Send size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Comments List */}
+              <div style={styles.commentsList}>
+                {selectedPost.comments.map(comment => (
+                  <div key={comment.id} style={styles.commentItem}>
+                    <div style={styles.avatarSmall}>
+                      <User size={16} color="#94a3b8" />
+                    </div>
+                    <div style={styles.commentContent}>
+                      <div style={styles.commentHeader}>
+                        <span style={styles.commentAuthor}>
+                          {comment.author}
+                          {comment.isAdmin && (
+                            <span style={styles.adminLabel}>
+                              <Shield size={12} />
+                              Admin
+                            </span>
+                          )}
+                        </span>
+                        <span style={styles.commentTime}>{comment.timestamp}</span>
+                      </div>
+                      <p style={styles.commentText}>{comment.content}</p>
+                      <div style={styles.commentActions}>
+                        <button style={styles.commentLikeBtn}>
+                          <ThumbsUp size={12} />
+                          {comment.likes}
+                        </button>
+                        <button style={styles.commentReplyBtn}>Reply</button>
+                        {isAdmin && (
+                          <button 
+                            style={styles.commentDeleteBtn}
+                            onClick={() => handleDeleteComment(selectedPost.id, comment.id)}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.confirmModal}>
+            <div style={styles.confirmIcon}>
+              <Trash2 size={32} color="#ef4444" />
+            </div>
+            <h3 style={styles.confirmTitle}>Delete this post?</h3>
+            <p style={styles.confirmText}>
+              This action cannot be undone. The post and all its comments will be permanently removed.
+            </p>
+            <div style={styles.confirmActions}>
+              <button 
+                style={styles.cancelButton}
+                onClick={() => setShowDeleteConfirm(null)}
+              >
+                Cancel
+              </button>
+              <button 
+                style={styles.confirmDeleteButton}
+                onClick={() => handleDeletePost(showDeleteConfirm)}
+              >
+                Delete Post
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* New Post Modal */}
       {showNewPost && (
@@ -595,7 +821,6 @@ const WellnessPortal = () => {
                 <X size={20} />
               </button>
             </div>
-            
             <div style={styles.formGroup}>
               <label style={styles.label}>Category</label>
               <select 
@@ -608,7 +833,6 @@ const WellnessPortal = () => {
                 ))}
               </select>
             </div>
-            
             <div style={styles.formGroup}>
               <label style={styles.label}>Title</label>
               <input 
@@ -618,97 +842,22 @@ const WellnessPortal = () => {
                 onChange={e => setNewPostData({...newPostData, title: e.target.value})}
               />
             </div>
-            
             <div style={styles.formGroup}>
               <label style={styles.label}>Your Message</label>
               <textarea 
                 style={styles.textarea}
-                placeholder="Share your thoughts with the community..."
+                placeholder="Share your thoughts..."
                 value={newPostData.content}
                 onChange={e => setNewPostData({...newPostData, content: e.target.value})}
                 rows={5}
               />
             </div>
-            
             <button 
               style={styles.primaryButton}
               onClick={handleNewPost}
               disabled={!newPostData.title || !newPostData.content}
             >
               Post Discussion
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Upload Audio Modal */}
-      {showUploadAudio && (
-        <div style={styles.modalOverlay} onClick={() => setShowUploadAudio(false)}>
-          <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}>
-              <h3 style={styles.modalTitle}>Upload Audio</h3>
-              <button style={styles.closeButton} onClick={() => setShowUploadAudio(false)}>
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div style={styles.uploadZone}>
-              <Upload size={48} color="#cbd5e1" />
-              <p style={styles.uploadText}>Drag and drop audio file here</p>
-              <p style={styles.uploadSubtext}>or click to browse</p>
-            </div>
-            
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Title</label>
-              <input 
-                style={styles.input}
-                placeholder="Guided Meditation for..."
-                value={uploadData.title}
-                onChange={e => setUploadData({...uploadData, title: e.target.value})}
-              />
-            </div>
-            
-            <div style={styles.formRow}>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Type</label>
-                <select 
-                  style={styles.select}
-                  value={uploadData.type}
-                  onChange={e => setUploadData({...uploadData, type: e.target.value})}
-                >
-                  {CATEGORIES.audio.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Duration</label>
-                <input 
-                  style={styles.input}
-                  placeholder="10:00"
-                  value={uploadData.duration}
-                  onChange={e => setUploadData({...uploadData, duration: e.target.value})}
-                />
-              </div>
-            </div>
-            
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Description</label>
-              <textarea 
-                style={styles.textarea}
-                placeholder="Describe this audio..."
-                value={uploadData.description}
-                onChange={e => setUploadData({...uploadData, description: e.target.value})}
-                rows={3}
-              />
-            </div>
-            
-            <button 
-              style={styles.primaryButton}
-              onClick={handleAudioUpload}
-              disabled={!uploadData.title}
-            >
-              Upload Audio
             </button>
           </div>
         </div>
@@ -724,14 +873,11 @@ const WellnessPortal = () => {
                 <X size={20} />
               </button>
             </div>
-            
             <div style={styles.profileSection}>
               <div style={styles.avatarLarge}>
                 <User size={40} color="#94a3b8" />
               </div>
-              <button style={styles.changePhoto}>Change Photo</button>
             </div>
-            
             <div style={styles.formGroup}>
               <label style={styles.label}>Display Name</label>
               <input 
@@ -740,22 +886,10 @@ const WellnessPortal = () => {
                 onChange={e => setProfileForm({...profileForm, displayName: e.target.value})}
               />
             </div>
-            
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Bio</label>
-              <textarea 
-                style={styles.textarea}
-                placeholder="Tell us about yourself..."
-                value={profileForm.bio}
-                onChange={e => setProfileForm({...profileForm, bio: e.target.value})}
-                rows={3}
-              />
-            </div>
-            
             <button 
               style={styles.primaryButton}
               onClick={() => {
-                const updated = {...user, display_name: profileForm.displayName, bio: profileForm.bio};
+                const updated = {...user, display_name: profileForm.displayName};
                 setUser(updated);
                 localStorage.setItem('wellnessUser', JSON.stringify(updated));
                 setShowProfile(false);
@@ -773,126 +907,10 @@ const WellnessPortal = () => {
 const styles = {
   container: {
     minHeight: '100vh',
-    background: '#fafaf9', // Warm white/gray
+    background: '#fafaf9',
     color: '#1e293b',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-    lineHeight: 1.6
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
-  
-  // Auth Styles
-  authCard: {
-    maxWidth: '420px',
-    margin: '80px auto',
-    background: '#ffffff',
-    padding: '48px',
-    borderRadius: '24px',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
-    border: '1px solid #f1f5f9'
-  },
-  authHeader: {
-    textAlign: 'center',
-    marginBottom: '32px'
-  },
-  authTitle: {
-    fontSize: '28px',
-    fontWeight: '700',
-    color: '#1e293b',
-    margin: '16px 0 8px',
-    letterSpacing: '-0.5px'
-  },
-  authSubtitle: {
-    color: '#64748b',
-    fontSize: '16px'
-  },
-  inputGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-    marginBottom: '24px'
-  },
-  input: {
-    width: '100%',
-    padding: '14px 18px',
-    borderRadius: '12px',
-    border: '1px solid #e2e8f0',
-    fontSize: '15px',
-    background: '#ffffff',
-    color: '#1e293b',
-    outline: 'none',
-    transition: 'all 0.2s',
-    boxSizing: 'border-box'
-  },
-  select: {
-    width: '100%',
-    padding: '14px 18px',
-    borderRadius: '12px',
-    border: '1px solid #e2e8f0',
-    fontSize: '15px',
-    background: '#ffffff',
-    color: '#1e293b',
-    outline: 'none',
-    cursor: 'pointer'
-  },
-  textarea: {
-    width: '100%',
-    padding: '14px 18px',
-    borderRadius: '12px',
-    border: '1px solid #e2e8f0',
-    fontSize: '15px',
-    background: '#ffffff',
-    color: '#1e293b',
-    outline: 'none',
-    resize: 'vertical',
-    fontFamily: 'inherit',
-    boxSizing: 'border-box'
-  },
-  primaryButton: {
-    width: '100%',
-    padding: '14px 24px',
-    background: '#ec4899',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: '12px',
-    fontSize: '16px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px'
-  },
-  primaryButtonSmall: {
-    padding: '10px 20px',
-    background: '#ec4899',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: '10px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    transition: 'all 0.2s'
-  },
-  authNote: {
-    textAlign: 'center',
-    color: '#94a3b8',
-    fontSize: '14px',
-    marginTop: '20px'
-  },
-  error: {
-    color: '#ef4444',
-    fontSize: '14px',
-    marginBottom: '16px',
-    textAlign: 'center',
-    padding: '12px',
-    background: '#fef2f2',
-    borderRadius: '8px'
-  },
-
-  // Header Styles
   header: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -912,8 +930,20 @@ const styles = {
   brandText: {
     fontSize: '24px',
     fontWeight: '700',
-    color: '#1e293b',
-    letterSpacing: '-0.5px'
+    color: '#1e293b'
+  },
+  adminBadge: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '4px 10px',
+    background: '#fef3c7',
+    color: '#d97706',
+    fontSize: '12px',
+    fontWeight: '700',
+    borderRadius: '20px',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px'
   },
   nav: {
     display: 'flex',
@@ -933,8 +963,7 @@ const styles = {
     borderRadius: '10px',
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    transition: 'all 0.2s'
+    gap: '8px'
   },
   navButtonActive: {
     background: '#ffffff',
@@ -954,24 +983,10 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    cursor: 'pointer',
-    transition: 'all 0.2s'
+    cursor: 'pointer'
   },
-  iconButtonGhost: {
-    padding: '6px',
-    border: 'none',
-    background: 'transparent',
-    color: '#94a3b8',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    fontSize: '14px'
-  },
-
-  // Main Content
   main: {
-    maxWidth: '1200px',
+    maxWidth: '800px',
     margin: '0 auto',
     padding: '32px 40px'
   },
@@ -987,35 +1002,26 @@ const styles = {
   sectionTitle: {
     fontSize: '28px',
     fontWeight: '700',
-    color: '#1e293b',
-    margin: '0 0 4px 0',
-    letterSpacing: '-0.5px'
+    margin: '0 0 4px 0'
   },
   sectionSubtitle: {
     color: '#64748b',
     fontSize: '16px',
     margin: 0
   },
-  searchBox: {
+  primaryButtonSmall: {
+    padding: '10px 20px',
+    background: '#ec4899',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '10px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
-    background: '#ffffff',
-    padding: '10px 16px',
-    borderRadius: '10px',
-    border: '1px solid #e2e8f0',
-    width: '300px'
+    gap: '8px'
   },
-  searchInput: {
-    border: 'none',
-    outline: 'none',
-    background: 'transparent',
-    fontSize: '14px',
-    width: '100%',
-    color: '#1e293b'
-  },
-
-  // Filter Styles
   filterBar: {
     marginBottom: '24px',
     overflowX: 'auto'
@@ -1034,8 +1040,7 @@ const styles = {
     fontWeight: '500',
     cursor: 'pointer',
     borderRadius: '20px',
-    whiteSpace: 'nowrap',
-    transition: 'all 0.2s'
+    whiteSpace: 'nowrap'
   },
   filterTabActive: {
     background: '#fce7f3',
@@ -1043,8 +1048,6 @@ const styles = {
     borderColor: '#fce7f3',
     fontWeight: '600'
   },
-
-  // Card Styles
   cardList: {
     display: 'flex',
     flexDirection: 'column',
@@ -1056,8 +1059,28 @@ const styles = {
     borderRadius: '16px',
     border: '1px solid #f1f5f9',
     boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+    cursor: 'pointer',
     transition: 'all 0.2s',
-    cursor: 'pointer'
+    position: 'relative'
+  },
+  pinnedCard: {
+    border: '1px solid #fef3c7',
+    background: '#fffbeb'
+  },
+  pinnedBadge: {
+    position: 'absolute',
+    top: '12px',
+    right: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '4px 10px',
+    background: '#fef3c7',
+    color: '#d97706',
+    fontSize: '11px',
+    fontWeight: '700',
+    borderRadius: '20px',
+    textTransform: 'uppercase'
   },
   cardMeta: {
     display: 'flex',
@@ -1072,8 +1095,16 @@ const styles = {
     fontSize: '12px',
     fontWeight: '600',
     borderRadius: '20px',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px'
+    textTransform: 'uppercase'
+  },
+  categoryTagLarge: {
+    padding: '6px 16px',
+    background: '#f0fdf4',
+    color: '#16a34a',
+    fontSize: '13px',
+    fontWeight: '700',
+    borderRadius: '20px',
+    textTransform: 'uppercase'
   },
   timestamp: {
     fontSize: '13px',
@@ -1082,9 +1113,8 @@ const styles = {
   cardTitle: {
     fontSize: '18px',
     fontWeight: '700',
-    color: '#1e293b',
     margin: '0 0 8px 0',
-    lineHeight: 1.4
+    color: '#1e293b'
   },
   cardContent: {
     color: '#475569',
@@ -1117,16 +1147,6 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center'
   },
-  avatarLarge: {
-    width: '80px',
-    height: '80px',
-    borderRadius: '50%',
-    background: '#f1f5f9',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    margin: '0 auto 12px'
-  },
   authorName: {
     fontSize: '14px',
     fontWeight: '600',
@@ -1134,7 +1154,8 @@ const styles = {
   },
   cardStats: {
     display: 'flex',
-    gap: '16px'
+    gap: '16px',
+    alignItems: 'center'
   },
   statButton: {
     display: 'flex',
@@ -1145,211 +1166,41 @@ const styles = {
     fontWeight: '500',
     background: 'transparent',
     border: 'none',
-    cursor: 'pointer'
-  },
-
-  // Resource Styles
-  resourceGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-    gap: '20px'
-  },
-  resourceCard: {
-    background: '#ffffff',
-    borderRadius: '16px',
-    border: '1px solid #f1f5f9',
-    padding: '24px',
-    display: 'flex',
-    gap: '16px',
-    transition: 'all 0.2s',
-    cursor: 'pointer'
-  },
-  resourceIcon: {
-    width: '56px',
-    height: '56px',
-    borderRadius: '12px',
-    background: '#fdf2f8',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0
-  },
-  resourceContent: {
-    flex: 1
-  },
-  resourceType: {
-    fontSize: '12px',
-    fontWeight: '600',
-    color: '#ec4899',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px'
-  },
-  resourceTitle: {
-    fontSize: '16px',
-    fontWeight: '700',
-    color: '#1e293b',
-    margin: '4px 0 8px 0'
-  },
-  resourceDesc: {
-    fontSize: '14px',
-    color: '#64748b',
-    margin: '0 0 12px 0',
-    lineHeight: 1.5
-  },
-  resourceMeta: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    fontSize: '13px',
-    color: '#94a3b8',
-    marginBottom: '12px'
-  },
-  downloadButton: {
-    padding: '8px 16px',
-    background: '#f8fafc',
-    color: '#475569',
-    border: '1px solid #e2e8f0',
-    borderRadius: '8px',
-    fontSize: '13px',
-    fontWeight: '600',
     cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
+    padding: '6px',
+    borderRadius: '6px',
     transition: 'all 0.2s'
   },
-
-  // Audio Styles
-  audioGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-    gap: '20px'
+  statButtonActive: {
+    color: '#ec4899',
+    background: '#fce7f3'
   },
-  audioCard: {
-    background: '#ffffff',
-    borderRadius: '16px',
-    border: '1px solid #f1f5f9',
-    overflow: 'hidden',
-    transition: 'all 0.2s',
-    cursor: 'pointer'
-  },
-  audioThumbnail: {
-    height: '160px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative'
-  },
-  audioPlayOverlay: {
-    position: 'absolute',
-    width: '48px',
-    height: '48px',
-    borderRadius: '50%',
-    background: 'rgba(0,0,0,0.6)',
-    backdropFilter: 'blur(4px)',
+  iconButtonGhost: {
+    padding: '6px',
     border: 'none',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    background: 'transparent',
+    color: '#94a3b8',
     cursor: 'pointer',
-    color: '#ffffff',
-    transition: 'transform 0.2s'
-  },
-  audioInfo: {
-    padding: '20px'
-  },
-  audioType: {
-    fontSize: '12px',
-    fontWeight: '600',
-    color: '#6366f1',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px'
-  },
-  audioTitle: {
-    fontSize: '16px',
-    fontWeight: '700',
-    color: '#1e293b',
-    margin: '4px 0 8px 0'
-  },
-  audioDesc: {
-    fontSize: '14px',
-    color: '#64748b',
-    margin: '0 0 12px 0',
-    lineHeight: 1.5,
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden'
-  },
-  audioMeta: {
     display: 'flex',
-    justifyContent: 'space-between',
-    fontSize: '13px',
-    color: '#94a3b8'
+    alignItems: 'center'
   },
-  audioDuration: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px'
-  },
-  playerBar: {
-    position: 'fixed',
-    bottom: '0',
-    left: '0',
-    right: '0',
-    background: '#ffffff',
-    borderTop: '1px solid #f1f5f9',
-    padding: '16px 40px',
-    boxShadow: '0 -4px 6px -1px rgba(0, 0, 0, 0.05)',
-    zIndex: 50
-  },
-  playerInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '16px',
-    maxWidth: '1200px',
-    margin: '0 auto 12px'
-  },
-  playButton: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '50%',
-    background: '#ec4899',
+  deleteButtonSmall: {
+    padding: '6px',
     border: 'none',
-    color: '#ffffff',
+    background: 'transparent',
+    color: '#ef4444',
+    cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer'
+    borderRadius: '6px',
+    transition: 'all 0.2s'
   },
-  playerTitle: {
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: '2px'
-  },
-  playerMeta: {
-    fontSize: '13px',
-    color: '#94a3b8'
-  },
-  progressBar: {
-    height: '4px',
-    background: '#f1f5f9',
-    borderRadius: '2px',
-    maxWidth: '1200px',
-    margin: '0 auto',
-    overflow: 'hidden'
-  },
-  progressFill: {
-    width: '30%',
-    height: '100%',
-    background: '#ec4899',
-    borderRadius: '2px'
-  },
-
-  // Modal Styles
+  
+  // Detail Modal Styles
   modalOverlay: {
     position: 'fixed',
     inset: 0,
-    background: 'rgba(0, 0, 0, 0.4)',
+    background: 'rgba(0, 0, 0, 0.5)',
     backdropFilter: 'blur(4px)',
     display: 'flex',
     alignItems: 'center',
@@ -1357,26 +1208,355 @@ const styles = {
     zIndex: 200,
     padding: '20px'
   },
+  detailModal: {
+    background: '#ffffff',
+    borderRadius: '20px',
+    width: '100%',
+    maxWidth: '700px',
+    maxHeight: '90vh',
+    overflow: 'auto',
+    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+  },
+  detailHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '20px 24px',
+    borderBottom: '1px solid #f1f5f9',
+    gap: '16px'
+  },
+  backButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '8px 12px',
+    background: '#f8fafc',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#64748b',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer'
+  },
+  detailMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    flex: 1,
+    justifyContent: 'center'
+  },
+  adminDeleteBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '8px 16px',
+    background: '#fef2f2',
+    color: '#ef4444',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer'
+  },
+  detailContent: {
+    padding: '24px'
+  },
+  detailTitle: {
+    fontSize: '24px',
+    fontWeight: '700',
+    color: '#1e293b',
+    margin: '0 0 20px 0',
+    lineHeight: 1.3
+  },
+  detailAuthor: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginBottom: '24px',
+    paddingBottom: '24px',
+    borderBottom: '1px solid #f1f5f9'
+  },
+  avatarLarge: {
+    width: '48px',
+    height: '48px',
+    borderRadius: '50%',
+    background: '#f1f5f9',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  avatarSmall: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '50%',
+    background: '#f1f5f9',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0
+  },
+  detailAuthorName: {
+    fontSize: '16px',
+    fontWeight: '700',
+    color: '#1e293b'
+  },
+  detailAuthorMeta: {
+    fontSize: '13px',
+    color: '#94a3b8'
+  },
+  detailBody: {
+    fontSize: '16px',
+    lineHeight: 1.8,
+    color: '#475569',
+    marginBottom: '24px'
+  },
+  tagsContainer: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '24px'
+  },
+  tag: {
+    padding: '6px 12px',
+    background: '#f8fafc',
+    color: '#64748b',
+    fontSize: '13px',
+    borderRadius: '20px',
+    fontWeight: '500'
+  },
+  detailActions: {
+    display: 'flex',
+    gap: '12px',
+    padding: '16px 0',
+    borderTop: '1px solid #f1f5f9',
+    borderBottom: '1px solid #f1f5f9'
+  },
+  actionButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '10px 16px',
+    background: '#f8fafc',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#64748b',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s'
+  },
+  actionButtonActive: {
+    background: '#fce7f3',
+    color: '#ec4899'
+  },
+  
+  // Comments Section
+  commentsSection: {
+    padding: '24px',
+    background: '#fafaf9'
+  },
+  commentsTitle: {
+    fontSize: '18px',
+    fontWeight: '700',
+    margin: '0 0 20px 0',
+    color: '#1e293b'
+  },
+  commentInputArea: {
+    display: 'flex',
+    gap: '12px',
+    marginBottom: '24px'
+  },
+  commentInputWrapper: {
+    flex: 1,
+    display: 'flex',
+    gap: '8px',
+    background: '#ffffff',
+    padding: '4px',
+    borderRadius: '12px',
+    border: '1px solid #e2e8f0'
+  },
+  commentInput: {
+    flex: 1,
+    border: 'none',
+    outline: 'none',
+    padding: '8px 12px',
+    fontSize: '14px',
+    background: 'transparent'
+  },
+  sendButton: {
+    width: '36px',
+    height: '36px',
+    borderRadius: '8px',
+    background: '#ec4899',
+    color: '#ffffff',
+    border: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer'
+  },
+  commentsList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px'
+  },
+  commentItem: {
+    display: 'flex',
+    gap: '12px'
+  },
+  commentContent: {
+    flex: 1,
+    background: '#ffffff',
+    padding: '12px 16px',
+    borderRadius: '12px',
+    border: '1px solid #f1f5f9'
+  },
+  commentHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '6px'
+  },
+  commentAuthor: {
+    fontSize: '14px',
+    fontWeight: '700',
+    color: '#1e293b',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px'
+  },
+  adminLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '2px 8px',
+    background: '#fef3c7',
+    color: '#d97706',
+    fontSize: '10px',
+    fontWeight: '800',
+    borderRadius: '4px',
+    textTransform: 'uppercase'
+  },
+  commentTime: {
+    fontSize: '12px',
+    color: '#94a3b8'
+  },
+  commentText: {
+    fontSize: '14px',
+    color: '#475569',
+    lineHeight: 1.5,
+    margin: 0
+  },
+  commentActions: {
+    display: 'flex',
+    gap: '12px',
+    marginTop: '8px'
+  },
+  commentLikeBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    fontSize: '12px',
+    color: '#64748b',
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 0
+  },
+  commentReplyBtn: {
+    fontSize: '12px',
+    color: '#ec4899',
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    fontWeight: '600',
+    padding: 0
+  },
+  commentDeleteBtn: {
+    fontSize: '12px',
+    color: '#ef4444',
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    fontWeight: '600',
+    padding: 0
+  },
+
+  // Delete Confirmation
+  confirmModal: {
+    background: '#ffffff',
+    borderRadius: '20px',
+    padding: '32px',
+    textAlign: 'center',
+    maxWidth: '400px',
+    width: '100%'
+  },
+  confirmIcon: {
+    width: '64px',
+    height: '64px',
+    borderRadius: '50%',
+    background: '#fef2f2',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    margin: '0 auto 16px'
+  },
+  confirmTitle: {
+    fontSize: '20px',
+    fontWeight: '700',
+    color: '#1e293b',
+    margin: '0 0 8px 0'
+  },
+  confirmText: {
+    color: '#64748b',
+    fontSize: '14px',
+    margin: '0 0 24px 0',
+    lineHeight: 1.5
+  },
+  confirmActions: {
+    display: 'flex',
+    gap: '12px',
+    justifyContent: 'center'
+  },
+  cancelButton: {
+    padding: '10px 24px',
+    background: '#f8fafc',
+    color: '#64748b',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer'
+  },
+  confirmDeleteButton: {
+    padding: '10px 24px',
+    background: '#ef4444',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer'
+  },
+
+  // Other existing styles...
   modal: {
     background: '#ffffff',
     borderRadius: '20px',
     width: '100%',
     maxWidth: '520px',
     maxHeight: '90vh',
-    overflow: 'auto',
-    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+    overflow: 'auto'
   },
   modalHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '24px 24px 0',
-    marginBottom: '20px'
+    padding: '20px 24px',
+    borderBottom: '1px solid #f1f5f9'
   },
   modalTitle: {
-    fontSize: '20px',
+    fontSize: '18px',
     fontWeight: '700',
-    color: '#1e293b',
     margin: 0
   },
   closeButton: {
@@ -1392,14 +1572,7 @@ const styles = {
     justifyContent: 'center'
   },
   formGroup: {
-    marginBottom: '20px',
-    padding: '0 24px'
-  },
-  formRow: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '16px',
-    padding: '0 24px'
+    padding: '16px 24px'
   },
   label: {
     display: 'block',
@@ -1408,37 +1581,169 @@ const styles = {
     color: '#374151',
     marginBottom: '6px'
   },
-  uploadZone: {
-    margin: '0 24px 24px',
-    padding: '40px',
-    border: '2px dashed #e2e8f0',
-    borderRadius: '12px',
-    textAlign: 'center',
-    background: '#f8fafc'
-  },
-  uploadText: {
-    color: '#475569',
-    fontWeight: '600',
-    margin: '12px 0 4px'
-  },
-  uploadSubtext: {
-    color: '#94a3b8',
+  select: {
+    width: '100%',
+    padding: '10px 14px',
+    borderRadius: '8px',
+    border: '1px solid #e2e8f0',
     fontSize: '14px'
   },
-  changePhoto: {
-    display: 'block',
-    margin: '0 auto 24px',
-    padding: '8px 16px',
-    background: 'transparent',
+  formRow: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '16px',
+    padding: '0 24px'
+  },
+  input: {
+    width: '100%',
+    padding: '10px 14px',
+    borderRadius: '8px',
+    border: '1px solid #e2e8f0',
+    fontSize: '14px',
+    boxSizing: 'border-box'
+  },
+  textarea: {
+    width: '100%',
+    padding: '10px 14px',
+    borderRadius: '8px',
+    border: '1px solid #e2e8f0',
+    fontSize: '14px',
+    resize: 'vertical',
+    minHeight: '100px',
+    boxSizing: 'border-box',
+    fontFamily: 'inherit'
+  },
+  primaryButton: {
+    width: 'calc(100% - 48px)',
+    margin: '0 24px 24px',
+    padding: '12px',
+    background: '#ec4899',
+    color: '#ffffff',
     border: 'none',
-    color: '#ec4899',
+    borderRadius: '10px',
     fontSize: '14px',
     fontWeight: '600',
     cursor: 'pointer'
   },
   profileSection: {
     textAlign: 'center',
-    marginBottom: '24px'
+    padding: '24px'
+  },
+  resourceGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+    gap: '20px'
+  },
+  resourceCard: {
+    background: '#ffffff',
+    borderRadius: '16px',
+    border: '1px solid #f1f5f9',
+    padding: '24px',
+    display: 'flex',
+    gap: '16px'
+  },
+  resourceIcon: {
+    width: '48px',
+    height: '48px',
+    borderRadius: '12px',
+    background: '#fdf2f8',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  resourceContent: {
+    flex: 1
+  },
+  resourceType: {
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#ec4899'
+  },
+  resourceTitle: {
+    fontSize: '16px',
+    fontWeight: '700',
+    margin: '4px 0 8px 0'
+  },
+  resourceDesc: {
+    fontSize: '14px',
+    color: '#64748b',
+    marginBottom: '12px'
+  },
+  downloadButton: {
+    padding: '8px 16px',
+    background: '#f8fafc',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px'
+  },
+  audioGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+    gap: '20px'
+  },
+  audioCard: {
+    background: '#ffffff',
+    borderRadius: '16px',
+    border: '1px solid #f1f5f9',
+    overflow: 'hidden',
+    cursor: 'pointer'
+  },
+  audioThumbnail: {
+    height: '140px',
+    background: '#fce7f3',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  audioInfo: {
+    padding: '16px'
+  },
+  audioType: {
+    fontSize: '12px',
+    color: '#ec4899',
+    fontWeight: '600'
+  },
+  audioTitle: {
+    fontSize: '15px',
+    fontWeight: '700',
+    margin: '4px 0 0 0'
+  },
+  playerBar: {
+    position: 'fixed',
+    bottom: '0',
+    left: '0',
+    right: '0',
+    background: '#ffffff',
+    borderTop: '1px solid #f1f5f9',
+    padding: '12px 40px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  playerInfo: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px'
+  },
+  playButton: {
+    width: '40px',
+    height: '40px',
+    borderRadius: '50%',
+    background: '#ec4899',
+    border: 'none',
+    color: '#ffffff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer'
+  },
+  playerTitle: {
+    fontWeight: '600'
   }
 };
 
