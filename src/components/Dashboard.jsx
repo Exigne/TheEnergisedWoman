@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, MessageSquare, LogOut, Crown, Plus, Music, 
   Upload, FileText, ExternalLink, Clock, User, 
-  Trash2, Lock, Mail, Hash, Send, Heart, Zap, MessageCircle
+  Trash2, Lock, Mail, Hash, Send, Heart, Zap, MessageCircle, Play
 } from 'lucide-react';
 
 const GROUPS = ['All Discussions', 'General', 'Mental Health', 'Self Care', 'Relationships', 'Career', 'Motherhood', 'Fitness', 'Nutrition'];
@@ -33,8 +33,6 @@ const Dashboard = () => {
       const userData = JSON.parse(saved);
       setUser(userData);
       setIsAdmin(userData.isAdmin || userData.email.includes('admin'));
-      const hasSeenWelcome = localStorage.getItem('seenWelcome');
-      if (!hasSeenWelcome) setShowWelcome(true);
       loadAllData();
     }
   }, []);
@@ -52,55 +50,35 @@ const Dashboard = () => {
     } catch (err) { console.error("Data load error", err); }
   };
 
+  // --- HANDLERS ---
+  const handleAudioUpload = async () => {
+    if (!audioForm.title || !audioForm.url) return alert("Title and URL required");
+    // Auto-fix Dropbox links if the user forgets
+    let finalUrl = audioForm.url;
+    if (finalUrl.includes('dropbox.com') && finalUrl.endsWith('dl=0')) {
+        finalUrl = finalUrl.replace('dl=0', 'raw=1');
+    }
+
+    const res = await fetch('/.netlify/functions/database?type=audio', { 
+        method: 'POST', 
+        body: JSON.stringify({...audioForm, url: finalUrl}) 
+    });
+    if (res.ok) { 
+        const newTrack = await res.json();
+        setAudios([newTrack, ...audios]); 
+        setShowModal(null); 
+        setAudioForm({title:'', url:'', description:''}); 
+    }
+  };
+
   const handleAddComment = async () => {
     if (!commentText.trim()) return;
-    const newComment = {
-      id: Date.now(),
-      author: user.display_name,
-      text: commentText,
-      created_at: new Date().toISOString()
-    };
-    const updatedPost = {
-      ...selectedPost,
-      comments: [...(selectedPost.comments || []), newComment]
-    };
+    const newComment = { id: Date.now(), author: user.display_name, text: commentText, created_at: new Date().toISOString() };
+    const updatedPost = { ...selectedPost, comments: [...(selectedPost.comments || []), newComment] };
     setSelectedPost(updatedPost);
     setCommentText('');
     setDiscussions(discussions.map(d => d.id === selectedPost.id ? updatedPost : d));
     await fetch(`/.netlify/functions/database?id=${selectedPost.id}&type=discussion`, { method: 'PUT', body: JSON.stringify(updatedPost) });
-  };
-
-  const handleLike = async (e, postId) => {
-    e.stopPropagation();
-    const post = discussions.find(p => p.id === postId);
-    const hasLiked = post.likedBy?.includes(user.email);
-    const updatedPost = {
-      ...post,
-      likes: hasLiked ? (post.likes || 1) - 1 : (post.likes || 0) + 1,
-      likedBy: hasLiked ? post.likedBy.filter(em => em !== user.email) : [...(post.likedBy || []), user.email]
-    };
-    setDiscussions(discussions.map(d => d.id === postId ? updatedPost : d));
-    if (selectedPost?.id === postId) setSelectedPost(updatedPost);
-    await fetch(`/.netlify/functions/database?id=${postId}&type=discussion`, { method: 'PUT', body: JSON.stringify(updatedPost) });
-  };
-
-  const handleNewPost = async () => {
-    if (!postForm.title || !postForm.content) return alert("Fields required");
-    const postData = { ...postForm, author: user.display_name, authorId: user.email, created_at: new Date().toISOString(), likes: 0, likedBy: [], comments: [] };
-    const res = await fetch('/.netlify/functions/database?type=discussion', { method: 'POST', body: JSON.stringify(postData) });
-    if (res.ok) { setDiscussions([await res.json(), ...discussions]); setShowModal(null); setPostForm({title:'', content:'', category:'General'}); }
-  };
-
-  const handleAudioUpload = async () => {
-    if (!audioForm.title || !audioForm.url) return alert("Title and URL required");
-    const res = await fetch('/.netlify/functions/database?type=audio', { method: 'POST', body: JSON.stringify(audioForm) });
-    if (res.ok) { setAudios([await res.json(), ...audios]); setShowModal(null); setAudioForm({title:'', url:'', description:''}); }
-  };
-
-  const handleLibraryUpload = async () => {
-    if (!libraryForm.title || !libraryForm.url) return alert("Title and URL required");
-    const res = await fetch('/.netlify/functions/database?type=resource', { method: 'POST', body: JSON.stringify(libraryForm) });
-    if (res.ok) { setResources([await res.json(), ...resources]); setShowModal(null); setLibraryForm({title:'', url:'', type:'PDF'}); }
   };
 
   const handleDelete = async (id, type) => {
@@ -114,26 +92,12 @@ const Dashboard = () => {
     }
   };
 
-  const filteredDiscussions = discussions.filter(d => activeGroup === 'All Discussions' || d.category === activeGroup);
+  // --- HELPERS ---
+  const isDirectAudio = (url) => {
+    return url.includes('raw=1') || url.match(/\.(mp3|wav|ogg)$/) || url.includes('cloudinary');
+  };
 
-  if (!user) {
-    return (
-      <div style={styles.authPage}>
-        <div style={styles.authCard}>
-          <Crown size={42} color="#ec4899" />
-          <h1 style={{ margin: '16px 0 8px', fontSize: '24px' }}>The Energised Woman</h1>
-          <div style={styles.inputWrap}><Mail size={16} color="#94a3b8"/><input style={styles.ghostInput} placeholder="Email" id="log-email" /></div>
-          <div style={styles.inputWrap}><Lock size={16} color="#94a3b8"/><input style={styles.ghostInput} type="password" placeholder="Password" id="log-pass" /></div>
-          <button style={styles.primaryButtonFull} onClick={() => {
-            const email = document.getElementById('log-email').value;
-            const userData = { email, display_name: email.split('@')[0], isAdmin: email.includes('admin') };
-            setUser(userData); setIsAdmin(userData.isAdmin);
-            localStorage.setItem('wellnessUser', JSON.stringify(userData));
-          }}>Sign In</button>
-        </div>
-      </div>
-    );
-  }
+  if (!user) return <div style={styles.authPage}>Please Sign In</div>;
 
   return (
     <div style={styles.container}>
@@ -144,144 +108,130 @@ const Dashboard = () => {
           <button onClick={() => setActiveTab('audio')} style={{...styles.navBtn, ...(activeTab === 'audio' && styles.navBtnActive)}}>Audio Hub</button>
           <button onClick={() => setActiveTab('resources')} style={{...styles.navBtn, ...(activeTab === 'resources' && styles.navBtnActive)}}>Library</button>
         </nav>
-        <div style={styles.userSection}><button style={styles.iconBtn} onClick={() => {setUser(null); localStorage.removeItem('wellnessUser'); localStorage.removeItem('seenWelcome');}}><LogOut size={18}/></button></div>
+        <div style={styles.userSection}><button style={styles.iconBtn} onClick={() => {setUser(null); localStorage.clear();}}><LogOut size={18}/></button></div>
       </header>
 
       <main style={styles.main}>
-        {activeTab === 'community' && (
-          <div style={styles.communityLayout}>
-            <aside style={styles.sidebar}>
-              <h4 style={styles.sideLabel}>Groups</h4>
-              {GROUPS.map(g => (
-                <button key={g} onClick={() => setActiveGroup(g)} style={{...styles.sidebarBtn, ...(activeGroup === g && styles.sidebarBtnActive)}}><Hash size={14} /> {g}</button>
-              ))}
-            </aside>
-            <section style={styles.feed}>
-              <div style={styles.sectionHeader}><h2>{activeGroup}</h2><button style={styles.primaryButton} onClick={() => setShowModal('post')}><Plus size={18}/> New Post</button></div>
-              <div style={styles.postList}>
-                {filteredDiscussions.map(post => (
-                  <div key={post.id} style={styles.card} onClick={() => {setSelectedPost(post); setShowModal('detail');}}>
-                    <div style={styles.cardHeader}><span style={styles.tag}>{post.category}</span>{isAdmin && <button onClick={(e) => {e.stopPropagation(); handleDelete(post.id, 'discussion')}} style={styles.delBtn}><Trash2 size={14}/></button>}</div>
-                    <h3 style={styles.cardTitle}>{post.title}</h3>
-                    <p style={styles.cardExcerpt}>{post.content?.substring(0, 120)}...</p>
-                    <div style={styles.cardMeta}>
-                       <span style={styles.metaItem}><User size={12}/> {post.author}</span>
-                       <div style={{display: 'flex', gap: '15px'}}>
-                        <span style={styles.metaItem}><MessageCircle size={14}/> {post.comments?.length || 0}</span>
-                        <button style={styles.metaBtn} onClick={(e) => handleLike(e, post.id)}>
-                            <Heart size={14} fill={post.likedBy?.includes(user.email) ? "#ec4899" : "none"} color={post.likedBy?.includes(user.email) ? "#ec4899" : "#94a3b8"} /> {post.likes || 0}
-                        </button>
-                       </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
-        )}
-
-        {/* ... Audio and Library Tabs remain the same as previous version ... */}
+        {/* --- AUDIO HUB TAB --- */}
         {activeTab === 'audio' && (
           <div>
-            <div style={styles.sectionHeader}><h2>Audio Hub</h2>{isAdmin && <button style={styles.primaryButton} onClick={() => setShowModal('audio')}><Upload size={18}/> Add Audio</button>}</div>
-            {audios.map(audio => (
-              <div key={audio.id} style={styles.audioCard}>
-                <div style={{flex: 1}}>
-                  <div style={{display: 'flex', justifyContent: 'space-between'}}><h4 style={{margin: 0}}>{audio.title}</h4>{isAdmin && <button onClick={() => handleDelete(audio.id, 'audio')} style={styles.delBtn}><Trash2 size={16}/></button>}</div>
-                  <p style={{margin: '4px 0', fontSize: '13px', color: '#64748b'}}>{audio.description}</p>
-                  <audio controls style={styles.player}><source src={audio.url} /></audio>
+            <div style={styles.sectionHeader}>
+                <h2>Audio Hub</h2>
+                {isAdmin && <button style={styles.primaryButton} onClick={() => setShowModal('audio')}><Upload size={18}/> Add Audio</button>}
+            </div>
+            <div style={styles.audioGrid}>
+                {audios.map(audio => (
+                <div key={audio.id} style={styles.audioCard}>
+                    <div style={{flex: 1}}>
+                    <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                        <h4 style={{margin: 0}}>{audio.title}</h4>
+                        {isAdmin && <button onClick={() => handleDelete(audio.id, 'audio')} style={styles.delBtn}><Trash2 size={16}/></button>}
+                    </div>
+                    <p style={{margin: '8px 0', fontSize: '13px', color: '#64748b'}}>{audio.description}</p>
+                    
+                    {isDirectAudio(audio.url) ? (
+                        <audio controls style={styles.player}><source src={audio.url} /></audio>
+                    ) : (
+                        <div style={styles.linkFallback}>
+                            <p style={{fontSize: '11px', color: '#f59e0b', marginBottom: '8px'}}>Note: Cloud-hosted file requires external player.</p>
+                            <a href={audio.url} target="_blank" rel="noreferrer" style={styles.viewBtnInternal}>
+                                <Play size={14} fill="currentColor" /> Open in {audio.url.includes('proton') ? 'Proton' : 'New Tab'}
+                            </a>
+                        </div>
+                    )}
+                    </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {activeTab === 'resources' && (
-          <div>
-            <div style={styles.sectionHeader}><h2>Resource Library</h2>{isAdmin && <button style={styles.primaryButton} onClick={() => setShowModal('library')}><Plus size={18}/> Add Resource</button>}</div>
-            <div style={styles.resourceGrid}>
-              {resources.map(res => (
-                <div key={res.id} style={styles.resourceCard}>
-                  <FileText color="#ec4899" /><div style={{flex: 1}}><h4 style={{margin: 0}}>{res.title}</h4><span style={{fontSize: '11px', color: '#94a3b8'}}>{res.type}</span></div>
-                  <div style={{display: 'flex', gap: '8px'}}><button onClick={() => {setViewingDoc(res); setShowModal('docViewer');}} style={styles.viewBtnInternal}>Open</button>{isAdmin && <button onClick={() => handleDelete(res.id, 'resource')} style={styles.delBtn}><Trash2 size={14}/></button>}</div>
-                </div>
-              ))}
+                ))}
             </div>
           </div>
         )}
+
+        {/* --- COMMUNITY TAB --- */}
+        {activeTab === 'community' && (
+           <div style={styles.communityLayout}>
+             <aside style={styles.sidebar}>
+               {GROUPS.map(g => <button key={g} onClick={() => setActiveGroup(g)} style={{...styles.sidebarBtn, ...(activeGroup === g && styles.sidebarBtnActive)}}><Hash size={14} /> {g}</button>)}
+             </aside>
+             <section style={styles.feed}>
+               <div style={styles.sectionHeader}><h2>{activeGroup}</h2><button style={styles.primaryButton} onClick={() => setShowModal('post')}><Plus size={18}/> New Post</button></div>
+               {discussions.filter(d => activeGroup === 'All Discussions' || d.category === activeGroup).map(post => (
+                 <div key={post.id} style={styles.card} onClick={() => {setSelectedPost(post); setShowModal('detail');}}>
+                   <div style={styles.cardHeader}><span style={styles.tag}>{post.category}</span></div>
+                   <h3 style={styles.cardTitle}>{post.title}</h3>
+                   <div style={styles.cardMeta}>
+                     <span><User size={12}/> {post.author}</span>
+                     <span><MessageCircle size={12}/> {post.comments?.length || 0}</span>
+                   </div>
+                 </div>
+               ))}
+             </section>
+           </div>
+        )}
+
+        {/* --- LIBRARY TAB --- */}
+        {activeTab === 'resources' && (
+           <div>
+             <div style={styles.sectionHeader}><h2>Library</h2>{isAdmin && <button style={styles.primaryButton} onClick={() => setShowModal('library')}><Plus size={18}/> Add Resource</button>}</div>
+             <div style={styles.resourceGrid}>
+               {resources.map(res => (
+                 <div key={res.id} style={styles.resourceCard}>
+                   <FileText color="#ec4899" />
+                   <div style={{flex: 1}}><strong>{res.title}</strong></div>
+                   <button onClick={() => {setViewingDoc(res); setShowModal('docViewer');}} style={styles.viewBtnInternal}>Open</button>
+                 </div>
+               ))}
+             </div>
+           </div>
+        )}
       </main>
 
-      {/* --- MODAL: POST DETAIL WITH COMMENTS --- */}
+      {/* --- MODAL: POST DETAIL --- */}
       {showModal === 'detail' && selectedPost && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.popOutContent} onClick={e => e.stopPropagation()}>
             <button onClick={() => setShowModal(null)} style={styles.closeBtn}><X size={18}/></button>
-            <div style={{display: 'flex', justifyContent: 'space-between'}}><span style={styles.tag}>{selectedPost.category}</span><button style={styles.likeBtnLarge} onClick={(e) => handleLike(e, selectedPost.id)}><Heart size={20} fill={selectedPost.likedBy?.includes(user.email) ? "#ec4899" : "none"} color={selectedPost.likedBy?.includes(user.email) ? "#ec4899" : "#64748b"} /><span>{selectedPost.likes || 0}</span></button></div>
-            <h2 style={styles.popOutTitle}>{selectedPost.title}</h2>
-            <div style={styles.popOutBody}>{selectedPost.content}</div>
-            
-            <hr style={styles.divider} />
-            
+            <h2>{selectedPost.title}</h2>
+            <p style={styles.popOutBody}>{selectedPost.content}</p>
             <div style={styles.commentSection}>
-              <h4>Comments ({selectedPost.comments?.length || 0})</h4>
-              <div style={styles.commentList}>
-                {(selectedPost.comments || []).map(c => (
-                  <div key={c.id} style={styles.commentItem}>
-                    <div style={styles.commentMeta}><strong>{c.author}</strong> • <small>{new Date(c.created_at).toLocaleDateString()}</small></div>
-                    <div style={styles.commentText}>{c.text}</div>
-                  </div>
-                ))}
-              </div>
-              <div style={styles.commentInputWrap}>
-                <input 
-                  style={styles.commentInput} 
-                  placeholder="Add a comment..." 
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleAddComment()}
-                />
-                <button style={styles.sendBtn} onClick={handleAddComment}><Send size={18} /></button>
-              </div>
+                <h4>Comments</h4>
+                <div style={styles.commentList}>
+                    {(selectedPost.comments || []).map(c => (
+                        <div key={c.id} style={styles.commentItem}><strong>{c.author}:</strong> {c.text}</div>
+                    ))}
+                </div>
+                <div style={styles.commentInputWrap}>
+                    <input style={styles.commentInput} placeholder="Write a comment..." value={commentText} onChange={e => setCommentText(e.target.value)} />
+                    <button style={styles.sendBtn} onClick={handleAddComment}><Send size={16}/></button>
+                </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ... Other Modals (Welcome, DocViewer, Admin Uploads) remain the same ... */}
+      {/* --- MODAL: DOC VIEWER --- */}
       {showModal === 'docViewer' && viewingDoc && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.docViewerContent} onClick={e => e.stopPropagation()}>
-            <div style={styles.viewerHeader}><h3>{viewingDoc.title}</h3><div style={{display: 'flex', gap: '10px'}}><a href={viewingDoc.url} target="_blank" rel="noreferrer" style={styles.externalBtn}><ExternalLink size={16}/></a><button onClick={() => setShowModal(null)} style={styles.closeBtn}><X size={18}/></button></div></div>
-            <div style={styles.iframeContainer}><iframe src={viewingDoc.url.includes('docs.google.com') ? viewingDoc.url.split('?')[0].replace('/edit', '/preview') : `https://docs.google.com/viewer?url=${encodeURIComponent(viewingDoc.url)}&embedded=true`} style={styles.iframe} title="Viewer" frameBorder="0"></iframe></div>
+             <div style={styles.viewerHeader}><h3>{viewingDoc.title}</h3><button onClick={() => setShowModal(null)}><X size={18}/></button></div>
+             <iframe 
+                src={viewingDoc.url.includes('docs.google.com') ? viewingDoc.url.replace('/edit', '/preview') : viewingDoc.url} 
+                style={styles.iframe} 
+                frameBorder="0"
+             ></iframe>
           </div>
         </div>
       )}
 
-      {showWelcome && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.welcomeCard}>
-            <div style={styles.welcomeIcon}><Zap size={32} color="white" /></div>
-            <h2>Welcome, {user.display_name}!</h2>
-            <p>Join the conversation, explore resources, and find your energy.</p>
-            <button style={styles.primaryButtonFull} onClick={() => {localStorage.setItem('seenWelcome', 'true'); setShowWelcome(false);}}>Let's Go</button>
-          </div>
-        </div>
-      )}
-
-      {/* Admin Upload Modals */}
-      {showModal === 'post' && (
-        <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
-          <div style={styles.modal} onClick={e => e.stopPropagation()}><h3>New Discussion</h3><input style={styles.input} placeholder="Headline" onChange={e => setPostForm({...postForm, title: e.target.value})} /><select style={styles.input} onChange={e => setPostForm({...postForm, category: e.target.value})}>{GROUPS.filter(g => g !== 'All Discussions').map(g => <option key={g} value={g}>{g}</option>)}</select><textarea style={{...styles.input, height: '150px'}} placeholder="Content..." onChange={e => setPostForm({...postForm, content: e.target.value})} /><button style={styles.primaryButtonFull} onClick={handleNewPost}>Share Post</button></div>
-        </div>
-      )}
+      {/* --- ADMIN MODAL: ADD AUDIO --- */}
       {showModal === 'audio' && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
-          <div style={styles.modal} onClick={e => e.stopPropagation()}><h3>Add Audio</h3><input style={styles.input} placeholder="Track Title" onChange={e => setAudioForm({...audioForm, title: e.target.value})} /><input style={styles.input} placeholder="Direct MP3 URL" onChange={e => setAudioForm({...audioForm, url: e.target.value})} /><textarea style={styles.input} placeholder="Description" onChange={e => setAudioForm({...audioForm, description: e.target.value})} /><button style={styles.primaryButtonFull} onClick={handleAudioUpload}>Save Track</button></div>
-        </div>
-      )}
-      {showModal === 'library' && (
-        <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
-          <div style={styles.modal} onClick={e => e.stopPropagation()}><h3>Add Resource</h3><input style={styles.input} placeholder="Name" onChange={e => setLibraryForm({...libraryForm, title: e.target.value})} /><input style={styles.input} placeholder="URL" onChange={e => setLibraryForm({...libraryForm, url: e.target.value})} /><select style={styles.input} onChange={e => setLibraryForm({...libraryForm, type: e.target.value})}><option value="PDF">PDF</option><option value="Link">Link</option></select><button style={styles.primaryButtonFull} onClick={handleLibraryUpload}>Add to Library</button></div>
+          <div style={styles.modal} onClick={e => e.stopPropagation()}>
+            <h3>Add Audio Hub Track</h3>
+            <input style={styles.input} placeholder="Track Title" onChange={e => setAudioForm({...audioForm, title: e.target.value})} />
+            <input style={styles.input} placeholder="URL (Dropbox raw=1 or Proton Link)" onChange={e => setAudioForm({...audioForm, url: e.target.value})} />
+            <textarea style={styles.input} placeholder="Description" onChange={e => setAudioForm({...audioForm, description: e.target.value})} />
+            <button style={styles.primaryButtonFull} onClick={handleAudioUpload}>Save Track</button>
+          </div>
         </div>
       )}
     </div>
@@ -291,65 +241,38 @@ const Dashboard = () => {
 const styles = {
   container: { minHeight: '100vh', background: '#f8fafc', fontFamily: 'Inter, sans-serif' },
   header: { background: 'white', padding: '0 40px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 100 },
-  brand: { display: 'flex', alignItems: 'center', gap: '8px', width: '250px' },
-  brandText: { fontSize: '18px', fontWeight: '800', color: '#1e293b' },
-  centerNav: { display: 'flex', gap: '6px', background: '#f1f5f9', padding: '5px', borderRadius: '12px' },
-  navBtn: { padding: '8px 18px', border: 'none', background: 'transparent', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', color: '#64748b' },
+  brand: { display: 'flex', alignItems: 'center', gap: '8px' },
+  brandText: { fontSize: '18px', fontWeight: '800' },
+  centerNav: { display: 'flex', gap: '5px', background: '#f1f5f9', padding: '5px', borderRadius: '12px' },
+  navBtn: { padding: '8px 15px', border: 'none', background: 'transparent', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', color: '#64748b' },
   navBtnActive: { background: 'white', color: '#ec4899', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' },
-  userSection: { width: '250px', display: 'flex', justifyContent: 'flex-end' },
-  main: { maxWidth: '1200px', margin: '0 auto', padding: '40px 20px' },
-  communityLayout: { display: 'grid', gridTemplateColumns: '240px 1fr', gap: '40px' },
-  sidebar: { display: 'flex', flexDirection: 'column', gap: '4px' },
-  sideLabel: { paddingLeft: '12px', color: '#94a3b8', fontSize: '11px', textTransform: 'uppercase', marginBottom: '8px' },
-  sidebarBtn: { textAlign: 'left', padding: '10px 12px', borderRadius: '8px', border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '500' },
-  sidebarBtnActive: { background: '#fdf2f8', color: '#ec4899', fontWeight: '700' },
+  main: { maxWidth: '1000px', margin: '0 auto', padding: '40px 20px' },
   sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' },
-  postList: { display: 'flex', flexDirection: 'column', gap: '16px' },
-  card: { background: 'white', padding: '24px', borderRadius: '20px', border: '1px solid #e2e8f0', cursor: 'pointer' },
-  cardHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px' },
-  tag: { fontSize: '10px', background: '#fdf2f8', color: '#ec4899', padding: '4px 10px', borderRadius: '20px', fontWeight: '800' },
-  cardTitle: { fontSize: '20px', margin: '0 0 8px 0', color: '#1e293b' },
-  cardExcerpt: { color: '#64748b', fontSize: '15px', lineHeight: '1.6' },
-  cardMeta: { marginTop: '16px', display: 'flex', justifyContent: 'space-between', color: '#94a3b8', fontSize: '12px' },
-  metaItem: { display: 'flex', alignItems: 'center', gap: '4px' },
-  metaBtn: { background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', color: '#94a3b8' },
+  audioGrid: { display: 'flex', flexDirection: 'column', gap: '15px' },
+  audioCard: { background: 'white', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex' },
+  player: { width: '100%', marginTop: '10px' },
+  linkFallback: { marginTop: '10px', padding: '15px', background: '#fffbeb', borderRadius: '12px', border: '1px solid #fef3c7' },
   primaryButton: { background: '#ec4899', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' },
   primaryButtonFull: { background: '#ec4899', color: 'white', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: '700', cursor: 'pointer', width: '100%' },
-  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' },
-  popOutContent: { background: 'white', width: '100%', maxWidth: '700px', borderRadius: '28px', padding: '30px', position: 'relative', maxHeight: '90vh', overflowY: 'auto' },
-  popOutTitle: { fontSize: '24px', margin: '16px 0', fontWeight: '800' },
-  popOutBody: { fontSize: '15px', lineHeight: '1.7', color: '#334155', marginBottom: '30px' },
-  divider: { border: 'none', borderTop: '1px solid #f1f5f9', margin: '20px 0' },
-  commentSection: { marginTop: '20px' },
-  commentList: { maxHeight: '200px', overflowY: 'auto', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '12px' },
-  commentItem: { background: '#f8fafc', padding: '12px', borderRadius: '12px' },
-  commentMeta: { fontSize: '12px', color: '#64748b', marginBottom: '4px' },
-  commentText: { fontSize: '14px', color: '#1e293b' },
-  commentInputWrap: { display: 'flex', gap: '10px', background: '#f1f5f9', padding: '8px', borderRadius: '12px' },
-  commentInput: { flex: 1, background: 'none', border: 'none', outline: 'none', padding: '8px' },
-  sendBtn: { background: '#ec4899', color: 'white', border: 'none', borderRadius: '8px', padding: '8px', cursor: 'pointer' },
-  docViewerContent: { background: 'white', width: '95%', maxWidth: '1100px', height: '90vh', borderRadius: '24px', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-  viewerHeader: { padding: '20px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0' },
-  iframeContainer: { flex: 1, background: '#f1f5f9' },
-  iframe: { width: '100%', height: '100%', border: 'none' },
-  viewBtnInternal: { background: '#fdf2f8', color: '#ec4899', border: 'none', padding: '6px 12px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
-  externalBtn: { background: '#f1f5f9', color: '#64748b', padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center' },
-  audioCard: { background: 'white', padding: '20px', borderRadius: '16px', marginBottom: '12px', border: '1px solid #e2e8f0' },
-  player: { width: '100%', marginTop: '10px' },
-  resourceGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' },
-  resourceCard: { display: 'flex', alignItems: 'center', gap: '12px', background: 'white', padding: '15px', borderRadius: '16px', border: '1px solid #e2e8f0' },
-  authPage: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fdfaff' },
-  authCard: { background: 'white', padding: '40px', borderRadius: '32px', width: '350px', textAlign: 'center' },
-  inputWrap: { display: 'flex', alignItems: 'center', gap: '10px', background: '#f1f5f9', padding: '14px', borderRadius: '14px', marginBottom: '12px' },
-  ghostInput: { background: 'none', border: 'none', outline: 'none', width: '100%' },
-  delBtn: { background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' },
-  closeBtn: { position: 'absolute', top: '20px', right: '20px', background: '#f1f5f9', border: 'none', borderRadius: '50%', padding: '6px', cursor: 'pointer' },
-  input: { width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '16px' },
-  modal: { background: 'white', padding: '35px', borderRadius: '28px', width: '500px' },
-  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' },
-  likeBtnLarge: { background: '#f8fafc', border: '1px solid #e2e8f0', padding: '6px 12px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' },
-  welcomeCard: { background: 'white', padding: '40px', borderRadius: '32px', width: '400px', textAlign: 'center' },
-  welcomeIcon: { background: '#ec4899', width: '60px', height: '60px', borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }
+  viewBtnInternal: { background: '#ec4899', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13px' },
+  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 },
+  modal: { background: 'white', padding: '30px', borderRadius: '20px', width: '450px' },
+  input: { width: '100%', padding: '12px', marginBottom: '15px', borderRadius: '10px', border: '1px solid #e2e8f0' },
+  communityLayout: { display: 'grid', gridTemplateColumns: '200px 1fr', gap: '30px' },
+  sidebar: { display: 'flex', flexDirection: 'column', gap: '5px' },
+  sidebarBtn: { textAlign: 'left', padding: '10px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' },
+  sidebarBtnActive: { background: '#fdf2f8', color: '#ec4899', fontWeight: 'bold' },
+  card: { background: 'white', padding: '20px', borderRadius: '15px', border: '1px solid #e2e8f0', marginBottom: '15px', cursor: 'pointer' },
+  tag: { fontSize: '10px', background: '#fdf2f8', color: '#ec4899', padding: '3px 8px', borderRadius: '10px', fontWeight: 'bold' },
+  popOutContent: { background: 'white', width: '600px', padding: '30px', borderRadius: '25px', position: 'relative' },
+  commentList: { maxHeight: '150px', overflowY: 'auto', margin: '15px 0' },
+  commentItem: { fontSize: '13px', padding: '8px', borderBottom: '1px solid #f1f5f9' },
+  commentInputWrap: { display: 'flex', gap: '10px' },
+  commentInput: { flex: 1, padding: '10px', borderRadius: '10px', border: '1px solid #e2e8f0' },
+  docViewerContent: { background: 'white', width: '90%', height: '90vh', borderRadius: '20px', overflow: 'hidden', display: 'flex', flexDirection: 'column' },
+  viewerHeader: { padding: '15px 25px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0' },
+  iframe: { flex: 1, width: '100%' },
+  delBtn: { background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }
 };
 
 export default Dashboard;
