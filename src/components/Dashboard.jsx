@@ -1,286 +1,216 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
-  MessageCircle, 
-  BookOpen, 
-  Music, 
-  Heart, 
-  Sparkles, 
-  User, 
-  LogOut, 
-  Settings, 
-  Search, 
-  Upload, 
-  Play, 
-  Pause, 
-  Download, 
-  X, 
-  ThumbsUp, 
-  MessageSquare, 
-  Share2, 
-  Filter,
-  Clock,
-  Send,
-  Trash2,
-  Shield,
-  MoreHorizontal,
-  ChevronLeft,
-  Flag,
-  Headphones,
-  FileText
+  MessageCircle, BookOpen, Music, Heart, Sparkles, User, LogOut, 
+  Search, Upload, Play, Pause, Download, X, ThumbsUp, MessageSquare, 
+  Share2, Clock, Send, Trash2, Shield, ChevronLeft, Flag, Headphones, 
+  FileText, Loader2, AlertCircle, CheckCircle2
 } from 'lucide-react';
 
-// Categories for organization
+// Categories
 const CATEGORIES = {
-  discussion: ['General', 'Mental Health', 'Self Care', 'Relationships', 'Career', 'Motherhood'],
-  resources: ['Articles', 'Guides', 'Templates', 'E-books', 'External Links'],
+  discussion: ['General', 'Mental Health', 'Self Care', 'Relationships', 'Career', 'Motherhood', 'Fitness', 'Nutrition'],
   audio: ['Meditations', 'Affirmations', 'Sleep Stories', 'Podcasts', 'Soundscapes']
 };
 
-// Enhanced sample data with comments
-const SAMPLE_DISCUSSIONS = [];
-
-// Neon Database API URL - Replace with your actual Neon API endpoint
-const NEON_API_URL = 'YOUR_NEON_API_ENDPOINT_HERE';
-
-// Database API functions
+// API Helper for Netlify Functions + Neon
 const api = {
-  // Fetch all discussions
-  fetchDiscussions: async () => {
+  request: async (endpoint, options = {}) => {
     try {
-      const response = await fetch(`${NEON_API_URL}/discussions`);
-      if (!response.ok) throw new Error('Failed to fetch discussions');
+      const response = await fetch(`/.netlify/functions/${endpoint}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Request failed');
+      }
+      
       return await response.json();
     } catch (error) {
-      console.error('Error fetching discussions:', error);
-      return [];
+      console.error(`API Error (${endpoint}):`, error);
+      throw error;
     }
   },
 
-  // Create new discussion
-  createDiscussion: async (discussion) => {
-    try {
-      const response = await fetch(`${NEON_API_URL}/discussions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(discussion)
-      });
-      if (!response.ok) throw new Error('Failed to create discussion');
-      return await response.json();
-    } catch (error) {
-      console.error('Error creating discussion:', error);
-      return null;
-    }
-  },
-
-  // Update discussion (for likes, comments)
-  updateDiscussion: async (id, updates) => {
-    try {
-      const response = await fetch(`${NEON_API_URL}/discussions/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
-      });
-      if (!response.ok) throw new Error('Failed to update discussion');
-      return await response.json();
-    } catch (error) {
-      console.error('Error updating discussion:', error);
-      return null;
-    }
-  },
-
-  // Delete discussion
-  deleteDiscussion: async (id) => {
-    try {
-      const response = await fetch(`${NEON_API_URL}/discussions/${id}`, {
-        method: 'DELETE'
-      });
-      if (!response.ok) throw new Error('Failed to delete discussion');
-      return true;
-    } catch (error) {
-      console.error('Error deleting discussion:', error);
-      return false;
-    }
-  }
+  // Discussions
+  fetchDiscussions: () => api.request('discussions'),
+  createDiscussion: (data) => api.request('discussions', { method: 'POST', body: JSON.stringify(data) }),
+  updateDiscussion: (id, data) => api.request(`discussions?id=${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteDiscussion: (id) => api.request(`discussions?id=${id}`, { method: 'DELETE' }),
+  
+  // Auth/Profile
+  fetchProfile: (email) => api.request(`profile?email=${email}`),
+  updateProfile: (data) => api.request('profile', { method: 'PUT', body: JSON.stringify(data) }),
 };
 
 const SAMPLE_RESOURCES = [
-  {
-    id: 1,
-    title: "30-Day Self-Care Challenge",
-    type: "Guide",
-    category: "Self Care",
-    author: "Dr. Rachel Kim",
-    downloads: 1240,
-    description: "A comprehensive guide to building sustainable self-care habits",
-    fileSize: "2.4 MB",
-    format: "PDF"
-  },
-  {
-    id: 2,
-    title: "Sleep Hygiene Checklist",
-    type: "Template",
-    category: "Wellness",
-    author: "Sleep Foundation",
-    downloads: 856,
-    description: "Essential steps for improving sleep quality naturally",
-    fileSize: "850 KB",
-    format: "PDF"
-  }
-];
-
-const SAMPLE_AUDIO = [
-  {
-    id: 1,
-    title: "Morning Affirmations for Confidence",
-    type: "Affirmations",
-    duration: "5:30",
-    author: "Wellness Team",
-    plays: 3420,
-    description: "Start your day with positive affirmations for self-confidence",
-    thumbnail: "pink"
-  },
-  {
-    id: 2,
-    title: "Deep Sleep Meditation",
-    type: "Meditation",
-    duration: "20:00",
-    author: "Sarah Chen",
-    plays: 8901,
-    description: "Guided meditation to help you fall into deep, restful sleep",
-    thumbnail: "purple"
-  }
+  { id: 1, title: "30-Day Self-Care Challenge", type: "Guide", category: "Self Care", downloads: 1240, description: "Comprehensive guide to sustainable habits", fileSize: "2.4 MB" },
+  { id: 2, title: "Sleep Hygiene Checklist", type: "Template", category: "Wellness", downloads: 856, description: "Essential steps for better sleep", fileSize: "850 KB" }
 ];
 
 const WellnessPortal = () => {
+  // Auth State
   const [user, setUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  // UI State
   const [activeTab, setActiveTab] = useState('community');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  
-  // Admin check - in real app, this would come from backend
-  const isAdmin = user?.email?.includes('admin') || false;
-  
-  // Community state
-  const [discussions, setDiscussions] = useState(SAMPLE_DISCUSSIONS);
+
+  // Community State
+  const [discussions, setDiscussions] = useState([]);
+  const [discussionsLoading, setDiscussionsLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState('newest'); // 'newest' | 'popular'
   const [showNewPost, setShowNewPost] = useState(false);
   const [newPostData, setNewPostData] = useState({ title: '', content: '', category: 'General' });
-  
-  // Post detail modal state
   const [selectedPost, setSelectedPost] = useState(null);
   const [commentText, setCommentText] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
-  
-  // Resources state
-  const [resources, setResources] = useState(SAMPLE_RESOURCES);
-  const [resourceFilter, setResourceFilter] = useState('All');
-  
-  // Audio state
-  const [audioLibrary, setAudioLibrary] = useState(SAMPLE_AUDIO);
+
+  // Resources
+  const [resources] = useState(SAMPLE_RESOURCES);
+
+  // Audio State
+  const [audioLibrary, setAudioLibrary] = useState([
+    { id: 1, title: "Morning Confidence", type: "Affirmations", duration: "5:30", author: "Wellness Team", audioUrl: "https://example.com/audio1.mp3", thumbnail: "pink" },
+    { id: 2, title: "Deep Sleep", type: "Meditation", duration: "20:00", author: "Sarah Chen", audioUrl: "https://example.com/audio2.mp3", thumbnail: "purple" }
+  ]);
   const [currentlyPlaying, setCurrentlyPlaying] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showUploadAudio, setShowUploadAudio] = useState(false);
-  const [uploadData, setUploadData] = useState({ 
-    title: '', 
-    type: 'Meditation', 
-    duration: '', 
-    description: '',
-    fileUrl: ''
-  });
-  
-  // Profile state
-  const [showProfile, setShowProfile] = useState(false);
-  const [profileForm, setProfileForm] = useState({ displayName: '', bio: '' });
-  
-  // Audio player ref
+  const [uploadData, setUploadData] = useState({ title: '', type: 'Meditation', duration: '', description: '', fileUrl: '' });
   const audioRef = useRef(null);
 
+  // Profile
+  const [showProfile, setShowProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({ displayName: '', bio: '' });
+
+  // Toast helper
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  // Check auth on load
   useEffect(() => {
     const saved = localStorage.getItem('wellnessUser');
     if (saved) {
       const userData = JSON.parse(saved);
       setUser(userData);
+      checkAdminStatus(userData.email);
       setProfileForm({
         displayName: userData.display_name || userData.email.split('@')[0],
         bio: userData.bio || ''
       });
     }
+    setLoading(false);
   }, []);
-  
-  // Load discussions from database
+
+  // Load discussions when user logs in
   useEffect(() => {
     if (user) {
       loadDiscussions();
     }
-  }, [user]);
-  
+  }, [user, sortBy]);
+
+  const checkAdminStatus = async (email) => {
+    // In production, fetch this from your database
+    // For now, check if email is in admin list or has admin flag
+    const adminEmails = ['admin@serenityspace.com', 'admin@example.com'];
+    setIsAdmin(adminEmails.includes(email) || email.endsWith('@admin.com'));
+  };
+
   const loadDiscussions = async () => {
-    const data = await api.fetchDiscussions();
-    if (data && data.length > 0) {
-      setDiscussions(data);
+    setDiscussionsLoading(true);
+    try {
+      const data = await api.fetchDiscussions();
+      // Sort based on preference
+      const sorted = sortBy === 'popular' 
+        ? data.sort((a, b) => b.likes - a.likes)
+        : data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      setDiscussions(sorted);
+    } catch (err) {
+      setError('Failed to load discussions');
+      // Fallback to empty array
+      setDiscussions([]);
+    } finally {
+      setDiscussionsLoading(false);
     }
   };
-  
-  // Handle audio playback
-  useEffect(() => {
-    if (audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.play().catch(err => console.log('Playback error:', err));
-      } else {
-        audioRef.current.pause();
-      }
-    }
-  }, [isPlaying, currentlyPlaying]);
 
-  const handleAuth = async () => {
-    if (!email || !password) {
-      setError('Please enter email and password');
+  // Auth Handler
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    if (!email || !password) return;
+    
+    setAuthLoading(true);
+    setError(null);
+    
+    try {
+      // Call Netlify auth function
+      const result = await fetch('/.netlify/functions/auth', {
+        method: 'POST',
+        body: JSON.stringify({ email, password, action: 'login' })
+      });
+      
+      if (!result.ok) throw new Error('Authentication failed');
+      
+      const userData = await result.json();
+      setUser(userData);
+      setIsAdmin(userData.isAdmin || false);
+      localStorage.setItem('wellnessUser', JSON.stringify(userData));
+      showToast('Welcome back!', 'success');
+    } catch (err) {
+      setError(err.message);
+      showToast(err.message, 'error');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Like Handler with Optimistic Update
+  const handleLike = async (postId) => {
+    if (!user) {
+      showToast('Please sign in to like posts', 'error');
       return;
     }
-    setLoading(true);
-    try {
-      const userData = { 
-        email, 
-        display_name: email.split('@')[0],
-        bio: '',
-        joined: new Date().toISOString()
-      };
-      setUser(userData);
-      localStorage.setItem('wellnessUser', JSON.stringify(userData));
-      setError(null);
-    } catch (e) {
-      setError('Authentication failed');
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  // Like functionality
-  const handleLike = async (postId, e) => {
-    if (e) e.stopPropagation();
-    if (!user) return;
-    
     const post = discussions.find(p => p.id === postId);
-    const hasLiked = post.likedBy.includes(user.email);
+    const hasLiked = post.likedBy?.includes(user.email);
     
+    // Optimistic update
     const updatedPost = {
       ...post,
       likes: hasLiked ? post.likes - 1 : post.likes + 1,
       likedBy: hasLiked 
         ? post.likedBy.filter(id => id !== user.email)
-        : [...post.likedBy, user.email]
+        : [...(post.likedBy || []), user.email]
     };
     
-    // Update in database
-    await api.updateDiscussion(postId, updatedPost);
-    
-    // Update local state
     setDiscussions(prev => prev.map(p => p.id === postId ? updatedPost : p));
+    if (selectedPost?.id === postId) setSelectedPost(updatedPost);
+
+    try {
+      await api.updateDiscussion(postId, { likedBy: updatedPost.likedBy, likes: updatedPost.likes });
+    } catch (err) {
+      // Revert on error
+      setDiscussions(prev => prev.map(p => p.id === postId ? post : p));
+      showToast('Failed to update like', 'error');
+    }
   };
 
-  // Add comment
+  // Add Comment
   const handleAddComment = async () => {
     if (!commentText.trim() || !user || !selectedPost) return;
     
@@ -289,146 +219,137 @@ const WellnessPortal = () => {
       author: user.display_name || user.email.split('@')[0],
       authorId: user.email,
       content: commentText,
-      timestamp: "Just now",
+      created_at: new Date().toISOString(),
       likes: 0
     };
-    
-    const updatedPost = {
-      ...selectedPost,
-      comments: [...selectedPost.comments, newComment]
-    };
-    
-    // Update in database
-    await api.updateDiscussion(selectedPost.id, updatedPost);
-    
-    // Update local state
-    setDiscussions(prev => prev.map(post => 
-      post.id === selectedPost.id ? updatedPost : post
-    ));
-    
+
+    const updatedComments = [...(selectedPost.comments || []), newComment];
+    const updatedPost = { ...selectedPost, comments: updatedComments };
+
+    // Optimistic update
+    setDiscussions(prev => prev.map(p => p.id === selectedPost.id ? updatedPost : p));
     setSelectedPost(updatedPost);
     setCommentText('');
-  };
 
-  // Delete post (admin only)
-  const handleDeletePost = async (postId) => {
-    if (!isAdmin) return;
-    
-    // Delete from database
-    const success = await api.deleteDiscussion(postId);
-    
-    if (success) {
-      // Update local state
-      setDiscussions(prev => prev.filter(post => post.id !== postId));
-      setSelectedPost(null);
-      setShowDeleteConfirm(null);
+    try {
+      await api.updateDiscussion(selectedPost.id, { comments: updatedComments });
+    } catch (err) {
+      showToast('Failed to post comment', 'error');
     }
   };
 
-  // Delete comment (admin only)
+  // Delete Post (Admin only)
+  const handleDeletePost = async (postId) => {
+    if (!isAdmin) return;
+    
+    try {
+      await api.deleteDiscussion(postId);
+      setDiscussions(prev => prev.filter(p => p.id !== postId));
+      setSelectedPost(null);
+      setShowDeleteConfirm(null);
+      showToast('Post deleted successfully', 'success');
+    } catch (err) {
+      showToast('Failed to delete post', 'error');
+    }
+  };
+
+  // Delete Comment
   const handleDeleteComment = async (postId, commentId) => {
     if (!isAdmin) return;
     
     const post = discussions.find(p => p.id === postId);
-    const updatedPost = {
-      ...post,
-      comments: post.comments.filter(c => c.id !== commentId)
-    };
+    const updatedComments = post.comments.filter(c => c.id !== commentId);
     
-    // Update in database
-    await api.updateDiscussion(postId, updatedPost);
-    
-    // Update local state
-    setDiscussions(prev => prev.map(p => 
-      p.id === postId ? updatedPost : p
-    ));
-    
-    if (selectedPost) {
-      setSelectedPost(updatedPost);
+    try {
+      await api.updateDiscussion(postId, { comments: updatedComments });
+      const updatedPost = { ...post, comments: updatedComments };
+      setDiscussions(prev => prev.map(p => p.id === postId ? updatedPost : p));
+      if (selectedPost?.id === postId) setSelectedPost(updatedPost);
+      showToast('Comment deleted', 'success');
+    } catch (err) {
+      showToast('Failed to delete comment', 'error');
     }
   };
 
+  // Create New Post
   const handleNewPost = async () => {
-    if (!newPostData.title || !newPostData.content) return;
+    if (!newPostData.title.trim() || !newPostData.content.trim()) return;
     
     const post = {
-      id: Date.now(),
       author: user.display_name || user.email.split('@')[0],
       authorId: user.email,
-      avatar: "",
       category: newPostData.category,
       title: newPostData.title,
       content: newPostData.content,
       likes: 0,
       likedBy: [],
       comments: [],
-      timestamp: new Date().toISOString(),
-      tags: [],
+      created_at: new Date().toISOString(),
       isPinned: false
     };
-    
-    // Save to database
-    const savedPost = await api.createDiscussion(post);
-    
-    if (savedPost) {
-      // Update local state
-      setDiscussions([savedPost, ...discussions]);
+
+    try {
+      const saved = await api.createDiscussion(post);
+      setDiscussions(prev => [saved, ...prev]);
       setNewPostData({ title: '', content: '', category: 'General' });
       setShowNewPost(false);
+      showToast('Post created successfully!', 'success');
+    } catch (err) {
+      showToast('Failed to create post', 'error');
     }
   };
 
-  const handleAudioUpload = () => {
-    if (!uploadData.title || !uploadData.fileUrl) return;
-    
-    // Convert Google Drive link to direct playable URL
-    let audioUrl = uploadData.fileUrl;
-    if (audioUrl.includes('drive.google.com')) {
-      const fileIdMatch = audioUrl.match(/\/d\/([^\/]+)/);
-      if (fileIdMatch) {
-        audioUrl = `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
-      }
-    }
-    
-    const newAudio = {
-      id: Date.now(),
-      title: uploadData.title,
-      type: uploadData.type,
-      duration: uploadData.duration || "5:00",
-      author: user.display_name || "You",
-      plays: 0,
-      description: uploadData.description,
-      thumbnail: "pink",
-      audioUrl: audioUrl
-    };
-    
-    setAudioLibrary([newAudio, ...audioLibrary]);
-    setUploadData({ title: '', type: 'Meditation', duration: '', description: '', fileUrl: '' });
-    setShowUploadAudio(false);
-  };
-
-  const togglePlay = (id) => {
-    const audio = audioLibrary.find(a => a.id === id);
-    
-    if (currentlyPlaying === id) {
+  // Audio Player Logic
+  const togglePlay = (audio) => {
+    if (currentlyPlaying?.id === audio.id) {
       setIsPlaying(!isPlaying);
     } else {
-      setCurrentlyPlaying(id);
+      setCurrentlyPlaying(audio);
       setIsPlaying(true);
-      
-      // Load new audio source
-      if (audioRef.current && audio?.audioUrl) {
+      if (audioRef.current) {
         audioRef.current.src = audio.audioUrl;
         audioRef.current.load();
       }
     }
   };
 
-  const filteredDiscussions = selectedCategory === 'All' 
-    ? discussions 
-    : discussions.filter(d => d.category === selectedCategory);
+  useEffect(() => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.play().catch(console.error);
+      } else {
+        audioRef.current.pause();
+      }
+    }
+  }, [isPlaying, currentlyPlaying]);
 
-  // If no user is logged in, show login screen
+  // Filter & Sort Discussions
+  const filteredDiscussions = discussions
+    .filter(post => selectedCategory === 'All' || post.category === selectedCategory)
+    .filter(post => 
+      searchQuery === '' || 
+      post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      post.content.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+  // Format timestamp
+  const formatTime = (timestamp) => {
+    if (!timestamp) return 'Just now';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = Math.floor((now - date) / 1000);
+    
+    if (diff < 60) return 'Just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+    return date.toLocaleDateString();
+  };
+
+  if (loading) {
+    return <div style={styles.loadingScreen}><Loader2 size={48} color="#ec4899" className="spin" /></div>;
+  }
+
   if (!user) {
     return (
       <div style={styles.container}>
@@ -437,59 +358,77 @@ const WellnessPortal = () => {
             <div style={styles.loginHeader}>
               <Heart size={48} color="#ec4899" fill="#fce7f3" />
               <h1 style={styles.loginTitle}>Serenity Space</h1>
-              <p style={styles.loginSubtitle}>Your wellness community awaits</p>
+              <p style={styles.loginSubtitle}>Your wellness sanctuary</p>
             </div>
             
             {error && (
-              <div style={styles.errorMessage}>{error}</div>
+              <div style={styles.errorBanner}>
+                <AlertCircle size={16} />
+                {error}
+              </div>
             )}
             
-            <div style={styles.loginForm}>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Email</label>
-                <input 
-                  type="email"
-                  style={styles.input}
-                  placeholder="Enter your email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                />
-              </div>
-              
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Password</label>
-                <input 
-                  type="password"
-                  style={styles.input}
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                />
-              </div>
-              
+            <form onSubmit={handleAuth} style={styles.loginForm}>
+              <input 
+                type="email"
+                style={styles.authInput}
+                placeholder="Email address"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+              />
+              <input 
+                type="password"
+                style={styles.authInput}
+                placeholder="Password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+              />
               <button 
-                style={styles.loginButton}
-                onClick={handleAuth}
-                disabled={loading}
+                type="submit"
+                style={styles.authButton}
+                disabled={authLoading}
               >
-                {loading ? 'Loading...' : 'Sign In'}
+                {authLoading ? <Loader2 size={20} className="spin" /> : 'Sign In'}
               </button>
-              
-              <p style={styles.loginHint}>
-                Use any email (try "admin@example.com" for admin access)
-              </p>
-            </div>
+            </form>
+            
+            <p style={styles.demoHint}>
+              Demo: Use "admin@example.com" for admin access
+            </p>
           </div>
         </div>
+        
+        {/* Toast Notification */}
+        {toast && (
+          <div style={{
+            ...styles.toast,
+            ...(toast.type === 'error' ? styles.toastError : styles.toastSuccess)
+          }}>
+            {toast.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+            {toast.message}
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <div style={styles.container}>
-      {/* Hidden Audio Player */}
-      <audio ref={audioRef} />
+      <audio ref={audioRef} onEnded={() => setIsPlaying(false)} />
       
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          ...styles.toast,
+          ...(toast.type === 'error' ? styles.toastError : styles.toastSuccess)
+        }}>
+          {toast.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+          {toast.message}
+        </div>
+      )}
+
       {/* Header */}
       <header style={styles.header}>
         <div style={styles.brand}>
@@ -497,50 +436,31 @@ const WellnessPortal = () => {
           <h1 style={styles.brandText}>Serenity Space</h1>
           {isAdmin && (
             <span style={styles.adminBadge}>
-              <Shield size={14} />
-              Admin
+              <Shield size={14} /> Admin
             </span>
           )}
         </div>
         
         <nav style={styles.nav}>
-          <button 
-            onClick={() => setActiveTab('community')}
-            style={{
-              ...styles.navButton,
-              ...(activeTab === 'community' ? styles.navButtonActive : {})
-            }}
-          >
-            <MessageCircle size={18} />
-            Community
-          </button>
-          <button 
-            onClick={() => setActiveTab('resources')}
-            style={{
-              ...styles.navButton,
-              ...(activeTab === 'resources' ? styles.navButtonActive : {})
-            }}
-          >
-            <BookOpen size={18} />
-            Resources
-          </button>
-          <button 
-            onClick={() => setActiveTab('audio')}
-            style={{
-              ...styles.navButton,
-              ...(activeTab === 'audio' ? styles.navButtonActive : {})
-            }}
-          >
-            <Headphones size={18} />
-            Audio
-          </button>
+          {['community', 'resources', 'audio'].map(tab => (
+            <button 
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              style={{
+                ...styles.navButton,
+                ...(activeTab === tab ? styles.navButtonActive : {})
+              }}
+            >
+              {tab === 'community' && <MessageCircle size={18} />}
+              {tab === 'resources' && <BookOpen size={18} />}
+              {tab === 'audio' && <Headphones size={18} />}
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
         </nav>
         
         <div style={styles.userActions}>
-          <button 
-            onClick={() => setShowProfile(true)}
-            style={styles.iconButton}
-          >
+          <button onClick={() => setShowProfile(true)} style={styles.iconButton}>
             <User size={20} color="#64748b" />
           </button>
           <button 
@@ -552,143 +472,149 @@ const WellnessPortal = () => {
         </div>
       </header>
 
-      {/* Main Content */}
       <main style={styles.main}>
+        {/* Community Tab */}
         {activeTab === 'community' && (
           <div style={styles.section}>
             <div style={styles.sectionHeader}>
               <div>
-                <h2 style={styles.sectionTitle}>Community Discussions</h2>
-                <p style={styles.sectionSubtitle}>Connect, share, and grow together</p>
+                <h2 style={styles.sectionTitle}>Community</h2>
+                <p style={styles.sectionSubtitle}>Join the conversation</p>
               </div>
-              <button 
-                style={styles.primaryButtonSmall}
-                onClick={() => setShowNewPost(true)}
-              >
-                <MessageSquare size={16} />
-                New Discussion
+              <button style={styles.primaryButton} onClick={() => setShowNewPost(true)}>
+                <MessageSquare size={16} /> New Post
               </button>
             </div>
 
-            {/* Filters */}
-            <div style={styles.filterBar}>
-              <div style={styles.filterTabs}>
-                <button 
-                  style={{
-                    ...styles.filterTab,
-                    ...(selectedCategory === 'All' ? styles.filterTabActive : {})
-                  }}
-                  onClick={() => setSelectedCategory('All')}
-                >
-                  All Topics
-                </button>
-                {CATEGORIES.discussion.map(cat => (
-                  <button 
-                    key={cat}
-                    style={{
-                      ...styles.filterTab,
-                      ...(selectedCategory === cat ? styles.filterTabActive : {})
-                    }}
-                    onClick={() => setSelectedCategory(cat)}
-                  >
-                    {cat}
+            {/* Search & Filter Bar */}
+            <div style={styles.controlsBar}>
+              <div style={styles.searchBox}>
+                <Search size={18} color="#94a3b8" />
+                <input 
+                  type="text" 
+                  placeholder="Search discussions..."
+                  style={styles.searchInput}
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery('')} style={styles.clearSearch}>
+                    <X size={16} />
                   </button>
-                ))}
+                )}
               </div>
+              
+              <select 
+                style={styles.sortSelect}
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value)}
+              >
+                <option value="newest">Newest First</option>
+                <option value="popular">Most Popular</option>
+              </select>
             </div>
 
-            {/* Discussion List */}
-            <div style={styles.cardList}>
-              {filteredDiscussions.map(post => (
-                <article 
-                  key={post.id} 
-                  style={{
-                    ...styles.discussionCard,
-                    ...(post.isPinned ? styles.pinnedCard : {})
-                  }}
-                  onClick={() => setSelectedPost(post)}
+            {/* Category Pills */}
+            <div style={styles.categoryPills}>
+              <button 
+                style={{...styles.pill, ...(selectedCategory === 'All' ? styles.pillActive : {})}}
+                onClick={() => setSelectedCategory('All')}
+              >
+                All
+              </button>
+              {CATEGORIES.discussion.map(cat => (
+                <button 
+                  key={cat}
+                  style={{...styles.pill, ...(selectedCategory === cat ? styles.pillActive : {})}}
+                  onClick={() => setSelectedCategory(cat)}
                 >
-                  {post.isPinned && (
-                    <div style={styles.pinnedBadge}>
-                      <Sparkles size={12} />
-                      Featured
-                    </div>
-                  )}
-                  <div style={styles.cardMeta}>
-                    <span style={styles.categoryTag}>{post.category}</span>
-                    <span style={styles.timestamp}>{post.timestamp}</span>
-                  </div>
-                  
-                  <h3 style={styles.cardTitle}>{post.title}</h3>
-                  <p style={styles.cardContent}>{post.content}</p>
-                  
-                  <div style={styles.cardFooter}>
-                    <div style={styles.authorInfo}>
-                      <div style={styles.avatarPlaceholder}>
-                        <User size={16} color="#94a3b8" />
-                      </div>
-                      <span style={styles.authorName}>{post.author}</span>
-                    </div>
-                    
-                    <div style={styles.cardStats} onClick={e => e.stopPropagation()}>
-                      <button 
-                        style={{
-                          ...styles.statButton,
-                          ...(post.likedBy.includes(user?.email) ? styles.statButtonActive : {})
-                        }}
-                        onClick={(e) => handleLike(post.id, e)}
-                      >
-                        <ThumbsUp size={16} fill={post.likedBy.includes(user?.email) ? "#ec4899" : "none"} />
-                        {post.likes}
-                      </button>
-                      <button style={styles.statButton}>
-                        <MessageSquare size={16} />
-                        {post.comments.length}
-                      </button>
-                      <button style={styles.iconButtonGhost}>
-                        <Share2 size={16} />
-                      </button>
-                      {isAdmin && (
-                        <button 
-                          style={styles.deleteButtonSmall}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowDeleteConfirm(post.id);
-                          }}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </article>
+                  {cat}
+                </button>
               ))}
             </div>
+
+            {/* Discussions List */}
+            {discussionsLoading ? (
+              <div style={styles.skeletonList}>
+                {[1,2,3].map(i => <div key={i} style={styles.skeletonCard} />)}
+              </div>
+            ) : (
+              <div style={styles.cardList}>
+                {filteredDiscussions.length === 0 ? (
+                  <div style={styles.emptyState}>
+                    <MessageCircle size={48} color="#cbd5e1" />
+                    <p>No discussions found</p>
+                    {searchQuery && <button onClick={() => setSearchQuery('')} style={styles.link}>Clear search</button>}
+                  </div>
+                ) : (
+                  filteredDiscussions.map(post => (
+                    <article 
+                      key={post.id} 
+                      style={{...styles.card, ...(post.isPinned ? styles.pinnedCard : {})}}
+                      onClick={() => setSelectedPost(post)}
+                    >
+                      {post.isPinned && (
+                        <div style={styles.pinnedBadge}>
+                          <Sparkles size={12} /> Featured
+                        </div>
+                      )}
+                      
+                      <div style={styles.cardHeader}>
+                        <span style={styles.categoryTag}>{post.category}</span>
+                        <span style={styles.timeStamp}>{formatTime(post.created_at)}</span>
+                      </div>
+                      
+                      <h3 style={styles.cardTitle}>{post.title}</h3>
+                      <p style={styles.cardExcerpt}>{post.content}</p>
+                      
+                      <div style={styles.cardFooter}>
+                        <div style={styles.author}>
+                          <div style={styles.avatarSmall}><User size={14} /></div>
+                          <span>{post.author}</span>
+                        </div>
+                        
+                        <div style={styles.stats} onClick={e => e.stopPropagation()}>
+                          <button 
+                            style={{...styles.statBtn, ...(post.likedBy?.includes(user.email) ? styles.statBtnActive : {})}}
+                            onClick={(e) => { e.stopPropagation(); handleLike(post.id); }}
+                          >
+                            <ThumbsUp size={16} fill={post.likedBy?.includes(user.email) ? "#ec4899" : "none"} />
+                            {post.likes || 0}
+                          </button>
+                          <span style={styles.statBtn}>
+                            <MessageSquare size={16} />
+                            {post.comments?.length || 0}
+                          </span>
+                          {isAdmin && (
+                            <button 
+                              style={styles.deleteBtn}
+                              onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(post.id); }}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         )}
 
+        {/* Resources & Audio tabs remain similar but improved... */}
         {activeTab === 'resources' && (
           <div style={styles.section}>
-            <div style={styles.sectionHeader}>
-              <div>
-                <h2 style={styles.sectionTitle}>Resource Library</h2>
-                <p style={styles.sectionSubtitle}>Curated guides and tools for your journey</p>
-              </div>
-            </div>
+            <h2 style={styles.sectionTitle}>Resources</h2>
             <div style={styles.resourceGrid}>
-              {resources.map(resource => (
-                <div key={resource.id} style={styles.resourceCard}>
-                  <div style={styles.resourceIcon}>
-                    <FileText size={32} color="#ec4899" />
-                  </div>
-                  <div style={styles.resourceContent}>
-                    <span style={styles.resourceType}>{resource.type}</span>
-                    <h3 style={styles.resourceTitle}>{resource.title}</h3>
-                    <p style={styles.resourceDesc}>{resource.description}</p>
-                    <button style={styles.downloadButton}>
-                      <Download size={16} />
-                      Download
-                    </button>
+              {resources.map(r => (
+                <div key={r.id} style={styles.resourceCard}>
+                  <FileText size={32} color="#ec4899" />
+                  <div>
+                    <h3>{r.title}</h3>
+                    <p>{r.description}</p>
+                    <button style={styles.downloadBtn}><Download size={16} /> Download</button>
                   </div>
                 </div>
               ))}
@@ -699,43 +625,49 @@ const WellnessPortal = () => {
         {activeTab === 'audio' && (
           <div style={styles.section}>
             <div style={styles.sectionHeader}>
-              <div>
-                <h2 style={styles.sectionTitle}>Audio Wellness</h2>
-                <p style={styles.sectionSubtitle}>Meditations, affirmations, and calming sounds</p>
-              </div>
-              <button 
-                style={styles.primaryButtonSmall}
-                onClick={() => setShowUploadAudio(true)}
-              >
-                <Upload size={16} />
-                Upload Audio
+              <h2 style={styles.sectionTitle}>Audio Library</h2>
+              <button style={styles.primaryButton} onClick={() => setShowUploadAudio(true)}>
+                <Upload size={16} /> Upload
               </button>
             </div>
-
+            
+            {/* Audio Player Bar */}
             {currentlyPlaying && (
-              <div style={styles.playerBar}>
-                <div style={styles.playerInfo}>
-                  <button style={styles.playButton} onClick={() => togglePlay(currentlyPlaying)}>
-                    {isPlaying ? <Pause size={20} fill="white" /> : <Play size={20} fill="white" />}
-                  </button>
-                  <div>
-                    <div style={styles.playerTitle}>
-                      {audioLibrary.find(a => a.id === currentlyPlaying)?.title}
-                    </div>
-                  </div>
+              <div style={styles.audioBar}>
+                <button onClick={() => setIsPlaying(!isPlaying)} style={styles.audioBarPlay}>
+                  {isPlaying ? <Pause fill="white" /> : <Play fill="white" />}
+                </button>
+                <div style={styles.audioBarInfo}>
+                  <div style={styles.audioBarTitle}>{currentlyPlaying.title}</div>
+                  <div style={styles.audioBarMeta}>{currentlyPlaying.type} • {currentlyPlaying.author}</div>
+                </div>
+                <div style={styles.audioProgress}>
+                  <div style={styles.audioProgressFill} />
                 </div>
               </div>
             )}
 
             <div style={styles.audioGrid}>
               {audioLibrary.map(audio => (
-                <div key={audio.id} style={styles.audioCard} onClick={() => togglePlay(audio.id)}>
-                  <div style={styles.audioThumbnail}>
-                    <Headphones size={32} color="#ec4899" />
+                <div key={audio.id} style={styles.audioCard}>
+                  <div style={{...styles.audioThumb, background: audio.thumbnail === 'pink' ? '#fce7f3' : '#e0e7ff'}}>
+                    <button 
+                      style={styles.audioPlayBtn}
+                      onClick={() => togglePlay(audio)}
+                    >
+                      {currentlyPlaying?.id === audio.id && isPlaying ? (
+                        <Pause size={24} fill="white" />
+                      ) : (
+                        <Play size={24} fill="white" />
+                      )}
+                    </button>
                   </div>
                   <div style={styles.audioInfo}>
-                    <span style={styles.audioType}>{audio.type}</span>
-                    <h3 style={styles.audioTitle}>{audio.title}</h3>
+                    <div style={styles.audioType}>{audio.type}</div>
+                    <h4 style={styles.audioTitle}>{audio.title}</h4>
+                    <div style={styles.audioMeta}>
+                      <Clock size={14} /> {audio.duration}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -748,144 +680,90 @@ const WellnessPortal = () => {
       {selectedPost && (
         <div style={styles.modalOverlay} onClick={() => setSelectedPost(null)}>
           <div style={styles.detailModal} onClick={e => e.stopPropagation()}>
-            {/* Post Header */}
             <div style={styles.detailHeader}>
-              <button 
-                style={styles.backButton}
-                onClick={() => setSelectedPost(null)}
-              >
-                <ChevronLeft size={20} />
-                Back
+              <button style={styles.backBtn} onClick={() => setSelectedPost(null)}>
+                <ChevronLeft size={20} /> Back
               </button>
-              <div style={styles.detailMeta}>
-                <span style={styles.categoryTagLarge}>{selectedPost.category}</span>
-                <span style={styles.timestamp}>{selectedPost.timestamp}</span>
-              </div>
+              <span style={styles.detailCategory}>{selectedPost.category}</span>
               {isAdmin && (
                 <button 
-                  style={styles.adminDeleteBtn}
+                  style={styles.adminDelete}
                   onClick={() => setShowDeleteConfirm(selectedPost.id)}
                 >
-                  <Trash2 size={18} />
-                  Delete Post
+                  <Trash2 size={18} /> Delete
                 </button>
               )}
             </div>
 
-            {/* Post Content */}
             <div style={styles.detailContent}>
               <h2 style={styles.detailTitle}>{selectedPost.title}</h2>
               
               <div style={styles.detailAuthor}>
-                <div style={styles.avatarLarge}>
-                  <User size={24} color="#94a3b8" />
-                </div>
+                <div style={styles.avatar}><User size={24} /></div>
                 <div>
                   <div style={styles.detailAuthorName}>{selectedPost.author}</div>
-                  <div style={styles.detailAuthorMeta}>Community Member</div>
+                  <div style={styles.detailTime}>{formatTime(selectedPost.created_at)}</div>
                 </div>
               </div>
 
-              <div style={styles.detailBody}>
-                {selectedPost.content}
-              </div>
+              <div style={styles.detailBody}>{selectedPost.content}</div>
 
-              {/* Tags */}
-              {selectedPost.tags.length > 0 && (
-                <div style={styles.tagsContainer}>
-                  {selectedPost.tags.map(tag => (
-                    <span key={tag} style={styles.tag}>#{tag}</span>
-                  ))}
-                </div>
-              )}
-
-              {/* Action Bar */}
               <div style={styles.detailActions}>
                 <button 
-                  style={{
-                    ...styles.actionButton,
-                    ...(selectedPost.likedBy.includes(user?.email) ? styles.actionButtonActive : {})
-                  }}
+                  style={{...styles.actionBtn, ...(selectedPost.likedBy?.includes(user.email) ? styles.actionBtnActive : {})}}
                   onClick={() => handleLike(selectedPost.id)}
                 >
-                  <ThumbsUp size={20} fill={selectedPost.likedBy.includes(user?.email) ? "#ec4899" : "none"} />
-                  {selectedPost.likes} likes
+                  <ThumbsUp fill={selectedPost.likedBy?.includes(user.email) ? "#ec4899" : "none"} />
+                  {selectedPost.likes || 0} likes
                 </button>
-                <button style={styles.actionButton}>
-                  <MessageSquare size={20} />
-                  {selectedPost.comments.length} comments
-                </button>
-                <button style={styles.actionButton}>
-                  <Share2 size={20} />
-                  Share
-                </button>
-                <button style={styles.actionButton}>
-                  <Flag size={20} />
-                  Report
-                </button>
+                <button style={styles.actionBtn}><Share2 size={20} /> Share</button>
+                <button style={styles.actionBtn}><Flag size={20} /> Report</button>
               </div>
             </div>
 
-            {/* Comments Section */}
+            {/* Comments */}
             <div style={styles.commentsSection}>
-              <h3 style={styles.commentsTitle}>
-                Discussion ({selectedPost.comments.length})
-              </h3>
-
-              {/* Comment Input */}
-              <div style={styles.commentInputArea}>
-                <div style={styles.avatarSmall}>
-                  <User size={16} color="#94a3b8" />
-                </div>
-                <div style={styles.commentInputWrapper}>
-                  <input
-                    type="text"
-                    placeholder="Add to the discussion..."
-                    style={styles.commentInput}
-                    value={commentText}
-                    onChange={(e) => setCommentText(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleAddComment()}
-                  />
-                  <button 
-                    style={styles.sendButton}
-                    onClick={handleAddComment}
-                    disabled={!commentText.trim()}
-                  >
-                    <Send size={18} />
-                  </button>
-                </div>
+              <h4 style={styles.commentsTitle}>Comments ({selectedPost.comments?.length || 0})</h4>
+              
+              <div style={styles.commentInputBox}>
+                <div style={styles.avatarSmall}><User size={16} /></div>
+                <input
+                  type="text"
+                  style={styles.commentInput}
+                  placeholder="Write a comment..."
+                  value={commentText}
+                  onChange={e => setCommentText(e.target.value)}
+                  onKeyPress={e => e.key === 'Enter' && handleAddComment()}
+                />
+                <button 
+                  style={styles.sendBtn}
+                  onClick={handleAddComment}
+                  disabled={!commentText.trim()}
+                >
+                  <Send size={18} />
+                </button>
               </div>
 
-              {/* Comments List */}
               <div style={styles.commentsList}>
-                {selectedPost.comments.map(comment => (
-                  <div key={comment.id} style={styles.commentItem}>
-                    <div style={styles.avatarSmall}>
-                      <User size={16} color="#94a3b8" />
-                    </div>
+                {selectedPost.comments?.map(comment => (
+                  <div key={comment.id} style={styles.comment}>
+                    <div style={styles.avatarSmall}><User size={16} /></div>
                     <div style={styles.commentContent}>
                       <div style={styles.commentHeader}>
                         <span style={styles.commentAuthor}>
                           {comment.author}
-                          {comment.isAdmin && (
-                            <span style={styles.adminLabel}>
-                              <Shield size={12} />
-                              Admin
-                            </span>
+                          {comment.authorId?.includes('admin') && (
+                            <span style={styles.adminTag}>Admin</span>
                           )}
                         </span>
-                        <span style={styles.commentTime}>{comment.timestamp}</span>
+                        <span style={styles.commentTime}>{formatTime(comment.created_at)}</span>
                       </div>
                       <p style={styles.commentText}>{comment.content}</p>
                       <div style={styles.commentActions}>
-                        <button style={styles.commentLikeBtn}>
-                          <ThumbsUp size={12} />
-                          {comment.likes}
-                        </button>
-                        <button style={styles.commentReplyBtn}>Reply</button>
+                        <button style={styles.commentAction}><ThumbsUp size={14} /> {comment.likes}</button>
                         {isAdmin && (
                           <button 
-                            style={styles.commentDeleteBtn}
+                            style={styles.commentActionDelete}
                             onClick={() => handleDeleteComment(selectedPost.id, comment.id)}
                           >
                             Delete
@@ -901,30 +779,16 @@ const WellnessPortal = () => {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation */}
       {showDeleteConfirm && (
         <div style={styles.modalOverlay}>
-          <div style={styles.confirmModal}>
-            <div style={styles.confirmIcon}>
-              <Trash2 size={32} color="#ef4444" />
-            </div>
-            <h3 style={styles.confirmTitle}>Delete this post?</h3>
-            <p style={styles.confirmText}>
-              This action cannot be undone. The post and all its comments will be permanently removed.
-            </p>
-            <div style={styles.confirmActions}>
-              <button 
-                style={styles.cancelButton}
-                onClick={() => setShowDeleteConfirm(null)}
-              >
-                Cancel
-              </button>
-              <button 
-                style={styles.confirmDeleteButton}
-                onClick={() => handleDeletePost(showDeleteConfirm)}
-              >
-                Delete Post
-              </button>
+          <div style={styles.confirmBox}>
+            <Trash2 size={32} color="#ef4444" />
+            <h3>Delete this post?</h3>
+            <p>This action cannot be undone.</p>
+            <div style={styles.confirmButtons}>
+              <button onClick={() => setShowDeleteConfirm(null)} style={styles.cancelBtn}>Cancel</button>
+              <button onClick={() => handleDeletePost(showDeleteConfirm)} style={styles.deleteConfirmBtn}>Delete</button>
             </div>
           </div>
         </div>
@@ -935,48 +799,35 @@ const WellnessPortal = () => {
         <div style={styles.modalOverlay} onClick={() => setShowNewPost(false)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
             <div style={styles.modalHeader}>
-              <h3 style={styles.modalTitle}>Start a Discussion</h3>
-              <button style={styles.closeButton} onClick={() => setShowNewPost(false)}>
-                <X size={20} />
-              </button>
+              <h3>Create Discussion</h3>
+              <button onClick={() => setShowNewPost(false)}><X size={20} /></button>
             </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Category</label>
-              <select 
-                style={styles.select}
-                value={newPostData.category}
-                onChange={e => setNewPostData({...newPostData, category: e.target.value})}
-              >
-                {CATEGORIES.discussion.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Title</label>
-              <input 
-                style={styles.input}
-                placeholder="What's on your mind?"
-                value={newPostData.title}
-                onChange={e => setNewPostData({...newPostData, title: e.target.value})}
-              />
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Your Message</label>
-              <textarea 
-                style={styles.textarea}
-                placeholder="Share your thoughts..."
-                value={newPostData.content}
-                onChange={e => setNewPostData({...newPostData, content: e.target.value})}
-                rows={5}
-              />
-            </div>
+            <select 
+              style={styles.input}
+              value={newPostData.category}
+              onChange={e => setNewPostData({...newPostData, category: e.target.value})}
+            >
+              {CATEGORIES.discussion.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <input 
+              style={styles.input}
+              placeholder="Title"
+              value={newPostData.title}
+              onChange={e => setNewPostData({...newPostData, title: e.target.value})}
+            />
+            <textarea 
+              style={styles.textarea}
+              placeholder="What's on your mind?"
+              rows={5}
+              value={newPostData.content}
+              onChange={e => setNewPostData({...newPostData, content: e.target.value})}
+            />
             <button 
               style={styles.primaryButton}
               onClick={handleNewPost}
-              disabled={!newPostData.title || !newPostData.content}
+              disabled={!newPostData.title.trim() || !newPostData.content.trim()}
             >
-              Post Discussion
+              Post
             </button>
           </div>
         </div>
@@ -987,70 +838,48 @@ const WellnessPortal = () => {
         <div style={styles.modalOverlay} onClick={() => setShowUploadAudio(false)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
             <div style={styles.modalHeader}>
-              <h3 style={styles.modalTitle}>Upload Audio</h3>
-              <button style={styles.closeButton} onClick={() => setShowUploadAudio(false)}>
-                <X size={20} />
-              </button>
+              <h3>Upload Audio</h3>
+              <button onClick={() => setShowUploadAudio(false)}><X size={20} /></button>
             </div>
             <div style={styles.formGroup}>
-              <label style={styles.label}>Type</label>
-              <select 
-                style={styles.select}
-                value={uploadData.type}
-                onChange={e => setUploadData({...uploadData, type: e.target.value})}
-              >
-                {CATEGORIES.audio.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Title</label>
+              <label>Audio File URL (Google Drive, etc.)</label>
               <input 
                 style={styles.input}
-                placeholder="Audio title"
+                placeholder="https://..."
+                value={uploadData.fileUrl}
+                onChange={e => setUploadData({...uploadData, fileUrl: e.target.value})}
+              />
+            </div>
+            <div style={styles.formGroup}>
+              <label>Title</label>
+              <input 
+                style={styles.input}
                 value={uploadData.title}
                 onChange={e => setUploadData({...uploadData, title: e.target.value})}
               />
             </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Google Drive File URL</label>
-              <input 
-                style={styles.input}
-                placeholder="Paste Google Drive share link here"
-                value={uploadData.fileUrl}
-                onChange={e => setUploadData({...uploadData, fileUrl: e.target.value})}
-              />
-              <p style={styles.helpText}>
-                Right-click your audio file in Google Drive → Get link → Make sure it's set to "Anyone with the link"
-              </p>
+            <div style={styles.formRow}>
+              <div style={styles.formGroup}>
+                <label>Type</label>
+                <select 
+                  style={styles.input}
+                  value={uploadData.type}
+                  onChange={e => setUploadData({...uploadData, type: e.target.value})}
+                >
+                  {CATEGORIES.audio.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div style={styles.formGroup}>
+                <label>Duration</label>
+                <input 
+                  style={styles.input}
+                  placeholder="5:30"
+                  value={uploadData.duration}
+                  onChange={e => setUploadData({...uploadData, duration: e.target.value})}
+                />
+              </div>
             </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Duration (e.g., 5:30)</label>
-              <input 
-                style={styles.input}
-                placeholder="5:30"
-                value={uploadData.duration}
-                onChange={e => setUploadData({...uploadData, duration: e.target.value})}
-              />
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Description</label>
-              <textarea 
-                style={styles.textarea}
-                placeholder="Describe your audio..."
-                value={uploadData.description}
-                onChange={e => setUploadData({...uploadData, description: e.target.value})}
-                rows={3}
-              />
-            </div>
-            <button 
-              style={styles.primaryButton}
-              onClick={handleAudioUpload}
-              disabled={!uploadData.title || !uploadData.fileUrl}
-            >
-              Upload Audio
-            </button>
+            <button style={styles.primaryButton} onClick={handleAudioUpload}>Upload</button>
           </div>
         </div>
       )}
@@ -1060,18 +889,11 @@ const WellnessPortal = () => {
         <div style={styles.modalOverlay} onClick={() => setShowProfile(false)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
             <div style={styles.modalHeader}>
-              <h3 style={styles.modalTitle}>Profile Settings</h3>
-              <button style={styles.closeButton} onClick={() => setShowProfile(false)}>
-                <X size={20} />
-              </button>
-            </div>
-            <div style={styles.profileSection}>
-              <div style={styles.avatarLarge}>
-                <User size={40} color="#94a3b8" />
-              </div>
+              <h3>Profile</h3>
+              <button onClick={() => setShowProfile(false)}><X size={20} /></button>
             </div>
             <div style={styles.formGroup}>
-              <label style={styles.label}>Display Name</label>
+              <label>Display Name</label>
               <input 
                 style={styles.input}
                 value={profileForm.displayName}
@@ -1085,9 +907,10 @@ const WellnessPortal = () => {
                 setUser(updated);
                 localStorage.setItem('wellnessUser', JSON.stringify(updated));
                 setShowProfile(false);
+                showToast('Profile updated');
               }}
             >
-              Save Changes
+              Save
             </button>
           </div>
         </div>
@@ -1097,915 +920,153 @@ const WellnessPortal = () => {
 };
 
 const styles = {
-  container: {
-    minHeight: '100vh',
-    background: '#fafaf9',
-    color: '#1e293b',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  },
-  loginContainer: {
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '20px'
-  },
-  loginBox: {
-    background: '#ffffff',
-    borderRadius: '20px',
-    padding: '48px',
-    maxWidth: '420px',
-    width: '100%',
-    boxShadow: '0 10px 40px rgba(0,0,0,0.1)'
-  },
-  loginHeader: {
-    textAlign: 'center',
-    marginBottom: '32px'
-  },
-  loginTitle: {
-    fontSize: '32px',
-    fontWeight: '700',
-    margin: '16px 0 8px 0',
-    color: '#1e293b'
-  },
-  loginSubtitle: {
-    color: '#64748b',
-    fontSize: '16px',
-    margin: 0
-  },
-  loginForm: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px'
-  },
-  loginButton: {
-    width: '100%',
-    padding: '14px',
-    background: '#ec4899',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: '10px',
-    fontSize: '16px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    marginTop: '8px'
-  },
-  loginHint: {
-    textAlign: 'center',
-    fontSize: '13px',
-    color: '#94a3b8',
-    margin: '8px 0 0 0'
-  },
-  errorMessage: {
-    background: '#fef2f2',
-    color: '#ef4444',
-    padding: '12px 16px',
-    borderRadius: '8px',
-    fontSize: '14px',
-    marginBottom: '16px',
-    textAlign: 'center'
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '20px 40px',
-    background: '#ffffff',
-    borderBottom: '1px solid #f1f5f9',
-    position: 'sticky',
-    top: 0,
-    zIndex: 100
-  },
-  brand: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px'
-  },
-  brandText: {
-    fontSize: '24px',
-    fontWeight: '700',
-    color: '#1e293b'
-  },
-  adminBadge: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: '4px 10px',
-    background: '#fef3c7',
-    color: '#d97706',
-    fontSize: '12px',
-    fontWeight: '700',
-    borderRadius: '20px',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px'
-  },
-  nav: {
-    display: 'flex',
-    gap: '8px',
-    background: '#f8fafc',
-    padding: '6px',
-    borderRadius: '12px'
-  },
-  navButton: {
-    padding: '10px 20px',
-    border: 'none',
-    background: 'transparent',
-    color: '#64748b',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    borderRadius: '10px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px'
-  },
-  navButtonActive: {
-    background: '#ffffff',
-    color: '#1e293b',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-  },
-  userActions: {
-    display: 'flex',
-    gap: '12px'
-  },
-  iconButton: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '10px',
-    border: '1px solid #e2e8f0',
-    background: '#ffffff',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer'
-  },
-  main: {
-    maxWidth: '800px',
-    margin: '0 auto',
-    padding: '32px 40px'
-  },
-  section: {
-    animation: 'fadeIn 0.3s ease'
-  },
-  sectionHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    marginBottom: '28px'
-  },
-  sectionTitle: {
-    fontSize: '28px',
-    fontWeight: '700',
-    margin: '0 0 4px 0'
-  },
-  sectionSubtitle: {
-    color: '#64748b',
-    fontSize: '16px',
-    margin: 0
-  },
-  primaryButtonSmall: {
-    padding: '10px 20px',
-    background: '#ec4899',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: '10px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px'
-  },
-  filterBar: {
-    marginBottom: '24px',
-    overflowX: 'auto'
-  },
-  filterTabs: {
-    display: 'flex',
-    gap: '8px',
-    paddingBottom: '8px'
-  },
-  filterTab: {
-    padding: '8px 16px',
-    border: '1px solid #e2e8f0',
-    background: '#ffffff',
-    color: '#64748b',
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    borderRadius: '20px',
-    whiteSpace: 'nowrap'
-  },
-  filterTabActive: {
-    background: '#fce7f3',
-    color: '#ec4899',
-    borderColor: '#fce7f3',
-    fontWeight: '600'
-  },
-  cardList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px'
-  },
-  discussionCard: {
-    background: '#ffffff',
-    padding: '24px',
-    borderRadius: '16px',
-    border: '1px solid #f1f5f9',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    position: 'relative'
-  },
-  pinnedCard: {
-    border: '1px solid #fef3c7',
-    background: '#fffbeb'
-  },
-  pinnedBadge: {
-    position: 'absolute',
-    top: '12px',
-    right: '12px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: '4px 10px',
-    background: '#fef3c7',
-    color: '#d97706',
-    fontSize: '11px',
-    fontWeight: '700',
-    borderRadius: '20px',
-    textTransform: 'uppercase'
-  },
-  cardMeta: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '12px'
-  },
-  categoryTag: {
-    padding: '4px 12px',
-    background: '#f0fdf4',
-    color: '#16a34a',
-    fontSize: '12px',
-    fontWeight: '600',
-    borderRadius: '20px',
-    textTransform: 'uppercase'
-  },
-  categoryTagLarge: {
-    padding: '6px 16px',
-    background: '#f0fdf4',
-    color: '#16a34a',
-    fontSize: '13px',
-    fontWeight: '700',
-    borderRadius: '20px',
-    textTransform: 'uppercase'
-  },
-  timestamp: {
-    fontSize: '13px',
-    color: '#94a3b8'
-  },
-  cardTitle: {
-    fontSize: '18px',
-    fontWeight: '700',
-    margin: '0 0 8px 0',
-    color: '#1e293b'
-  },
-  cardContent: {
-    color: '#475569',
-    fontSize: '15px',
-    lineHeight: 1.6,
-    margin: '0 0 16px 0',
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden'
-  },
-  cardFooter: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: '16px',
-    borderTop: '1px solid #f8fafc'
-  },
-  authorInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px'
-  },
-  avatarPlaceholder: {
-    width: '32px',
-    height: '32px',
-    borderRadius: '50%',
-    background: '#f1f5f9',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  authorName: {
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#475569'
-  },
-  cardStats: {
-    display: 'flex',
-    gap: '16px',
-    alignItems: 'center'
-  },
-  statButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    color: '#64748b',
-    fontSize: '14px',
-    fontWeight: '500',
-    background: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    padding: '6px',
-    borderRadius: '6px',
-    transition: 'all 0.2s'
-  },
-  statButtonActive: {
-    color: '#ec4899',
-    background: '#fce7f3'
-  },
-  iconButtonGhost: {
-    padding: '6px',
-    border: 'none',
-    background: 'transparent',
-    color: '#94a3b8',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center'
-  },
-  deleteButtonSmall: {
-    padding: '6px',
-    border: 'none',
-    background: 'transparent',
-    color: '#ef4444',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    borderRadius: '6px',
-    transition: 'all 0.2s'
-  },
+  container: { minHeight: '100vh', background: '#fafaf9', color: '#1e293b', fontFamily: 'system-ui, sans-serif' },
+  loadingScreen: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' },
   
-  // Detail Modal Styles
-  modalOverlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(0, 0, 0, 0.5)',
-    backdropFilter: 'blur(4px)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 200,
-    padding: '20px'
-  },
-  detailModal: {
-    background: '#ffffff',
-    borderRadius: '20px',
-    width: '100%',
-    maxWidth: '700px',
-    maxHeight: '90vh',
-    overflow: 'auto',
-    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-  },
-  detailHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '20px 24px',
-    borderBottom: '1px solid #f1f5f9',
-    gap: '16px'
-  },
-  backButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '8px 12px',
-    background: '#f8fafc',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#64748b',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer'
-  },
-  detailMeta: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    flex: 1,
-    justifyContent: 'center'
-  },
-  adminDeleteBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '8px 16px',
-    background: '#fef2f2',
-    color: '#ef4444',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer'
-  },
-  detailContent: {
-    padding: '24px'
-  },
-  detailTitle: {
-    fontSize: '24px',
-    fontWeight: '700',
-    color: '#1e293b',
-    margin: '0 0 20px 0',
-    lineHeight: 1.3
-  },
-  detailAuthor: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    marginBottom: '24px',
-    paddingBottom: '24px',
-    borderBottom: '1px solid #f1f5f9'
-  },
-  avatarLarge: {
-    width: '48px',
-    height: '48px',
-    borderRadius: '50%',
-    background: '#f1f5f9',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  avatarSmall: {
-    width: '32px',
-    height: '32px',
-    borderRadius: '50%',
-    background: '#f1f5f9',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0
-  },
-  detailAuthorName: {
-    fontSize: '16px',
-    fontWeight: '700',
-    color: '#1e293b'
-  },
-  detailAuthorMeta: {
-    fontSize: '13px',
-    color: '#94a3b8'
-  },
-  detailBody: {
-    fontSize: '16px',
-    lineHeight: 1.8,
-    color: '#475569',
-    marginBottom: '24px'
-  },
-  tagsContainer: {
-    display: 'flex',
-    gap: '8px',
-    marginBottom: '24px'
-  },
-  tag: {
-    padding: '6px 12px',
-    background: '#f8fafc',
-    color: '#64748b',
-    fontSize: '13px',
-    borderRadius: '20px',
-    fontWeight: '500'
-  },
-  detailActions: {
-    display: 'flex',
-    gap: '12px',
-    padding: '16px 0',
-    borderTop: '1px solid #f1f5f9',
-    borderBottom: '1px solid #f1f5f9'
-  },
-  actionButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '10px 16px',
-    background: '#f8fafc',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#64748b',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s'
-  },
-  actionButtonActive: {
-    background: '#fce7f3',
-    color: '#ec4899'
-  },
+  // Auth
+  loginContainer: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' },
+  loginBox: { background: 'white', padding: '40px', borderRadius: '20px', width: '100%', maxWidth: '400px', boxShadow: '0 10px 40px rgba(0,0,0,0.1)' },
+  loginHeader: { textAlign: 'center', marginBottom: '32px' },
+  loginTitle: { fontSize: '28px', fontWeight: '700', margin: '16px 0 4px' },
+  loginSubtitle: { color: '#64748b' },
+  loginForm: { display: 'flex', flexDirection: 'column', gap: '16px' },
+  authInput: { width: '100%', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '15px', boxSizing: 'border-box' },
+  authButton: { width: '100%', padding: '12px', background: '#ec4899', color: 'white', border: 'none', borderRadius: '10px', fontSize: '16px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  errorBanner: { background: '#fef2f2', color: '#ef4444', padding: '12px', borderRadius: '8px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px' },
+  demoHint: { textAlign: 'center', color: '#94a3b8', fontSize: '13px', marginTop: '16px' },
   
-  // Comments Section
-  commentsSection: {
-    padding: '24px',
-    background: '#fafaf9'
-  },
-  commentsTitle: {
-    fontSize: '18px',
-    fontWeight: '700',
-    margin: '0 0 20px 0',
-    color: '#1e293b'
-  },
-  commentInputArea: {
-    display: 'flex',
-    gap: '12px',
-    marginBottom: '24px'
-  },
-  commentInputWrapper: {
-    flex: 1,
-    display: 'flex',
-    gap: '8px',
-    background: '#ffffff',
-    padding: '4px',
-    borderRadius: '12px',
-    border: '1px solid #e2e8f0'
-  },
-  commentInput: {
-    flex: 1,
-    border: 'none',
-    outline: 'none',
-    padding: '8px 12px',
-    fontSize: '14px',
-    background: 'transparent'
-  },
-  sendButton: {
-    width: '36px',
-    height: '36px',
-    borderRadius: '8px',
-    background: '#ec4899',
-    color: '#ffffff',
-    border: 'none',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer'
-  },
-  commentsList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px'
-  },
-  commentItem: {
-    display: 'flex',
-    gap: '12px'
-  },
-  commentContent: {
-    flex: 1,
-    background: '#ffffff',
-    padding: '12px 16px',
-    borderRadius: '12px',
-    border: '1px solid #f1f5f9'
-  },
-  commentHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '6px'
-  },
-  commentAuthor: {
-    fontSize: '14px',
-    fontWeight: '700',
-    color: '#1e293b',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px'
-  },
-  adminLabel: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: '2px 8px',
-    background: '#fef3c7',
-    color: '#d97706',
-    fontSize: '10px',
-    fontWeight: '800',
-    borderRadius: '4px',
-    textTransform: 'uppercase'
-  },
-  commentTime: {
-    fontSize: '12px',
-    color: '#94a3b8'
-  },
-  commentText: {
-    fontSize: '14px',
-    color: '#475569',
-    lineHeight: 1.5,
-    margin: 0
-  },
-  commentActions: {
-    display: 'flex',
-    gap: '12px',
-    marginTop: '8px'
-  },
-  commentLikeBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    fontSize: '12px',
-    color: '#64748b',
-    background: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    padding: 0
-  },
-  commentReplyBtn: {
-    fontSize: '12px',
-    color: '#ec4899',
-    background: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    fontWeight: '600',
-    padding: 0
-  },
-  commentDeleteBtn: {
-    fontSize: '12px',
-    color: '#ef4444',
-    background: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    fontWeight: '600',
-    padding: 0
-  },
-
-  // Delete Confirmation
-  confirmModal: {
-    background: '#ffffff',
-    borderRadius: '20px',
-    padding: '32px',
-    textAlign: 'center',
-    maxWidth: '400px',
-    width: '100%'
-  },
-  confirmIcon: {
-    width: '64px',
-    height: '64px',
-    borderRadius: '50%',
-    background: '#fef2f2',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    margin: '0 auto 16px'
-  },
-  confirmTitle: {
-    fontSize: '20px',
-    fontWeight: '700',
-    color: '#1e293b',
-    margin: '0 0 8px 0'
-  },
-  confirmText: {
-    color: '#64748b',
-    fontSize: '14px',
-    margin: '0 0 24px 0',
-    lineHeight: 1.5
-  },
-  confirmActions: {
-    display: 'flex',
-    gap: '12px',
-    justifyContent: 'center'
-  },
-  cancelButton: {
-    padding: '10px 24px',
-    background: '#f8fafc',
-    color: '#64748b',
-    border: '1px solid #e2e8f0',
-    borderRadius: '8px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer'
-  },
-  confirmDeleteButton: {
-    padding: '10px 24px',
-    background: '#ef4444',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer'
-  },
-
-  // Other existing styles...
-  modal: {
-    background: '#ffffff',
-    borderRadius: '20px',
-    width: '100%',
-    maxWidth: '520px',
-    maxHeight: '90vh',
-    overflow: 'auto'
-  },
-  modalHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '20px 24px',
-    borderBottom: '1px solid #f1f5f9'
-  },
-  modalTitle: {
-    fontSize: '18px',
-    fontWeight: '700',
-    margin: 0
-  },
-  closeButton: {
-    width: '32px',
-    height: '32px',
-    borderRadius: '8px',
-    border: 'none',
-    background: '#f8fafc',
-    color: '#64748b',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  formGroup: {
-    padding: '16px 24px'
-  },
-  label: {
-    display: 'block',
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: '6px'
-  },
-  select: {
-    width: '100%',
-    padding: '10px 14px',
-    borderRadius: '8px',
-    border: '1px solid #e2e8f0',
-    fontSize: '14px'
-  },
-  formRow: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '16px',
-    padding: '0 24px'
-  },
-  input: {
-    width: '100%',
-    padding: '10px 14px',
-    borderRadius: '8px',
-    border: '1px solid #e2e8f0',
-    fontSize: '14px',
-    boxSizing: 'border-box'
-  },
-  textarea: {
-    width: '100%',
-    padding: '10px 14px',
-    borderRadius: '8px',
-    border: '1px solid #e2e8f0',
-    fontSize: '14px',
-    resize: 'vertical',
-    minHeight: '100px',
-    boxSizing: 'border-box',
-    fontFamily: 'inherit'
-  },
-  primaryButton: {
-    width: 'calc(100% - 48px)',
-    margin: '0 24px 24px',
-    padding: '12px',
-    background: '#ec4899',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: '10px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer'
-  },
-  profileSection: {
-    textAlign: 'center',
-    padding: '24px'
-  },
-  resourceGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-    gap: '20px'
-  },
-  resourceCard: {
-    background: '#ffffff',
-    borderRadius: '16px',
-    border: '1px solid #f1f5f9',
-    padding: '24px',
-    display: 'flex',
-    gap: '16px'
-  },
-  resourceIcon: {
-    width: '48px',
-    height: '48px',
-    borderRadius: '12px',
-    background: '#fdf2f8',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  resourceContent: {
-    flex: 1
-  },
-  resourceType: {
-    fontSize: '12px',
-    fontWeight: '600',
-    color: '#ec4899'
-  },
-  resourceTitle: {
-    fontSize: '16px',
-    fontWeight: '700',
-    margin: '4px 0 8px 0'
-  },
-  resourceDesc: {
-    fontSize: '14px',
-    color: '#64748b',
-    marginBottom: '12px'
-  },
-  downloadButton: {
-    padding: '8px 16px',
-    background: '#f8fafc',
-    border: '1px solid #e2e8f0',
-    borderRadius: '8px',
-    fontSize: '13px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px'
-  },
-  audioGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
-    gap: '20px'
-  },
-  audioCard: {
-    background: '#ffffff',
-    borderRadius: '16px',
-    border: '1px solid #f1f5f9',
-    overflow: 'hidden',
-    cursor: 'pointer'
-  },
-  audioThumbnail: {
-    height: '140px',
-    background: '#fce7f3',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  audioInfo: {
-    padding: '16px'
-  },
-  audioType: {
-    fontSize: '12px',
-    color: '#ec4899',
-    fontWeight: '600'
-  },
-  audioTitle: {
-    fontSize: '15px',
-    fontWeight: '700',
-    margin: '4px 0 0 0'
-  },
-  playerBar: {
-    position: 'fixed',
-    bottom: '0',
-    left: '0',
-    right: '0',
-    background: '#ffffff',
-    borderTop: '1px solid #f1f5f9',
-    padding: '12px 40px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    zIndex: 100
-  },
-  playerInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '16px'
-  },
-  playButton: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '50%',
-    background: '#ec4899',
-    border: 'none',
-    color: '#ffffff',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer'
-  },
-  playerTitle: {
-    fontWeight: '600'
-  },
-  helpText: {
-    fontSize: '12px',
-    color: '#94a3b8',
-    marginTop: '6px',
-    lineHeight: 1.4
-  }
+  // Toast
+  toast: { position: 'fixed', top: '20px', right: '20px', padding: '16px 20px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px', zIndex: 1000, boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', animation: 'slideIn 0.3s ease' },
+  toastSuccess: { background: '#10b981', color: 'white' },
+  toastError: { background: '#ef4444', color: 'white' },
+  
+  // Header
+  header: { position: 'sticky', top: 0, background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)', borderBottom: '1px solid #f1f5f9', padding: '16px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 50 },
+  brand: { display: 'flex', alignItems: 'center', gap: '12px' },
+  brandText: { fontSize: '20px', fontWeight: '700' },
+  adminBadge: { display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', background: '#fef3c7', color: '#d97706', fontSize: '11px', fontWeight: '700', borderRadius: '20px', textTransform: 'uppercase' },
+  nav: { display: 'flex', gap: '4px', background: '#f1f5f9', padding: '4px', borderRadius: '10px' },
+  navButton: { padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'transparent', color: '#64748b', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px' },
+  navButtonActive: { background: 'white', color: '#1e293b', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
+  userActions: { display: 'flex', gap: '8px' },
+  iconButton: { width: '36px', height: '36px', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  
+  // Main
+  main: { maxWidth: '800px', margin: '0 auto', padding: '32px 20px' },
+  section: { marginBottom: '40px' },
+  sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' },
+  sectionTitle: { fontSize: '24px', fontWeight: '700', margin: 0 },
+  sectionSubtitle: { color: '#64748b', margin: '4px 0 0 0', fontSize: '15px' },
+  primaryButton: { padding: '10px 20px', background: '#ec4899', color: 'white', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' },
+  
+  // Controls
+  controlsBar: { display: 'flex', gap: '12px', marginBottom: '20px' },
+  searchBox: { flex: 1, position: 'relative', display: 'flex', alignItems: 'center' },
+  searchInput: { width: '100%', padding: '10px 16px 10px 40px', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '14px' },
+  clearSearch: { position: 'absolute', right: '12px', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' },
+  sortSelect: { padding: '10px 16px', borderRadius: '10px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer' },
+  
+  // Categories
+  categoryPills: { display: 'flex', gap: '8px', overflowX: 'auto', marginBottom: '24px', paddingBottom: '8px' },
+  pill: { padding: '8px 16px', borderRadius: '20px', border: '1px solid #e2e8f0', background: 'white', color: '#64748b', fontSize: '13px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' },
+  pillActive: { background: '#fce7f3', color: '#ec4899', borderColor: '#fce7f3' },
+  
+  // Cards
+  cardList: { display: 'flex', flexDirection: 'column', gap: '16px' },
+  card: { background: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #f1f5f9', cursor: 'pointer', transition: 'all 0.2s', position: 'relative' },
+  cardHover: { boxShadow: '0 4px 12px rgba(0,0,0,0.05)' },
+  pinnedCard: { background: '#fffbeb', borderColor: '#fef3c7' },
+  pinnedBadge: { position: 'absolute', top: '12px', right: '12px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '700', color: '#d97706', textTransform: 'uppercase' },
+  cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
+  categoryTag: { fontSize: '12px', fontWeight: '700', color: '#059669', textTransform: 'uppercase', letterSpacing: '0.5px' },
+  timeStamp: { fontSize: '13px', color: '#94a3b8' },
+  cardTitle: { fontSize: '18px', fontWeight: '700', margin: '0 0 8px 0', lineHeight: 1.3 },
+  cardExcerpt: { color: '#475569', fontSize: '15px', lineHeight: 1.6', margin: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' },
+  cardFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #f8fafc' },
+  author: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '600', color: '#475569' },
+  avatarSmall: { width: '28px', height: '28px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' },
+  stats: { display: 'flex', gap: '12px', alignItems: 'center' },
+  statBtn: { display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', borderRadius: '6px', border: 'none', background: '#f8fafc', color: '#64748b', fontSize: '13px', fontWeight: '600', cursor: 'pointer' },
+  statBtnActive: { background: '#fce7f3', color: '#ec4899' },
+  deleteBtn: { padding: '6px', border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', borderRadius: '6px' },
+  
+  // Empty/Skeleton
+  emptyState: { textAlign: 'center', padding: '60px 20px', color: '#94a3b8' },
+  link: { color: '#ec4899', cursor: 'pointer', textDecoration: 'underline' },
+  skeletonList: { display: 'flex', flexDirection: 'column', gap: '16px' },
+  skeletonCard: { height: '140px', background: '#f1f5f9', borderRadius: '16px', animation: 'pulse 2s infinite' },
+  
+  // Modal
+  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '20px' },
+  modal: { background: 'white', borderRadius: '20px', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflow: 'auto' },
+  detailModal: { background: 'white', borderRadius: '20px', width: '100%', maxWidth: '700px', maxHeight: '90vh', overflow: 'auto' },
+  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #f1f5f9' },
+  input: { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '16px', fontSize: '14px', boxSizing: 'border-box' },
+  textarea: { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', minHeight: '120px', fontSize: '14px', fontFamily: 'inherit', boxSizing: 'border-box' },
+  formGroup: { marginBottom: '16px', padding: '0 24px' },
+  formRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', padding: '0 24px' },
+  
+  // Detail View
+  detailHeader: { display: 'flex', alignItems: 'center', gap: '16px', padding: '16px 24px', borderBottom: '1px solid #f1f5f9' },
+  backBtn: { display: 'flex', alignItems: 'center', gap: '4px', padding: '8px 12px', borderRadius: '8px', border: 'none', background: '#f8fafc', color: '#64748b', fontWeight: '600', cursor: 'pointer' },
+  detailCategory: { flex: 1, textAlign: 'center', fontSize: '13px', fontWeight: '700', color: '#059669', textTransform: 'uppercase' },
+  adminDelete: { display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#fef2f2', color: '#ef4444', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' },
+  detailContent: { padding: '24px' },
+  detailTitle: { fontSize: '24px', fontWeight: '700', margin: '0 0 20px 0', lineHeight: 1.3 },
+  detailAuthor: { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' },
+  avatar: { width: '40px', height: '40px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  detailAuthorName: { fontWeight: '700' },
+  detailTime: { fontSize: '13px', color: '#94a3b8' },
+  detailBody: { fontSize: '16px', lineHeight: 1.8, color: '#475569', marginBottom: '24px' },
+  detailActions: { display: 'flex', gap: '12px', padding: '16px 0', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' },
+  actionBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '8px', border: 'none', background: '#f8fafc', color: '#64748b', fontWeight: '600', cursor: 'pointer' },
+  actionBtnActive: { background: '#fce7f3', color: '#ec4899' },
+  
+  // Comments
+  commentsSection: { padding: '24px', background: '#fafaf9' },
+  commentsTitle: { margin: '0 0 20px 0', fontSize: '16px', fontWeight: '700' },
+  commentInputBox: { display: 'flex', gap: '12px', marginBottom: '24px' },
+  commentInput: { flex: 1, padding: '12px 16px', borderRadius: '24px', border: '1px solid #e2e8f0', fontSize: '14px' },
+  sendBtn: { width: '40px', height: '40px', borderRadius: '50%', background: '#ec4899', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  commentsList: { display: 'flex', flexDirection: 'column', gap: '16px' },
+  comment: { display: 'flex', gap: '12px' },
+  commentContent: { flex: 1 },
+  commentHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '4px' },
+  commentAuthor: { fontWeight: '700', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' },
+  adminTag: { fontSize: '10px', background: '#fef3c7', color: '#d97706', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' },
+  commentTime: { fontSize: '12px', color: '#94a3b8' },
+  commentText: { margin: 0, color: '#475569', lineHeight: 1.5, fontSize: '14px' },
+  commentActions: { display: 'flex', gap: '12px', marginTop: '8px' },
+  commentAction: { fontSize: '12px', color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' },
+  commentActionDelete: { fontSize: '12px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' },
+  
+  // Confirmation
+  confirmBox: { background: 'white', padding: '32px', borderRadius: '20px', textAlign: 'center', maxWidth: '360px' },
+  confirmButtons: { display: 'flex', gap: '12px', marginTop: '24px' },
+  cancelBtn: { flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', fontWeight: '600' },
+  deleteConfirmBtn: { flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#ef4444', color: 'white', cursor: 'pointer', fontWeight: '600' },
+  
+  // Audio
+  audioBar: { position: 'fixed', bottom: 0, left: 0, right: 0, background: 'white', borderTop: '1px solid #f1f5f9', padding: '12px 40px', display: 'flex', alignItems: 'center', gap: '16px', zIndex: 50 },
+  audioBarPlay: { width: '40px', height: '40px', borderRadius: '50%', background: '#ec4899', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  audioBarInfo: { flex: 1 },
+  audioBarTitle: { fontWeight: '700' },
+  audioBarMeta: { fontSize: '13px', color: '#64748b' },
+  audioProgress: { width: '200px', height: '4px', background: '#f1f5f9', borderRadius: '2px', overflow: 'hidden' },
+  audioProgressFill: { width: '40%', height: '100%', background: '#ec4899', borderRadius: '2px' },
+  audioGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px' },
+  audioCard: { background: 'white', borderRadius: '16px', overflow: 'hidden', border: '1px solid #f1f5f9', cursor: 'pointer' },
+  audioThumb: { height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  audioPlayBtn: { width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  audioInfo: { padding: '16px' },
+  audioType: { fontSize: '12px', fontWeight: '700', color: '#ec4899', textTransform: 'uppercase' },
+  audioTitle: { margin: '4px 0', fontSize: '15px', fontWeight: '700' },
+  audioMeta: { fontSize: '13px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' },
+  
+  // Resources
+  resourceGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' },
+  resourceCard: { background: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #f1f5f9', display: 'flex', gap: '16px' },
+  downloadBtn: { padding: '8px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '12px' },
 };
 
 export default WellnessPortal;
