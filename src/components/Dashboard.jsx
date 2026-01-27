@@ -24,7 +24,9 @@ import {
   Shield,
   MoreHorizontal,
   ChevronLeft,
-  Flag
+  Flag,
+  Headphones,
+  FileText
 } from 'lucide-react';
 
 // Categories for organization
@@ -368,6 +370,63 @@ const WellnessPortal = () => {
   const filteredDiscussions = selectedCategory === 'All' 
     ? discussions 
     : discussions.filter(d => d.category === selectedCategory);
+
+  // If no user is logged in, show login screen
+  if (!user) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.loginContainer}>
+          <div style={styles.loginBox}>
+            <div style={styles.loginHeader}>
+              <Heart size={48} color="#ec4899" fill="#fce7f3" />
+              <h1 style={styles.loginTitle}>Serenity Space</h1>
+              <p style={styles.loginSubtitle}>Your wellness community awaits</p>
+            </div>
+            
+            {error && (
+              <div style={styles.errorMessage}>{error}</div>
+            )}
+            
+            <div style={styles.loginForm}>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Email</label>
+                <input 
+                  type="email"
+                  style={styles.input}
+                  placeholder="Enter your email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                />
+              </div>
+              
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Password</label>
+                <input 
+                  type="password"
+                  style={styles.input}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                />
+              </div>
+              
+              <button 
+                style={styles.loginButton}
+                onClick={handleAuth}
+                disabled={loading}
+              >
+                {loading ? 'Loading...' : 'Sign In'}
+              </button>
+              
+              <p style={styles.loginHint}>
+                Use any email (try "admin@example.com" for admin access)
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.container}>
@@ -863,6 +922,67 @@ const WellnessPortal = () => {
         </div>
       )}
 
+      {/* Upload Audio Modal */}
+      {showUploadAudio && (
+        <div style={styles.modalOverlay} onClick={() => setShowUploadAudio(false)}>
+          <div style={styles.modal} onClick={e => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <h3 style={styles.modalTitle}>Upload Audio</h3>
+              <button style={styles.closeButton} onClick={() => setShowUploadAudio(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Type</label>
+              <select 
+                style={styles.select}
+                value={uploadData.type}
+                onChange={e => setUploadData({...uploadData, type: e.target.value})}
+              >
+                {CATEGORIES.audio.map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Title</label>
+              <input 
+                style={styles.input}
+                placeholder="Audio title"
+                value={uploadData.title}
+                onChange={e => setUploadData({...uploadData, title: e.target.value})}
+              />
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Duration (e.g., 5:30)</label>
+              <input 
+                style={styles.input}
+                placeholder="5:30"
+                value={uploadData.duration}
+                onChange={e => setUploadData({...uploadData, duration: e.target.value})}
+              />
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Description</label>
+              <textarea 
+                style={styles.textarea}
+                placeholder="Describe your audio..."
+                value={uploadData.description}
+                onChange={e => setUploadData({...uploadData, description: e.target.value})}
+                rows={3}
+              />
+            </div>
+            <button 
+              style={styles.primaryButton}
+              onClick={handleAudioUpload}
+              disabled={!uploadData.title}
+            >
+              Upload Audio
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Profile Modal */}
       {showProfile && (
         <div style={styles.modalOverlay} onClick={() => setShowProfile(false)}>
@@ -910,6 +1030,68 @@ const styles = {
     background: '#fafaf9',
     color: '#1e293b',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  },
+  loginContainer: {
+    minHeight: '100vh',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '20px'
+  },
+  loginBox: {
+    background: '#ffffff',
+    borderRadius: '20px',
+    padding: '48px',
+    maxWidth: '420px',
+    width: '100%',
+    boxShadow: '0 10px 40px rgba(0,0,0,0.1)'
+  },
+  loginHeader: {
+    textAlign: 'center',
+    marginBottom: '32px'
+  },
+  loginTitle: {
+    fontSize: '32px',
+    fontWeight: '700',
+    margin: '16px 0 8px 0',
+    color: '#1e293b'
+  },
+  loginSubtitle: {
+    color: '#64748b',
+    fontSize: '16px',
+    margin: 0
+  },
+  loginForm: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px'
+  },
+  loginButton: {
+    width: '100%',
+    padding: '14px',
+    background: '#ec4899',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '10px',
+    fontSize: '16px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    marginTop: '8px'
+  },
+  loginHint: {
+    textAlign: 'center',
+    fontSize: '13px',
+    color: '#94a3b8',
+    margin: '8px 0 0 0'
+  },
+  errorMessage: {
+    background: '#fef2f2',
+    color: '#ef4444',
+    padding: '12px 16px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    marginBottom: '16px',
+    textAlign: 'center'
   },
   header: {
     display: 'flex',
@@ -1723,7 +1905,8 @@ const styles = {
     padding: '12px 40px',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between'
+    justifyContent: 'space-between',
+    zIndex: 100
   },
   playerInfo: {
     display: 'flex',
