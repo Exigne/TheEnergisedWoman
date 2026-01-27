@@ -37,77 +37,71 @@ const CATEGORIES = {
 };
 
 // Enhanced sample data with comments
-const SAMPLE_DISCUSSIONS = [
-  {
-    id: 1,
-    author: "Sarah M.",
-    authorId: "user1",
-    avatar: "",
-    category: "Self Care",
-    title: "Morning routine tips for busy moms?",
-    content: "I'm struggling to find time for myself in the mornings between getting the kids ready and starting work. Would love to hear what works for you all! I've tried waking up at 5am but I'm not a morning person. Does anyone have practical tips for carving out even just 15 minutes of 'me time'?",
-    likes: 24,
-    likedBy: ["user2", "user3"],
-    comments: [
-      {
-        id: 101,
-        author: "Jessica T.",
-        content: "I prep everything the night before - clothes, lunches, etc. That gives me 20 minutes in the morning!",
-        timestamp: "1 hour ago",
-        likes: 5
-      },
-      {
-        id: 102,
-        author: "Emma L.",
-        content: "I do a 10-minute meditation while my coffee brews. It's not much but it centers me.",
-        timestamp: "45 minutes ago",
-        likes: 8
-      }
-    ],
-    timestamp: "2 hours ago",
-    tags: ["routine", "wellness", "morning"],
-    isPinned: false
+const SAMPLE_DISCUSSIONS = [];
+
+// Neon Database API URL - Replace with your actual Neon API endpoint
+const NEON_API_URL = 'YOUR_NEON_API_ENDPOINT_HERE';
+
+// Database API functions
+const api = {
+  // Fetch all discussions
+  fetchDiscussions: async () => {
+    try {
+      const response = await fetch(`${NEON_API_URL}/discussions`);
+      if (!response.ok) throw new Error('Failed to fetch discussions');
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching discussions:', error);
+      return [];
+    }
   },
-  {
-    id: 2,
-    author: "Jessica T.",
-    authorId: "user2",
-    avatar: "",
-    category: "Mental Health",
-    title: "Dealing with burnout - sharing my journey",
-    content: "After 6 months of feeling overwhelmed, I've learned a few things about setting boundaries. The biggest game-changer was learning to say 'no' without guilt. I used to agree to everything and ended up resentful and exhausted. Has anyone else struggled with people-pleasing tendencies? How did you overcome them?",
-    likes: 56,
-    likedBy: ["user1", "user4", "user5"],
-    comments: [
-      {
-        id: 201,
-        author: "Admin",
-        content: "Thank you for sharing this vulnerability. It's so important to normalize these conversations.",
-        timestamp: "4 hours ago",
-        likes: 12,
-        isAdmin: true
-      }
-    ],
-    timestamp: "5 hours ago",
-    tags: ["burnout", "boundaries", "healing"],
-    isPinned: true
+
+  // Create new discussion
+  createDiscussion: async (discussion) => {
+    try {
+      const response = await fetch(`${NEON_API_URL}/discussions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(discussion)
+      });
+      if (!response.ok) throw new Error('Failed to create discussion');
+      return await response.json();
+    } catch (error) {
+      console.error('Error creating discussion:', error);
+      return null;
+    }
   },
-  {
-    id: 3,
-    author: "Emma L.",
-    authorId: "user3",
-    avatar: "",
-    category: "Career",
-    title: "Negotiating remote work for better balance",
-    content: "Just successfully negotiated 3 days remote! Here's how I approached the conversation...",
-    likes: 89,
-    likedBy: [],
-    comments: [],
-    timestamp: "1 day ago",
-    tags: ["career", "work-life-balance", "remote"],
-    isPinned: false
+
+  // Update discussion (for likes, comments)
+  updateDiscussion: async (id, updates) => {
+    try {
+      const response = await fetch(`${NEON_API_URL}/discussions/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      if (!response.ok) throw new Error('Failed to update discussion');
+      return await response.json();
+    } catch (error) {
+      console.error('Error updating discussion:', error);
+      return null;
+    }
+  },
+
+  // Delete discussion
+  deleteDiscussion: async (id) => {
+    try {
+      const response = await fetch(`${NEON_API_URL}/discussions/${id}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error('Failed to delete discussion');
+      return true;
+    } catch (error) {
+      console.error('Error deleting discussion:', error);
+      return false;
+    }
   }
-];
+};
 
 const SAMPLE_RESOURCES = [
   {
@@ -192,12 +186,16 @@ const WellnessPortal = () => {
     title: '', 
     type: 'Meditation', 
     duration: '', 
-    description: '' 
+    description: '',
+    fileUrl: ''
   });
   
   // Profile state
   const [showProfile, setShowProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ displayName: '', bio: '' });
+  
+  // Audio player ref
+  const audioRef = useRef(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('wellnessUser');
@@ -210,6 +208,31 @@ const WellnessPortal = () => {
       });
     }
   }, []);
+  
+  // Load discussions from database
+  useEffect(() => {
+    if (user) {
+      loadDiscussions();
+    }
+  }, [user]);
+  
+  const loadDiscussions = async () => {
+    const data = await api.fetchDiscussions();
+    if (data && data.length > 0) {
+      setDiscussions(data);
+    }
+  };
+  
+  // Handle audio playback
+  useEffect(() => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.play().catch(err => console.log('Playback error:', err));
+      } else {
+        audioRef.current.pause();
+      }
+    }
+  }, [isPlaying, currentlyPlaying]);
 
   const handleAuth = async () => {
     if (!email || !password) {
@@ -235,27 +258,30 @@ const WellnessPortal = () => {
   };
 
   // Like functionality
-  const handleLike = (postId, e) => {
+  const handleLike = async (postId, e) => {
     if (e) e.stopPropagation();
     if (!user) return;
     
-    setDiscussions(prev => prev.map(post => {
-      if (post.id === postId) {
-        const hasLiked = post.likedBy.includes(user.email);
-        return {
-          ...post,
-          likes: hasLiked ? post.likes - 1 : post.likes + 1,
-          likedBy: hasLiked 
-            ? post.likedBy.filter(id => id !== user.email)
-            : [...post.likedBy, user.email]
-        };
-      }
-      return post;
-    }));
+    const post = discussions.find(p => p.id === postId);
+    const hasLiked = post.likedBy.includes(user.email);
+    
+    const updatedPost = {
+      ...post,
+      likes: hasLiked ? post.likes - 1 : post.likes + 1,
+      likedBy: hasLiked 
+        ? post.likedBy.filter(id => id !== user.email)
+        : [...post.likedBy, user.email]
+    };
+    
+    // Update in database
+    await api.updateDiscussion(postId, updatedPost);
+    
+    // Update local state
+    setDiscussions(prev => prev.map(p => p.id === postId ? updatedPost : p));
   };
 
   // Add comment
-  const handleAddComment = () => {
+  const handleAddComment = async () => {
     if (!commentText.trim() || !user || !selectedPost) return;
     
     const newComment = {
@@ -267,55 +293,62 @@ const WellnessPortal = () => {
       likes: 0
     };
     
-    setDiscussions(prev => prev.map(post => {
-      if (post.id === selectedPost.id) {
-        return {
-          ...post,
-          comments: [...post.comments, newComment]
-        };
-      }
-      return post;
-    }));
+    const updatedPost = {
+      ...selectedPost,
+      comments: [...selectedPost.comments, newComment]
+    };
     
-    setSelectedPost(prev => ({
-      ...prev,
-      comments: [...prev.comments, newComment]
-    }));
+    // Update in database
+    await api.updateDiscussion(selectedPost.id, updatedPost);
     
+    // Update local state
+    setDiscussions(prev => prev.map(post => 
+      post.id === selectedPost.id ? updatedPost : post
+    ));
+    
+    setSelectedPost(updatedPost);
     setCommentText('');
   };
 
   // Delete post (admin only)
-  const handleDeletePost = (postId) => {
-    if (!isAdmin) return;
-    setDiscussions(prev => prev.filter(post => post.id !== postId));
-    setSelectedPost(null);
-    setShowDeleteConfirm(null);
-  };
-
-  // Delete comment (admin only)
-  const handleDeleteComment = (postId, commentId) => {
+  const handleDeletePost = async (postId) => {
     if (!isAdmin) return;
     
-    setDiscussions(prev => prev.map(post => {
-      if (post.id === postId) {
-        return {
-          ...post,
-          comments: post.comments.filter(c => c.id !== commentId)
-        };
-      }
-      return post;
-    }));
+    // Delete from database
+    const success = await api.deleteDiscussion(postId);
     
-    if (selectedPost) {
-      setSelectedPost(prev => ({
-        ...prev,
-        comments: prev.comments.filter(c => c.id !== commentId)
-      }));
+    if (success) {
+      // Update local state
+      setDiscussions(prev => prev.filter(post => post.id !== postId));
+      setSelectedPost(null);
+      setShowDeleteConfirm(null);
     }
   };
 
-  const handleNewPost = () => {
+  // Delete comment (admin only)
+  const handleDeleteComment = async (postId, commentId) => {
+    if (!isAdmin) return;
+    
+    const post = discussions.find(p => p.id === postId);
+    const updatedPost = {
+      ...post,
+      comments: post.comments.filter(c => c.id !== commentId)
+    };
+    
+    // Update in database
+    await api.updateDiscussion(postId, updatedPost);
+    
+    // Update local state
+    setDiscussions(prev => prev.map(p => 
+      p.id === postId ? updatedPost : p
+    ));
+    
+    if (selectedPost) {
+      setSelectedPost(updatedPost);
+    }
+  };
+
+  const handleNewPost = async () => {
     if (!newPostData.title || !newPostData.content) return;
     
     const post = {
@@ -329,18 +362,33 @@ const WellnessPortal = () => {
       likes: 0,
       likedBy: [],
       comments: [],
-      timestamp: "Just now",
+      timestamp: new Date().toISOString(),
       tags: [],
       isPinned: false
     };
     
-    setDiscussions([post, ...discussions]);
-    setNewPostData({ title: '', content: '', category: 'General' });
-    setShowNewPost(false);
+    // Save to database
+    const savedPost = await api.createDiscussion(post);
+    
+    if (savedPost) {
+      // Update local state
+      setDiscussions([savedPost, ...discussions]);
+      setNewPostData({ title: '', content: '', category: 'General' });
+      setShowNewPost(false);
+    }
   };
 
   const handleAudioUpload = () => {
-    if (!uploadData.title) return;
+    if (!uploadData.title || !uploadData.fileUrl) return;
+    
+    // Convert Google Drive link to direct playable URL
+    let audioUrl = uploadData.fileUrl;
+    if (audioUrl.includes('drive.google.com')) {
+      const fileIdMatch = audioUrl.match(/\/d\/([^\/]+)/);
+      if (fileIdMatch) {
+        audioUrl = `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
+      }
+    }
     
     const newAudio = {
       id: Date.now(),
@@ -350,20 +398,29 @@ const WellnessPortal = () => {
       author: user.display_name || "You",
       plays: 0,
       description: uploadData.description,
-      thumbnail: "pink"
+      thumbnail: "pink",
+      audioUrl: audioUrl
     };
     
     setAudioLibrary([newAudio, ...audioLibrary]);
-    setUploadData({ title: '', type: 'Meditation', duration: '', description: '' });
+    setUploadData({ title: '', type: 'Meditation', duration: '', description: '', fileUrl: '' });
     setShowUploadAudio(false);
   };
 
   const togglePlay = (id) => {
+    const audio = audioLibrary.find(a => a.id === id);
+    
     if (currentlyPlaying === id) {
       setIsPlaying(!isPlaying);
     } else {
       setCurrentlyPlaying(id);
       setIsPlaying(true);
+      
+      // Load new audio source
+      if (audioRef.current && audio?.audioUrl) {
+        audioRef.current.src = audio.audioUrl;
+        audioRef.current.load();
+      }
     }
   };
 
@@ -430,6 +487,9 @@ const WellnessPortal = () => {
 
   return (
     <div style={styles.container}>
+      {/* Hidden Audio Player */}
+      <audio ref={audioRef} />
+      
       {/* Header */}
       <header style={styles.header}>
         <div style={styles.brand}>
@@ -954,6 +1014,18 @@ const WellnessPortal = () => {
               />
             </div>
             <div style={styles.formGroup}>
+              <label style={styles.label}>Google Drive File URL</label>
+              <input 
+                style={styles.input}
+                placeholder="Paste Google Drive share link here"
+                value={uploadData.fileUrl}
+                onChange={e => setUploadData({...uploadData, fileUrl: e.target.value})}
+              />
+              <p style={styles.helpText}>
+                Right-click your audio file in Google Drive → Get link → Make sure it's set to "Anyone with the link"
+              </p>
+            </div>
+            <div style={styles.formGroup}>
               <label style={styles.label}>Duration (e.g., 5:30)</label>
               <input 
                 style={styles.input}
@@ -975,7 +1047,7 @@ const WellnessPortal = () => {
             <button 
               style={styles.primaryButton}
               onClick={handleAudioUpload}
-              disabled={!uploadData.title}
+              disabled={!uploadData.title || !uploadData.fileUrl}
             >
               Upload Audio
             </button>
@@ -1927,6 +1999,12 @@ const styles = {
   },
   playerTitle: {
     fontWeight: '600'
+  },
+  helpText: {
+    fontSize: '12px',
+    color: '#94a3b8',
+    marginTop: '6px',
+    lineHeight: 1.4
   }
 };
 
