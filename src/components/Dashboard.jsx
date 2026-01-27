@@ -163,7 +163,7 @@ const Dashboard = () => {
             <input style={styles.input} type="password" placeholder="Password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required />
             <button type="submit" style={styles.primaryButtonFull}>Sign In</button>
           </form>
-          <div style={{marginTop: '20px', textAlign: 'center', fontSize: '12px', color: '#94a3b8'}}>Use any email to test. Use 'admin@...' for admin features.</div>
+          <div style={{marginTop: '20px', textAlign: 'center', fontSize: '12px', color: '#94a3b8'}}>Remember, don't forget your password.</div>
         </div>
       </div>
     );
