@@ -18,6 +18,10 @@ const Dashboard = () => {
   const [viewingDoc, setViewingDoc] = useState(null);
   const [selectedAudio, setSelectedAudio] = useState(null);
   
+  // Login State (New)
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  
   const [discussions, setDiscussions] = useState([]);
   const [audios, setAudios] = useState([]);
   const [resources, setResources] = useState([]);
@@ -58,6 +62,23 @@ const Dashboard = () => {
     } catch (err) { 
       console.error("Data load error", err);
     }
+  };
+
+  // --- NEW LOGIN HANDLER ---
+  const handleLogin = (e) => {
+    e.preventDefault();
+    // Simulate login - in a real app, send to backend here
+    const userData = {
+      email: loginEmail,
+      display_name: loginEmail.split('@')[0],
+      isAdmin: loginEmail.toLowerCase().includes('admin'), // Simple check for admin
+      token: 'mock-token-' + Date.now()
+    };
+    
+    localStorage.setItem('wellnessUser', JSON.stringify(userData));
+    setUser(userData);
+    setIsAdmin(userData.isAdmin);
+    loadAllData();
   };
 
   // Audio player functions
@@ -186,7 +207,49 @@ const Dashboard = () => {
     }
   };
 
-  if (!user) return <div style={{padding: '50px', textAlign: 'center'}}>Please Sign In</div>;
+  // --- REPLACED: Login View ---
+  if (!user) {
+    return (
+      <div style={styles.loginContainer}>
+        <div style={styles.loginCard}>
+          <div style={{textAlign: 'center', marginBottom: '30px'}}>
+            <div style={{display:'inline-flex', padding: '12px', background: '#fdf2f8', borderRadius: '50%', marginBottom: '15px'}}>
+               <Crown size={32} color="#ec4899" />
+            </div>
+            <h1 style={{fontSize: '24px', fontWeight: '800', color: '#1e293b', margin: '0 0 8px 0'}}>The Energised Woman</h1>
+            <p style={{color: '#64748b', fontSize: '14px', margin: 0}}>Sign in to access your wellness hub</p>
+          </div>
+          
+          <form onSubmit={handleLogin}>
+            <div style={{marginBottom: '15px'}}>
+               <input 
+                 style={styles.input} 
+                 type="email" 
+                 placeholder="Email address" 
+                 value={loginEmail}
+                 onChange={(e) => setLoginEmail(e.target.value)}
+                 required
+               />
+            </div>
+            <div style={{marginBottom: '25px'}}>
+               <input 
+                 style={styles.input} 
+                 type="password" 
+                 placeholder="Password" 
+                 value={loginPassword}
+                 onChange={(e) => setLoginPassword(e.target.value)}
+                 required
+               />
+            </div>
+            <button type="submit" style={styles.primaryButtonFull}>Sign In</button>
+          </form>
+          <div style={{marginTop: '20px', textAlign: 'center', fontSize: '12px', color: '#94a3b8'}}>
+            Use any email to test. Use 'admin@...' for admin features.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.container}>
@@ -363,6 +426,10 @@ const Dashboard = () => {
 
 const styles = {
   container: { minHeight: '100vh', background: '#f8fafc', fontFamily: 'Inter, sans-serif' },
+  // --- NEW LOGIN STYLES ---
+  loginContainer: { minHeight: '100vh', background: '#f8fafc', fontFamily: 'Inter, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' },
+  loginCard: { background: 'white', padding: '40px', borderRadius: '24px', width: '100%', maxWidth: '400px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' },
+  // ------------------------
   header: { background: 'white', padding: '0 40px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 100 },
   brand: { display: 'flex', alignItems: 'center', gap: '8px' },
   brandText: { fontSize: '18px', fontWeight: '800', color: '#1e293b' },
