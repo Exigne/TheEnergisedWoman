@@ -18,11 +18,11 @@ exports.handler = async (event) => {
   try {
     const data = JSON.parse(event.body || '{}');
     const { action, email, password, isRegistering } = data;
+    const type = event.queryStringParameters?.type || 'discussion';
 
     // AUTHENTICATION
     if (action === 'auth') {
       if (isRegistering) {
-        // Create new user
         const result = await pool.query(
           `INSERT INTO users (email, password_hash, display_name, created_at) 
            VALUES ($1, $2, $3, NOW()) 
@@ -37,7 +37,6 @@ exports.handler = async (event) => {
           body: JSON.stringify(result.rows[0])
         };
       } else {
-        // Login
         const result = await pool.query(
           `SELECT email, display_name, is_admin, bio, password_hash 
            FROM users 
@@ -63,7 +62,7 @@ exports.handler = async (event) => {
           };
         }
         
-        delete user.password_hash; // Don't send password back
+        delete user.password_hash;
         
         return {
           statusCode: 200,
@@ -73,7 +72,19 @@ exports.handler = async (event) => {
       }
     }
 
-    // GET DISCUSSIONS
+    // GET RESOURCES (Admin only functionality)
+    if (event.httpMethod === 'GET' && type === 'resources') {
+      const result = await pool.query(
+        'SELECT * FROM resources ORDER BY created_at DESC'
+      );
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify(result.rows)
+      };
+    }
+
+    // GET DISCUSSIONS (Default)
     if (event.httpMethod === 'GET') {
       const result = await pool.query(
         'SELECT * FROM discussions ORDER BY created_at DESC'
@@ -85,7 +96,23 @@ exports.handler = async (event) => {
       };
     }
 
-    // CREATE POST
+    // CREATE RESOURCE (Admin only)
+    if (event.httpMethod === 'POST' && type === 'resource') {
+      const { title, type: resourceType, description, url, author } = data;
+      const result = await pool.query(
+        `INSERT INTO resources (title, type, description, url, author, downloads, created_at) 
+         VALUES ($1, $2, $3, $4, $5, 0, NOW()) 
+         RETURNING *`,
+        [title, resourceType, description, url, author]
+      );
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify(result.rows[0])
+      };
+    }
+
+    // CREATE DISCUSSION (Default)
     if (event.httpMethod === 'POST') {
       const { author, authorId, title, content, category } = data;
       const result = await pool.query(
@@ -101,7 +128,7 @@ exports.handler = async (event) => {
       };
     }
 
-    // UPDATE (likes, comments)
+    // UPDATE (likes, comments for discussions)
     if (event.httpMethod === 'PUT') {
       const id = event.queryStringParameters?.id;
       const result = await pool.query(
