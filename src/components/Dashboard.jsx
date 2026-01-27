@@ -42,16 +42,6 @@ const Dashboard = () => {
       setUser(userData);
       setIsAdmin(userData.isAdmin || userData.email?.includes('admin'));
       loadAllData();
-    } else {
-      // Demo user for testing
-      const demoUser = { 
-        display_name: 'Demo User', 
-        email: 'demo@example.com', 
-        isAdmin: true 
-      };
-      setUser(demoUser);
-      setIsAdmin(true);
-      loadDemoData();
     }
   }, []);
 
@@ -67,24 +57,7 @@ const Dashboard = () => {
       if (aRes.ok) setAudios(await aRes.json());
     } catch (err) { 
       console.error("Data load error", err);
-      loadDemoData();
     }
-  };
-
-  const loadDemoData = () => {
-    setDiscussions([
-      { id: 1, title: 'Morning Routine Tips', content: 'What does everyone do to start their day energized?', category: 'Self Care', author: 'Sarah M.', comments: [{id: 1, author: 'Jane D.', text: 'I love starting with meditation!'}], created_at: new Date().toISOString() },
-      { id: 2, title: 'Managing Work-Life Balance', content: 'How do you all manage work and family time?', category: 'Career', author: 'Emily R.', comments: [], created_at: new Date().toISOString() }
-    ]);
-    
-    setAudios([
-      { id: 1, title: 'Morning Energy Meditation', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', description: 'A 10-minute guided meditation to energize your morning', comments: [{id: 1, author: 'Lisa K.', text: 'This helped me so much!'}] },
-      { id: 2, title: 'Stress Relief Session', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3', description: 'Calm your mind with this relaxing audio session', comments: [] }
-    ]);
-    
-    setResources([
-      { id: 1, title: 'Self-Care Guide', url: 'https://docs.google.com/document/d/1example/edit', type: 'PDF' }
-    ]);
   };
 
   // Audio player functions
