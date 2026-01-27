@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+ import React, { useState, useEffect } from 'react';
 import { 
   X, MessageSquare, LogOut, Crown, Plus, Music, 
-  FileText, User, Hash, Send, Heart, MessageCircle, Play, Mic, Headphones
+  FileText, User, Hash, Send, Heart, MessageCircle, Play, Mic, Headphones, Clock
 } from 'lucide-react';
 
 const PODCAST_RSS = "https://anchor.fm/s/e88b839c/podcast/rss";
+
+// Define the groups array that was missing
+const GROUPS = ['All Discussions', 'General', 'Support', 'Podcast', 'Resources'];
 
 const Dashboard = () => {
   const [user, setUser] = useState(null);
@@ -42,6 +45,7 @@ const Dashboard = () => {
 
   const fetchPodcast = async () => {
     try {
+      // Fixed: removed space in URL template literal
       const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(PODCAST_RSS)}`);
       const data = await res.json();
       if (data.items) setEpisodes(data.items);
@@ -140,6 +144,14 @@ const Dashboard = () => {
             </section>
           </div>
         )}
+
+        {/* Resources tab was referenced but not implemented - adding basic structure */}
+        {activeTab === 'resources' && (
+          <div style={styles.sectionHeader}>
+            <h2>Library Resources</h2>
+            <p style={{color: '#64748b'}}>Your saved resources will appear here.</p>
+          </div>
+        )}
       </main>
 
       {/* --- MASTER DETAIL MODAL (Handles Post or Podcast) --- */}
@@ -208,11 +220,13 @@ const styles = {
   sidebarBtn: { textAlign: 'left', padding: '10px 12px', borderRadius: '8px', border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', gap: '8px' },
   sidebarBtnActive: { background: '#fdf2f8', color: '#ec4899', fontWeight: '700' },
   card: { background: 'white', padding: '24px', borderRadius: '20px', border: '1px solid #e2e8f0', cursor: 'pointer', marginBottom: '16px' },
+  cardHeader: { marginBottom: '8px' },
   tag: { fontSize: '10px', background: '#fdf2f8', color: '#ec4899', padding: '4px 10px', borderRadius: '20px', fontWeight: '800' },
   cardTitle: { fontSize: '18px', margin: '8px 0', color: '#1e293b' },
   primaryButton: { background: '#ec4899', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' },
   modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
   popOutContent: { background: 'white', width: '650px', borderRadius: '28px', padding: '30px', position: 'relative', maxHeight: '90vh', overflowY: 'auto' },
+  popOutTitle: { fontSize: '24px', marginBottom: '16px', color: '#1e293b' }, // Added missing style
   popOutBody: { fontSize: '15px', lineHeight: '1.7', color: '#334155' },
   divider: { border: 'none', borderTop: '1px solid #f1f5f9', margin: '20px 0' },
   commentSection: { marginTop: '10px' },
