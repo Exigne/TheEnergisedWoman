@@ -30,8 +30,9 @@ const Dashboard = () => {
   const [commentText, setCommentText] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
 
-  // Resources stored in state (from Neon) but managed by admin only - currently hidden from main view
+  // Resources stored in state - visible to all, uploadable by admin only
   const [resources, setResources] = useState([]);
+  const [resourcesLoading, setResourcesLoading] = useState(false);
   const [showResourcesPanel, setShowResourcesPanel] = useState(false);
   const [showUploadResource, setShowUploadResource] = useState(false);
   const [resourceData, setResourceData] = useState({ title: '', type: 'Guide', description: '', url: '' });
@@ -56,7 +57,8 @@ const Dashboard = () => {
         bio: userData.bio || ''
       });
       loadDiscussions();
-      if (userData.isAdmin) loadResources();
+      // Load resources for ALL users, not just admin
+      loadResources();
     }
   }, []);
 
@@ -75,8 +77,9 @@ const Dashboard = () => {
     }
   };
 
-  // Load resources (admin only view)
+  // Load resources for all users to view
   const loadResources = async () => {
+    setResourcesLoading(true);
     try {
       const response = await fetch('/.netlify/functions/database?type=resources', { method: 'GET' });
       if (response.ok) {
@@ -85,6 +88,8 @@ const Dashboard = () => {
       }
     } catch (err) {
       console.error('Failed to load resources');
+    } finally {
+      setResourcesLoading(false);
     }
   };
 
@@ -131,7 +136,8 @@ const Dashboard = () => {
           localStorage.setItem('wellnessUser', JSON.stringify(newUser));
           showToast('Account created!', 'success');
           loadDiscussions();
-          if (newUser.is_admin || email.includes('admin')) loadResources();
+          // Load resources for all users
+          loadResources();
           return;
         }
       }
@@ -144,7 +150,8 @@ const Dashboard = () => {
       localStorage.setItem('wellnessUser', JSON.stringify(userData));
       showToast('Welcome back!', 'success');
       loadDiscussions();
-      if (userData.isAdmin) loadResources();
+      // Load resources for all users
+      loadResources();
       
     } catch (err) {
       setError('Cannot connect. Please try again.');
@@ -308,7 +315,6 @@ const Dashboard = () => {
       <div style={styles.container}>
         <div style={styles.loginBox}>
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
-            {/* Changed from Heart to Sparkles/Crown motif */}
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginBottom: 16 }}>
               <Crown size={40} color="#ec4899" />
               <Zap size={48} color="#ec4899" />
@@ -341,23 +347,20 @@ const Dashboard = () => {
       
       <header style={styles.header}>
         <div style={styles.brand}>
-          {/* Woman motif instead of heart */}
           <Zap size={32} color="#ec4899" />
           <h1 style={styles.brandText}>The Energised Woman</h1>
           {isAdmin && <span style={styles.adminBadge}><Shield size={14} /> Admin</span>}
         </div>
         
-        {/* Admin only: Resource Management Button */}
+        {/* Resources button visible to ALL users, not just admin */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {isAdmin && (
-            <button 
-              onClick={() => setShowResourcesPanel(true)} 
-              style={styles.adminPanelBtn}
-            >
-              <FileText size={18} />
-              Resources
-            </button>
-          )}
+          <button 
+            onClick={() => setShowResourcesPanel(true)} 
+            style={styles.resourceButton}
+          >
+            <FileText size={18} />
+            Resources
+          </button>
           
           <div style={styles.nav}>
             <button style={{...styles.navButton, ...styles.navButtonActive}}>
@@ -374,7 +377,6 @@ const Dashboard = () => {
       </header>
 
       <main style={styles.main}>
-        {/* Community Only - Resources and Audio removed from main view */}
         <div style={styles.section}>
           <div style={styles.sectionHeader}>
             <div>
@@ -501,32 +503,55 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Admin Only: Resources Panel */}
-      {isAdmin && showResourcesPanel && (
+      {/* Resources Panel - Visible to ALL users, but upload restricted to admin */}
+      {showResourcesPanel && (
         <div style={styles.modalOverlay} onClick={() => setShowResourcesPanel(false)}>
           <div style={{...styles.detailModal, maxWidth: 800}} onClick={e => e.stopPropagation()}>
             <div style={styles.modalHeader}>
-              <h3>Resource Management (Admin Only)</h3>
-              <button onClick={() => setShowResourcesPanel(false)}><X size={20} /></button>
+              <h3>Resources Library</h3>
+              <button onClick={() => setShowResourcesPanel(false)} style={styles.closeButton}><X size={20} /></button>
             </div>
             <div style={{padding: 24}}>
-              <p style={{marginBottom: 16, color: '#64748b'}}>Resources are stored in Neon.tech database but hidden from public view.</p>
+              <p style={{marginBottom: 16, color: '#64748b'}}>Download guides, templates, and wellness resources curated for energised women.</p>
               
-              <button style={styles.primaryButton} onClick={() => setShowUploadResource(true)}>
-                <Upload size={16} /> Upload New Resource
-              </button>
+              {/* Upload button ONLY visible to admin */}
+              {isAdmin && (
+                <button style={styles.primaryButton} onClick={() => setShowUploadResource(true)}>
+                  <Upload size={16} /> Upload New Resource
+                </button>
+              )}
 
               <div style={{marginTop: 24, display: 'flex', flexDirection: 'column', gap: 12}}>
-                {resources.map(resource => (
-                  <div key={resource.id} style={{padding: 16, background: '#f8fafc', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                    <div>
-                      <div style={{fontWeight: 700}}>{resource.title}</div>
-                      <div style={{fontSize: 13, color: '#64748b'}}>{resource.type} • {resource.downloads} downloads</div>
-                    </div>
-                    <FileText size={20} color="#ec4899" />
+                {resourcesLoading ? (
+                  <div style={{textAlign: 'center', padding: 40, color: '#94a3b8'}}>
+                    <Loader2 size={32} style={{animation: 'spin 1s linear infinite', margin: '0 auto 16px'}} />
+                    Loading resources...
                   </div>
-                ))}
-                {resources.length === 0 && <p style={{color: '#94a3b8'}}>No resources uploaded yet.</p>}
+                ) : (
+                  <>
+                    {resources.map(resource => (
+                      <div key={resource.id} style={{padding: 16, background: '#f8fafc', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                        <div>
+                          <div style={{fontWeight: 700}}>{resource.title}</div>
+                          <div style={{fontSize: 13, color: '#64748b'}}>{resource.type} • {resource.downloads || 0} downloads</div>
+                          {resource.description && <div style={{fontSize: 13, color: '#94a3b8', marginTop: 4}}>{resource.description}</div>}
+                        </div>
+                        <div style={{display: 'flex', gap: 8}}>
+                          <a href={resource.url} target="_blank" rel="noopener noreferrer" style={styles.downloadButton}>
+                            <FileText size={18} /> Download
+                          </a>
+                          {/* Delete option only for admin */}
+                          {isAdmin && (
+                            <button style={styles.deleteButtonSmall} onClick={() => {/* Add delete resource handler */}}>
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {resources.length === 0 && <p style={{color: '#94a3b8', textAlign: 'center', padding: 40}}>No resources available yet. Check back soon!</p>}
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -539,7 +564,7 @@ const Dashboard = () => {
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
             <div style={styles.modalHeader}>
               <h3>Upload Resource (Admin Only)</h3>
-              <button onClick={() => setShowUploadResource(false)}><X size={20} /></button>
+              <button style={styles.closeButton} onClick={() => setShowUploadResource(false)}><X size={20} /></button>
             </div>
             <input style={styles.input} placeholder="Resource Title" value={resourceData.title} onChange={e => setResourceData({...resourceData, title: e.target.value})} />
             <select style={styles.input} value={resourceData.type} onChange={e => setResourceData({...resourceData, type: e.target.value})}>
@@ -547,9 +572,10 @@ const Dashboard = () => {
               <option>Template</option>
               <option>E-book</option>
               <option>Article</option>
+              <option>Worksheet</option>
             </select>
             <textarea style={styles.textarea} placeholder="Description" rows={3} value={resourceData.description} onChange={e => setResourceData({...resourceData, description: e.target.value})} />
-            <input style={styles.input} placeholder="File URL" value={resourceData.url} onChange={e => setResourceData({...resourceData, url: e.target.value})} />
+            <input style={styles.input} placeholder="File URL (Google Drive, Dropbox, etc.)" value={resourceData.url} onChange={e => setResourceData({...resourceData, url: e.target.value})} />
             <button style={styles.primaryButton} onClick={handleResourceUpload} disabled={!resourceData.title || !resourceData.url}>Upload to Database</button>
           </div>
         </div>
@@ -634,7 +660,8 @@ const styles = {
   navButtonActive: { background: 'white', color: '#1e293b', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
   userActions: { display: 'flex', gap: 8 },
   iconButton: { width: 36, height: 36, borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  adminPanelBtn: { padding: '8px 16px', background: '#f0fdf4', color: '#059669', border: '1px solid #bbf7d0', borderRadius: 8, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 },
+  resourceButton: { padding: '8px 16px', background: '#faf5ff', color: '#9333ea', border: '1px solid #e9d5ff', borderRadius: 8, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 },
+  downloadButton: { padding: '8px 16px', background: '#ec4899', color: 'white', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none' },
   
   // Main
   main: { maxWidth: 800, margin: '0 auto', padding: '32px 20px' },
@@ -680,8 +707,8 @@ const styles = {
   modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 20 },
   modal: { background: 'white', borderRadius: 20, width: '100%', maxWidth: 500, maxHeight: '90vh', overflow: 'auto' },
   detailModal: { background: 'white', borderRadius: 20, width: '100%', maxWidth: 700, maxHeight: '90vh', overflow: 'auto' },
-  modalHeader: { display: 'flex', justifyItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #f1f5f9' },
-  closeButton: { width: 32, height: 32, borderRadius: 8, border: 'none', background: '#f8fafc', cursor: 'pointer' },
+  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #f1f5f9' },
+  closeButton: { width: 32, height: 32, borderRadius: 8, border: 'none', background: '#f8fafc', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   input: { width: '100%', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0', marginBottom: 12, fontSize: 14, boxSizing: 'border-box' },
   textarea: { width: '100%', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0', minHeight: 100, fontSize: 14, resize: 'vertical', boxSizing: 'border-box' },
   label: { display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 6 },
@@ -709,7 +736,7 @@ const styles = {
   commentInputArea: { display: 'flex', gap: 12, marginBottom: 24 },
   commentInputWrapper: { flex: 1, display: 'flex', gap: 8, background: 'white', padding: 4, borderRadius: 24, border: '1px solid #e2e8f0' },
   commentInput: { flex: 1, border: 'none', outline: 'none', padding: '8px 16px', fontSize: 14 },
-  sendButton: { width: 36, height: 36, borderRadius: '50%', background: '#ec4899', color: 'white', border: 'none', cursor: 'pointer' },
+  sendButton: { width: 36, height: 36, borderRadius: '50%', background: '#ec4899', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   commentsList: { display: 'flex', flexDirection: 'column', gap: 16 },
   comment: { display: 'flex', gap: 12 },
   commentContent: { flex: 1, background: 'white', padding: 16, borderRadius: 12, border: '1px solid #f1f5f9' },
