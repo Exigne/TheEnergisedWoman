@@ -1,4 +1,4 @@
- import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, MessageSquare, LogOut, Crown, Plus, Music, 
   Upload, FileText, ExternalLink, Clock, User, 
@@ -36,7 +36,6 @@ const Dashboard = () => {
       setUser(userData);
       setIsAdmin(userData.isAdmin || userData.email.includes('admin'));
       
-      // Check for first-time welcome
       const hasSeenWelcome = localStorage.getItem('seenWelcome');
       if (!hasSeenWelcome) {
         setShowWelcome(true);
@@ -144,7 +143,6 @@ const Dashboard = () => {
       </header>
 
       <main style={styles.main}>
-        {/* --- COMMUNITY --- */}
         {activeTab === 'community' && (
           <div style={styles.communityLayout}>
             <aside style={styles.sidebar}>
@@ -174,7 +172,6 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* --- AUDIO HUB --- */}
         {activeTab === 'audio' && (
           <div>
             <div style={styles.sectionHeader}><h2>Audio Hub</h2>{isAdmin && <button style={styles.primaryButton} onClick={() => setShowModal('audio')}><Upload size={18}/> Add Audio</button>}</div>
@@ -190,7 +187,6 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* --- RESOURCE LIBRARY --- */}
         {activeTab === 'resources' && (
           <div>
             <div style={styles.sectionHeader}><h2>Resource Library</h2>{isAdmin && <button style={styles.primaryButton} onClick={() => setShowModal('library')}><Plus size={18}/> Add Resource</button>}</div>
@@ -206,17 +202,34 @@ const Dashboard = () => {
         )}
       </main>
 
-      {/* --- MODAL: DOC VIEWER --- */}
+      {/* --- MODAL: DOC VIEWER (UPDATED WITH SMART LINK LOGIC) --- */}
       {showModal === 'docViewer' && viewingDoc && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.docViewerContent} onClick={e => e.stopPropagation()}>
-            <div style={styles.viewerHeader}><h3>{viewingDoc.title}</h3><div style={{display: 'flex', gap: '10px'}}><a href={viewingDoc.url} target="_blank" rel="noreferrer" style={styles.externalBtn}><ExternalLink size={16}/></a><button onClick={() => setShowModal(null)} style={styles.closeBtn}><X size={18}/></button></div></div>
-            <div style={styles.iframeContainer}><iframe src={`https://docs.google.com/viewer?url=${encodeURIComponent(viewingDoc.url)}&embedded=true`} style={styles.iframe} title="Viewer" frameBorder="0"></iframe></div>
+            <div style={styles.viewerHeader}>
+              <h3>{viewingDoc.title}</h3>
+              <div style={{display: 'flex', gap: '10px'}}>
+                <a href={viewingDoc.url} target="_blank" rel="noreferrer" style={styles.externalBtn} title="Open in new tab">
+                  <ExternalLink size={16}/>
+                </a>
+                <button onClick={() => setShowModal(null)} style={styles.closeBtn}><X size={18}/></button>
+              </div>
+            </div>
+            <div style={styles.iframeContainer}>
+              <iframe 
+                src={viewingDoc.url.includes('docs.google.com') 
+                  ? viewingDoc.url.split('?')[0].replace('/edit', '/preview').replace('/view', '/preview')
+                  : `https://docs.google.com/viewer?url=${encodeURIComponent(viewingDoc.url)}&embedded=true`
+                }
+                style={styles.iframe} 
+                title="Viewer" 
+                frameBorder="0"
+              ></iframe>
+            </div>
           </div>
         </div>
       )}
 
-      {/* --- MODAL: POST DETAIL --- */}
       {showModal === 'detail' && selectedPost && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.popOutContent} onClick={e => e.stopPropagation()}>
@@ -228,7 +241,6 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* --- MODAL: WELCOME OVERLAY --- */}
       {showWelcome && (
         <div style={styles.modalOverlay}>
           <div style={styles.welcomeCard}>
@@ -246,7 +258,6 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* --- ADMIN MODALS --- */}
       {showModal === 'post' && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}><h3>New Discussion</h3><input style={styles.input} placeholder="Headline" onChange={e => setPostForm({...postForm, title: e.target.value})} /><select style={styles.input} onChange={e => setPostForm({...postForm, category: e.target.value})}>{GROUPS.filter(g => g !== 'All Discussions').map(g => <option key={g} value={g}>{g}</option>)}</select><textarea style={{...styles.input, height: '150px'}} placeholder="Content..." onChange={e => setPostForm({...postForm, content: e.target.value})} /><button style={styles.primaryButtonFull} onClick={handleNewPost}>Share Post</button></div>
@@ -304,7 +315,7 @@ const styles = {
   iframeContainer: { flex: 1, width: '100%', background: '#f1f5f9' },
   iframe: { width: '100%', height: '100%', border: 'none' },
   viewBtnInternal: { background: '#fdf2f8', color: '#ec4899', border: 'none', padding: '6px 14px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' },
-  externalBtn: { background: '#f1f5f9', color: '#64748b', padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center' },
+  externalBtn: { background: '#f1f5f9', color: '#64748b', padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', textDecoration: 'none' },
   audioCard: { background: 'white', padding: '20px', borderRadius: '16px', marginBottom: '12px', border: '1px solid #e2e8f0' },
   player: { width: '100%', marginTop: '10px' },
   resourceGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' },
@@ -314,7 +325,7 @@ const styles = {
   inputWrap: { display: 'flex', alignItems: 'center', gap: '10px', background: '#f1f5f9', padding: '14px', borderRadius: '14px', marginBottom: '12px' },
   ghostInput: { background: 'none', border: 'none', outline: 'none', width: '100%' },
   delBtn: { background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' },
-  closeBtn: { background: '#f1f5f9', border: 'none', borderRadius: '50%', padding: '6px', cursor: 'pointer' },
+  closeBtn: { background: '#f1f5f9', border: 'none', borderRadius: '50%', padding: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   input: { width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '16px' },
   modal: { background: 'white', padding: '35px', borderRadius: '28px', width: '500px' },
   iconBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' },
