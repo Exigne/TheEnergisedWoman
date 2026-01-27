@@ -981,7 +981,7 @@ const styles = {
   categoryTag: { fontSize: '12px', fontWeight: '700', color: '#059669', textTransform: 'uppercase', letterSpacing: '0.5px' },
   timeStamp: { fontSize: '13px', color: '#94a3b8' },
   cardTitle: { fontSize: '18px', fontWeight: '700', margin: '0 0 8px 0', lineHeight: 1.3 },
-  cardExcerpt: { color: '#475569', fontSize: '15px', lineHeight: 1.6', margin: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' },
+  cardExcerpt: { color: '#475569', fontSize: '15px', lineHeight: 1.6, margin: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' },
   cardFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #f8fafc' },
   author: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '600', color: '#475569' },
   avatarSmall: { width: '28px', height: '28px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' },
