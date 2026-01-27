@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, LogOut, Crown, Plus, Video, 
   Upload, FileText, User, Trash2, Hash, Send, MessageCircle,
-  PlayCircle
+  PlayCircle, BookOpen, Utensils, LayoutGrid
 } from 'lucide-react';
 
 const GROUPS = ['All Discussions', 'General', 'Mental Health', 'Self Care', 'Relationships', 'Career', 'Motherhood', 'Fitness', 'Nutrition'];
+const RESOURCE_CATEGORIES = ['General', 'Recipes', 'Book Club'];
 
 const Dashboard = () => {
   const [user, setUser] = useState(null);
@@ -14,6 +15,9 @@ const Dashboard = () => {
   const [activeGroup, setActiveGroup] = useState('All Discussions');
   const [showModal, setShowModal] = useState(null); 
   
+  // Resources Tab State
+  const [activeResourceCategory, setActiveResourceCategory] = useState('General');
+
   // Selection States
   const [selectedPost, setSelectedPost] = useState(null);
   const [viewingDoc, setViewingDoc] = useState(null);
@@ -25,16 +29,17 @@ const Dashboard = () => {
   
   // Data States
   const [discussions, setDiscussions] = useState([]);
-  const [videos, setVideos] = useState([]); // Renamed from audios
+  const [videos, setVideos] = useState([]); 
   const [resources, setResources] = useState([]);
   
   // Forms
   const [postForm, setPostForm] = useState({ title: '', content: '', category: 'General' });
   const [videoForm, setVideoForm] = useState({ title: '', url: '', description: '' });
+  const [resourceForm, setResourceForm] = useState({ title: '', url: '', category: 'General' });
   const [commentText, setCommentText] = useState('');
 
   useEffect(() => {
-    document.title = "The Energised Woman | Dashboard";
+    document.title = "The Energised Woman Collective | Dashboard";
     const saved = localStorage.getItem('wellnessUser');
     if (saved) {
       const userData = JSON.parse(saved);
@@ -46,7 +51,6 @@ const Dashboard = () => {
 
   const loadAllData = async () => {
     try {
-      // Changed type=audio to type=video
       const [dRes, rRes, vRes] = await Promise.all([
         fetch('/.netlify/functions/database?type=discussions'),
         fetch('/.netlify/functions/database?type=resources'),
@@ -74,47 +78,43 @@ const Dashboard = () => {
     loadAllData();
   };
 
-  // --- NEW: Post Creation Function (Fixed Issue 1) ---
+  // --- Handlers ---
+
   const handleCreatePost = async () => {
     if (!postForm.title || !postForm.content) return alert("Please fill in title and content");
-    
-    const newPost = {
-      id: Date.now(),
-      author: user.display_name,
-      ...postForm,
-      comments: [],
-      created_at: new Date().toISOString()
-    };
-
-    // Optimistic UI Update
+    const newPost = { id: Date.now(), author: user.display_name, ...postForm, comments: [], created_at: new Date().toISOString() };
     setDiscussions([newPost, ...discussions]);
     setShowModal(null);
     setPostForm({ title: '', content: '', category: 'General' });
-
-    try {
-      await fetch('/.netlify/functions/database?type=discussion', { 
-        method: 'POST', 
-        body: JSON.stringify(newPost) 
-      });
-    } catch (err) {
-      console.error("Post save error", err);
-    }
+    try { await fetch('/.netlify/functions/database?type=discussion', { method: 'POST', body: JSON.stringify(newPost) }); } catch (err) { console.error(err); }
   };
 
-  // --- NEW: Video Helper (Fixed Issue 2) ---
+  const handleVideoUpload = async () => {
+    if (!videoForm.title || !videoForm.url) return alert("Title and URL required");
+    const newVideo = { id: Date.now(), ...videoForm, comments: [] };
+    setVideos([newVideo, ...videos]);
+    setShowModal(null); 
+    setVideoForm({title:'', url:'', description:''});
+    try { await fetch('/.netlify/functions/database?type=video', { method: 'POST', body: JSON.stringify(newVideo) }); } catch (err) { console.error(err); }
+  };
+
+  const handleResourceUpload = async () => {
+    if (!resourceForm.title || !resourceForm.url) return alert("Title and URL required");
+    const newResource = { id: Date.now(), ...resourceForm };
+    setResources([newResource, ...resources]);
+    setShowModal(null);
+    setResourceForm({ title: '', url: '', category: 'General' });
+    try { await fetch('/.netlify/functions/database?type=resources', { method: 'POST', body: JSON.stringify(newResource) }); } catch (err) { console.error(err); }
+  };
+
   const getVideoEmbedUrl = (url) => {
     if (!url) return '';
-    // Handle YouTube
     if (url.includes('youtube.com') || url.includes('youtu.be')) {
       let videoId = '';
-      if (url.includes('youtu.be')) {
-        videoId = url.split('/').pop();
-      } else if (url.includes('v=')) {
-        videoId = url.split('v=')[1].split('&')[0];
-      }
+      if (url.includes('youtu.be')) { videoId = url.split('/').pop(); } 
+      else if (url.includes('v=')) { videoId = url.split('v=')[1].split('&')[0]; }
       return `https://www.youtube.com/embed/${videoId}`;
     }
-    // Return original for direct MP4 links or other generic embeds
     return url;
   };
 
@@ -125,9 +125,7 @@ const Dashboard = () => {
     setSelectedPost(updatedPost);
     setCommentText('');
     setDiscussions(discussions.map(d => d.id === selectedPost.id ? updatedPost : d));
-    try {
-      await fetch(`/.netlify/functions/database?id=${selectedPost.id}&type=discussion`, { method: 'PUT', body: JSON.stringify(updatedPost) });
-    } catch (err) { console.error(err); }
+    try { await fetch(`/.netlify/functions/database?id=${selectedPost.id}&type=discussion`, { method: 'PUT', body: JSON.stringify(updatedPost) }); } catch (err) { console.error(err); }
   };
 
   const handleAddVideoComment = async () => {
@@ -137,26 +135,7 @@ const Dashboard = () => {
     setSelectedVideo(updatedVideo);
     setCommentText('');
     setVideos(videos.map(v => v.id === selectedVideo.id ? updatedVideo : v));
-    try {
-      await fetch(`/.netlify/functions/database?id=${selectedVideo.id}&type=video`, { method: 'PUT', body: JSON.stringify(updatedVideo) });
-    } catch (err) { console.error(err); }
-  };
-
-  const handleVideoUpload = async () => {
-    if (!videoForm.title || !videoForm.url) return alert("Title and URL required");
-    const newVideo = {
-      id: Date.now(),
-      ...videoForm,
-      comments: []
-    };
-    
-    setVideos([newVideo, ...videos]);
-    setShowModal(null); 
-    setVideoForm({title:'', url:'', description:''});
-
-    try {
-      await fetch('/.netlify/functions/database?type=video', { method: 'POST', body: JSON.stringify(newVideo) });
-    } catch (err) { console.error(err); }
+    try { await fetch(`/.netlify/functions/database?id=${selectedVideo.id}&type=video`, { method: 'PUT', body: JSON.stringify(updatedVideo) }); } catch (err) { console.error(err); }
   };
 
   const handleDelete = async (id, type) => {
@@ -165,9 +144,7 @@ const Dashboard = () => {
     if (type === 'video') setVideos(videos.filter(i => i.id !== id));
     if (type === 'resource') setResources(resources.filter(i => i.id !== id));
     setShowModal(null);
-    try {
-      await fetch(`/.netlify/functions/database?id=${id}&type=${type}`, { method: 'DELETE' });
-    } catch (err) { console.error(err); }
+    try { await fetch(`/.netlify/functions/database?id=${id}&type=${type}`, { method: 'DELETE' }); } catch (err) { console.error(err); }
   };
 
   if (!user) {
@@ -178,7 +155,7 @@ const Dashboard = () => {
             <div style={{display:'inline-flex', padding: '12px', background: '#fdf2f8', borderRadius: '50%', marginBottom: '15px'}}>
                <Crown size={32} color="#ec4899" />
             </div>
-            <h1 style={{fontSize: '24px', fontWeight: '800', color: '#1e293b', margin: '0 0 8px 0'}}>The Energised Woman</h1>
+            <h1 style={{fontSize: '24px', fontWeight: '800', color: '#1e293b', margin: '0 0 8px 0'}}>The Energised Woman Collective</h1>
             <p style={{color: '#64748b', fontSize: '14px', margin: 0}}>Sign in to access your wellness hub</p>
           </div>
           <form onSubmit={handleLogin}>
@@ -195,11 +172,11 @@ const Dashboard = () => {
   return (
     <div style={styles.container}>
       <header style={styles.header}>
-        <div style={styles.brand}><Crown size={22} color="#ec4899" /><h1 style={styles.brandText}>The Energised Woman</h1></div>
+        <div style={styles.brand}><Crown size={22} color="#ec4899" /><h1 style={styles.brandText}>The Energised Woman Collective</h1></div>
         <nav style={styles.centerNav}>
           <button onClick={() => setActiveTab('community')} style={{...styles.navBtn, ...(activeTab === 'community' && styles.navBtnActive)}}>Community</button>
           <button onClick={() => setActiveTab('video')} style={{...styles.navBtn, ...(activeTab === 'video' && styles.navBtnActive)}}>Video Hub</button>
-          <button onClick={() => setActiveTab('resources')} style={{...styles.navBtn, ...(activeTab === 'resources' && styles.navBtnActive)}}>Library</button>
+          <button onClick={() => setActiveTab('resources')} style={{...styles.navBtn, ...(activeTab === 'resources' && styles.navBtnActive)}}>Resources</button>
         </nav>
         <div style={styles.userSection}><button style={styles.iconBtn} onClick={() => {setUser(null); localStorage.clear();}}><LogOut size={18}/></button></div>
       </header>
@@ -227,35 +204,23 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* --- VIDEO HUB TAB (Updated) --- */}
+        {/* --- VIDEO HUB TAB --- */}
         {activeTab === 'video' && (
           <div>
             <div style={styles.sectionHeader}><h2>Video Hub</h2>{isAdmin && <button style={styles.primaryButton} onClick={() => setShowModal('addVideo')}><Upload size={18}/> Add Video</button>}</div>
             <div style={styles.videoGrid}>
               {videos.map(video => (
                 <div key={video.id} style={styles.videoCard}>
-                  {/* Video Player Embed */}
                   <div style={styles.videoFrameWrapper}>
-                     <iframe 
-                        src={getVideoEmbedUrl(video.url)} 
-                        title={video.title}
-                        style={styles.iframe} 
-                        frameBorder="0" 
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                        allowFullScreen
-                     ></iframe>
+                     <iframe src={getVideoEmbedUrl(video.url)} title={video.title} style={styles.iframe} frameBorder="0" allowFullScreen></iframe>
                   </div>
-                  
                   <div style={styles.videoContent}>
                     <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
                       <h4 style={{margin: '0 0 8px 0', fontSize: '16px'}}>{video.title}</h4>
                       {isAdmin && <button onClick={() => handleDelete(video.id, 'video')} style={styles.delBtn}><Trash2 size={16}/></button>}
                     </div>
                     <p style={{margin: '0 0 12px 0', fontSize: '13px', color: '#64748b', lineHeight: '1.4'}}>{video.description}</p>
-                    <button 
-                      style={styles.commentBtn}
-                      onClick={() => {setSelectedVideo(video); setShowModal('videoDetail');}}
-                    >
+                    <button style={styles.commentBtn} onClick={() => {setSelectedVideo(video); setShowModal('videoDetail');}}>
                       <MessageCircle size={14}/> {video.comments?.length || 0} Comments
                     </button>
                   </div>
@@ -265,18 +230,52 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* --- LIBRARY TAB --- */}
+        {/* --- RESOURCES TAB (Updated) --- */}
         {activeTab === 'resources' && (
           <div>
-            <div style={styles.sectionHeader}><h2>Library</h2>{isAdmin && <button style={styles.primaryButton} onClick={() => setShowModal('library')}><Plus size={18}/> Add Resource</button>}</div>
+            <div style={styles.sectionHeader}>
+              <h2>Resources</h2>
+              {isAdmin && <button style={styles.primaryButton} onClick={() => setShowModal('resource')}><Plus size={18}/> Add Resource</button>}
+            </div>
+            
+            {/* Sub-Navigation for Resources */}
+            <div style={styles.subNavContainer}>
+              {RESOURCE_CATEGORIES.map(cat => (
+                <button 
+                  key={cat} 
+                  onClick={() => setActiveResourceCategory(cat)}
+                  style={activeResourceCategory === cat ? styles.subNavBtnActive : styles.subNavBtn}
+                >
+                  {cat === 'Recipes' ? <Utensils size={14} /> : cat === 'Book Club' ? <BookOpen size={14} /> : <LayoutGrid size={14} />}
+                  {cat}
+                </button>
+              ))}
+            </div>
+
             <div style={styles.resourceGrid}>
-              {resources.map(res => (
+              {resources.filter(res => (res.category || 'General') === activeResourceCategory).map(res => (
                 <div key={res.id} style={styles.resourceCard}>
-                  <FileText color="#ec4899" />
-                  <div style={{flex: 1}}><h4 style={{margin: 0}}>{res.title}</h4></div>
+                  <div style={{
+                    padding: '12px', 
+                    borderRadius: '12px', 
+                    background: res.category === 'Recipes' ? '#ecfccb' : res.category === 'Book Club' ? '#e0f2fe' : '#fdf2f8',
+                    color: res.category === 'Recipes' ? '#65a30d' : res.category === 'Book Club' ? '#0ea5e9' : '#ec4899'
+                  }}>
+                    {res.category === 'Recipes' ? <Utensils size={20} /> : res.category === 'Book Club' ? <BookOpen size={20} /> : <FileText size={20} />}
+                  </div>
+                  <div style={{flex: 1}}>
+                    <h4 style={{margin: '0 0 4px 0'}}>{res.title}</h4>
+                    <span style={{fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px'}}>{res.category || 'General'}</span>
+                  </div>
                   <button onClick={() => {setViewingDoc(res); setShowModal('docViewer');}} style={styles.viewBtnInternal}>Open</button>
+                  {isAdmin && <button onClick={() => handleDelete(res.id, 'resource')} style={{...styles.delBtn, marginLeft: '8px'}}><Trash2 size={16}/></button>}
                 </div>
               ))}
+              {resources.filter(res => (res.category || 'General') === activeResourceCategory).length === 0 && (
+                <div style={{gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: '#94a3b8'}}>
+                  No resources in this section yet.
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -284,36 +283,20 @@ const Dashboard = () => {
 
       {/* --- MODALS --- */}
       
-      {/* 1. New Post Modal (Added Fix) */}
       {showModal === 'post' && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
             <h3>Create New Post</h3>
-            <input 
-              style={styles.input} 
-              placeholder="Title" 
-              value={postForm.title} 
-              onChange={e => setPostForm({...postForm, title: e.target.value})} 
-            />
-            <select 
-              style={styles.input} 
-              value={postForm.category} 
-              onChange={e => setPostForm({...postForm, category: e.target.value})}
-            >
+            <input style={styles.input} placeholder="Title" value={postForm.title} onChange={e => setPostForm({...postForm, title: e.target.value})} />
+            <select style={styles.input} value={postForm.category} onChange={e => setPostForm({...postForm, category: e.target.value})}>
               {GROUPS.filter(g => g !== 'All Discussions').map(g => <option key={g} value={g}>{g}</option>)}
             </select>
-            <textarea 
-              style={{...styles.input, height: '150px'}} 
-              placeholder="What's on your mind?" 
-              value={postForm.content} 
-              onChange={e => setPostForm({...postForm, content: e.target.value})} 
-            />
+            <textarea style={{...styles.input, height: '150px'}} placeholder="What's on your mind?" value={postForm.content} onChange={e => setPostForm({...postForm, content: e.target.value})} />
             <button style={styles.primaryButtonFull} onClick={handleCreatePost}>Post to Community</button>
           </div>
         </div>
       )}
 
-      {/* 2. Add Video Modal (Updated) */}
       {showModal === 'addVideo' && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
@@ -326,7 +309,22 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* 3. Post Detail Modal */}
+      {/* NEW: Resource Modal */}
+      {showModal === 'resource' && (
+        <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
+          <div style={styles.modal} onClick={e => e.stopPropagation()}>
+            <h3>Add Resource</h3>
+            <input style={styles.input} placeholder="Title" value={resourceForm.title} onChange={e => setResourceForm({...resourceForm, title: e.target.value})} />
+            <label style={{display:'block', marginBottom: '6px', fontSize: '13px', fontWeight: '600', color: '#64748b'}}>Category</label>
+            <select style={styles.input} value={resourceForm.category} onChange={e => setResourceForm({...resourceForm, category: e.target.value})}>
+              {RESOURCE_CATEGORIES.map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
+            <input style={styles.input} placeholder="URL (Google Doc, PDF, Drive Link)" value={resourceForm.url} onChange={e => setResourceForm({...resourceForm, url: e.target.value})} />
+            <button style={styles.primaryButtonFull} onClick={handleResourceUpload}>Add Resource</button>
+          </div>
+        </div>
+      )}
+
       {showModal === 'detail' && selectedPost && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.popOutContent} onClick={e => e.stopPropagation()}>
@@ -337,9 +335,7 @@ const Dashboard = () => {
             <div style={styles.commentSection}>
               <h4>Comments ({selectedPost.comments?.length || 0})</h4>
               <div style={styles.commentList}>
-                {(selectedPost.comments || []).map(c => (
-                  <div key={c.id} style={styles.commentItem}><strong>{c.author}</strong>: {c.text}</div>
-                ))}
+                {(selectedPost.comments || []).map(c => <div key={c.id} style={styles.commentItem}><strong>{c.author}</strong>: {c.text}</div>)}
               </div>
               <div style={styles.commentInputWrap}>
                 <input style={styles.commentInput} placeholder="Add comment..." value={commentText} onChange={e => setCommentText(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAddComment()} />
@@ -350,26 +346,20 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* 4. Video Detail Modal (Comments) */}
       {showModal === 'videoDetail' && selectedVideo && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.popOutContent} onClick={e => e.stopPropagation()}>
             <button onClick={() => setShowModal(null)} style={styles.closeBtn}><X size={18}/></button>
             <h2 style={styles.popOutTitle}>{selectedVideo.title}</h2>
-            
-            {/* Embedded player in modal too */}
             <div style={{...styles.videoFrameWrapper, marginBottom: '20px'}}>
                <iframe src={getVideoEmbedUrl(selectedVideo.url)} style={styles.iframe} frameBorder="0" allowFullScreen></iframe>
             </div>
-
             <div style={styles.popOutBody}>{selectedVideo.description}</div>
             <hr style={styles.divider} />
             <div style={styles.commentSection}>
               <h4>Comments ({selectedVideo.comments?.length || 0})</h4>
               <div style={styles.commentList}>
-                {(selectedVideo.comments || []).map(c => (
-                  <div key={c.id} style={styles.commentItem}><strong>{c.author}</strong>: {c.text}</div>
-                ))}
+                {(selectedVideo.comments || []).map(c => <div key={c.id} style={styles.commentItem}><strong>{c.author}</strong>: {c.text}</div>)}
               </div>
               <div style={styles.commentInputWrap}>
                 <input style={styles.commentInput} placeholder="Add comment..." value={commentText} onChange={e => setCommentText(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAddVideoComment()} />
@@ -380,7 +370,6 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* 5. Doc Viewer */}
       {showModal === 'docViewer' && viewingDoc && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.docViewerContent} onClick={e => e.stopPropagation()}>
@@ -433,22 +422,23 @@ const styles = {
   docViewerContent: { background: 'white', width: '90%', height: '90vh', borderRadius: '24px', overflow: 'hidden', display: 'flex', flexDirection: 'column' },
   viewerHeader: { padding: '20px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0' },
   iframe: { flex: 1, width: '100%', height: '100%' },
-  
-  // --- Video Styles ---
   videoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' },
   videoCard: { background: 'white', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' },
   videoFrameWrapper: { position: 'relative', paddingTop: '56.25%', background: 'black' },
   videoContent: { padding: '16px', flex: 1 },
   commentBtn: { background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' },
-  
-  resourceGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' },
-  resourceCard: { display: 'flex', alignItems: 'center', gap: '12px', background: 'white', padding: '15px', borderRadius: '16px', border: '1px solid #e2e8f0' },
+  resourceGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '15px' },
+  resourceCard: { display: 'flex', alignItems: 'center', gap: '12px', background: 'white', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0' },
   viewBtnInternal: { background: '#fdf2f8', color: '#ec4899', border: 'none', padding: '6px 12px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
   input: { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '10px', fontFamily: 'inherit', boxSizing: 'border-box' },
   modal: { background: 'white', padding: '30px', borderRadius: '20px', width: '400px', maxWidth: '90vw' },
   closeBtn: { position: 'absolute', top: '20px', right: '20px', background: '#f1f5f9', border: 'none', borderRadius: '50%', padding: '6px', cursor: 'pointer' },
   iconBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' },
   delBtn: { background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' },
+  // New Styles for Resource Tabs
+  subNavContainer: { display: 'flex', gap: '10px', marginBottom: '24px' },
+  subNavBtn: { padding: '8px 16px', borderRadius: '20px', border: '1px solid #e2e8f0', background: 'white', color: '#64748b', cursor: 'pointer', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' },
+  subNavBtnActive: { padding: '8px 16px', borderRadius: '20px', border: 'none', background: '#1e293b', color: 'white', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }
 };
 
 export default Dashboard;
