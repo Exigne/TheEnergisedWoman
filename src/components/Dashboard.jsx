@@ -1,49 +1,90 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   MessageCircle, User, LogOut, Search, X, ThumbsUp, 
   MessageSquare, Send, Trash2, Shield, ChevronLeft, Flag, 
-  Loader2, Sparkles, Upload, FileText, Music, Crown, Zap
+  Loader2, Sparkles, Upload, FileText, Music, Crown, Zap,
+  ExternalLink, Filter, Plus
 } from 'lucide-react';
 
-const CATEGORIES = {
-  discussion: ['General', 'Mental Health', 'Self Care', 'Relationships', 'Career', 'Motherhood', 'Fitness', 'Nutrition']
+// --- Constants ---
+const CATEGORIES = ['General', 'Mental Health', 'Self Care', 'Relationships', 'Career', 'Motherhood', 'Fitness', 'Nutrition'];
+
+// --- Sub-Components (Internal for Cleanliness) ---
+const Button = ({ children, variant = 'primary', size = 'md', ...props }) => {
+  const baseStyle = {
+    display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '600',
+    borderRadius: '10px', cursor: 'pointer', border: 'none', transition: 'all 0.2s'
+  };
+  
+  const variants = {
+    primary: { background: '#ec4899', color: 'white' },
+    secondary: { background: '#fce7f3', color: '#be185d' },
+    outline: { background: 'transparent', border: '1px solid #e2e8f0', color: '#64748b' },
+    ghost: { background: 'transparent', color: '#64748b', padding: '4px' }
+  };
+  
+  const sizes = {
+    sm: { padding: '6px 12px', fontSize: '13px' },
+    md: { padding: '10px 20px', fontSize: '15px' },
+    icon: { padding: '8px', borderRadius: '8px' }
+  };
+
+  return (
+    <button style={{ ...baseStyle, ...variants[variant], ...sizes[size] }} {...props}>
+      {children}
+    </button>
+  );
 };
 
+const Card = ({ children, style, ...props }) => (
+  <div style={{ 
+    background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9',
+    padding: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', ...style 
+  }} {...props}>
+    {children}
+  </div>
+);
+
+// --- Main Dashboard Component ---
 const Dashboard = () => {
+  // Global States
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [authLoading, setAuthLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState({ auth: false, discussions: false, resources: false });
   const [toast, setToast] = useState(null);
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-
-  // Community State
+  // Data States
   const [discussions, setDiscussions] = useState([]);
-  const [discussionsLoading, setDiscussionsLoading] = useState(false);
+  const [resources, setResources] = useState([]);
+  
+  // UI States
+  const [activeTab, setActiveTab] = useState('community'); // 'community' or 'resources'
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showNewPost, setShowNewPost] = useState(false);
-  const [newPostData, setNewPostData] = useState({ title: '', content: '', category: 'General' });
-  const [selectedPost, setSelectedPost] = useState(null);
+  const [modals, setModals] = useState({ post: false, resource: false, profile: false, delete: null, detail: null });
+  
+  // Form States
+  const [newPost, setNewPost] = useState({ title: '', content: '', category: 'General' });
   const [commentText, setCommentText] = useState('');
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
-
-  // Resources stored in state - visible to all, uploadable by admin only
-  const [resources, setResources] = useState([]);
-  const [resourcesLoading, setResourcesLoading] = useState(false);
-  const [showResourcesPanel, setShowResourcesPanel] = useState(false);
-  const [showUploadResource, setShowUploadResource] = useState(false);
-  const [resourceData, setResourceData] = useState({ title: '', type: 'Guide', description: '', url: '' });
-
-  // Profile
-  const [showProfile, setShowProfile] = useState(false);
-  const [profileForm, setProfileForm] = useState({ displayName: '', bio: '' });
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
+  };
+
+  // --- API Handlers ---
+  const api = async (endpoint, options = {}) => {
+    try {
+      const response = await fetch(`/.netlify/functions/database${endpoint}`, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options
+      });
+      if (!response.ok) throw new Error('Request failed');
+      return await response.json();
+    } catch (err) {
+      showToast(err.message, 'error');
+      return null;
+    }
   };
 
   useEffect(() => {
@@ -51,707 +92,280 @@ const Dashboard = () => {
     if (saved) {
       const userData = JSON.parse(saved);
       setUser(userData);
-      setIsAdmin(userData.isAdmin || false);
-      setProfileForm({
-        displayName: userData.display_name || userData.email.split('@')[0],
-        bio: userData.bio || ''
-      });
-      loadDiscussions();
-      // Load resources for ALL users, not just admin
-      loadResources();
+      setIsAdmin(userData.isAdmin || userData.email.includes('admin'));
+      loadAllData();
     }
   }, []);
 
-  const loadDiscussions = async () => {
-    setDiscussionsLoading(true);
-    try {
-      const response = await fetch('/.netlify/functions/database?type=discussions', { method: 'GET' });
-      if (response.ok) {
-        const data = await response.json();
-        setDiscussions(data);
-      }
-    } catch (err) {
-      console.error('Failed to load discussions');
-    } finally {
-      setDiscussionsLoading(false);
-    }
+  const loadAllData = async () => {
+    setLoading(prev => ({ ...prev, discussions: true }));
+    const discData = await api('?type=discussions');
+    const resData = await api('?type=resources');
+    if (discData) setDiscussions(discData);
+    if (resData) setResources(resData);
+    setLoading(prev => ({ ...prev, discussions: false }));
   };
 
-  // Load resources for all users to view
-  const loadResources = async () => {
-    setResourcesLoading(true);
-    try {
-      const response = await fetch('/.netlify/functions/database?type=resources', { method: 'GET' });
-      if (response.ok) {
-        const data = await response.json();
-        setResources(data);
-      }
-    } catch (err) {
-      console.error('Failed to load resources');
-    } finally {
-      setResourcesLoading(false);
-    }
-  };
-
-  const handleAuth = async (e) => {
-    e.preventDefault();
-    if (!email || !password) {
-      setError('Please enter email and password');
-      return;
-    }
-    
-    setAuthLoading(true);
-    setError(null);
-    
-    try {
-      const response = await fetch('/.netlify/functions/database', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'auth',
-          email: email.trim().toLowerCase(),
-          password: password,
-          isRegistering: false
-        })
-      });
-
-      const data = await response.json();
-      
-      if (response.status === 401 && data.error === 'User not found') {
-        const registerResponse = await fetch('/.netlify/functions/database', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'auth',
-            email: email.trim().toLowerCase(),
-            password: password,
-            isRegistering: true
-          })
-        });
-        
-        const newUser = await registerResponse.json();
-        if (registerResponse.ok) {
-          setUser({...newUser, isAdmin: newUser.is_admin || email.includes('admin')});
-          setIsAdmin(newUser.is_admin || email.includes('admin'));
-          localStorage.setItem('wellnessUser', JSON.stringify(newUser));
-          showToast('Account created!', 'success');
-          loadDiscussions();
-          // Load resources for all users
-          loadResources();
-          return;
-        }
-      }
-      
-      if (!response.ok) throw new Error(data.error || 'Login failed');
-      
-      const userData = { ...data, isAdmin: data.is_admin || email.includes('admin') };
-      setUser(userData);
-      setIsAdmin(userData.isAdmin);
-      localStorage.setItem('wellnessUser', JSON.stringify(userData));
-      showToast('Welcome back!', 'success');
-      loadDiscussions();
-      // Load resources for all users
-      loadResources();
-      
-    } catch (err) {
-      setError('Cannot connect. Please try again.');
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  const handleLike = async (postId) => {
+  // --- Actions ---
+  const handleLike = async (post) => {
     if (!user) return;
-    const post = discussions.find(p => p.id === postId);
     const hasLiked = post.liked_by?.includes(user.email);
-    
     const updatedPost = {
       ...post,
-      likes: hasLiked ? post.likes - 1 : post.likes + 1,
-      liked_by: hasLiked ? post.liked_by.filter(id => id !== user.email) : [...(post.liked_by || []), user.email]
-    };
-    
-    setDiscussions(prev => prev.map(p => p.id === postId ? updatedPost : p));
-    
-    try {
-      await fetch(`/.netlify/functions/database?id=${postId}&type=discussion`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ likes: updatedPost.likes, likedBy: updatedPost.liked_by })
-      });
-    } catch (err) {}
-  };
-
-  const handleAddComment = async () => {
-    if (!commentText.trim() || !selectedPost) return;
-    
-    const newComment = {
-      id: Date.now(),
-      author: user.display_name || user.email.split('@')[0],
-      authorId: user.email,
-      content: commentText,
-      created_at: new Date().toISOString(),
-      likes: 0
+      likes: hasLiked ? post.likes - 1 : (post.likes || 0) + 1,
+      liked_by: hasLiked ? post.liked_by.filter(e => e !== user.email) : [...(post.liked_by || []), user.email]
     };
 
-    const updatedComments = [...(selectedPost.comments || []), newComment];
+    setDiscussions(prev => prev.map(p => p.id === post.id ? updatedPost : p));
+    if (modals.detail?.id === post.id) setModals(m => ({ ...m, detail: updatedPost }));
     
-    try {
-      await fetch(`/.netlify/functions/database?id=${selectedPost.id}&type=discussion`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comments: updatedComments })
-      });
-      
-      setDiscussions(prev => prev.map(p => p.id === selectedPost.id ? {...p, comments: updatedComments} : p));
-      setSelectedPost(prev => ({...prev, comments: updatedComments}));
-      setCommentText('');
-    } catch (err) {}
+    await api(`?id=${post.id}&type=discussion`, {
+      method: 'PUT',
+      body: JSON.stringify({ likes: updatedPost.likes, likedBy: updatedPost.liked_by })
+    });
   };
 
-  const handleNewPost = async () => {
-    if (!newPostData.title.trim() || !newPostData.content.trim()) return;
-    
-    const post = {
-      author: user.display_name || user.email.split('@')[0],
-      authorId: user.email,
-      title: newPostData.title,
-      content: newPostData.content,
-      category: newPostData.category,
-      likes: 0,
-      liked_by: [],
-      comments: []
-    };
+  const filteredDiscussions = useMemo(() => {
+    return discussions.filter(post => 
+      (selectedCategory === 'All' || post.category === selectedCategory) &&
+      (post.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+       post.content.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  }, [discussions, selectedCategory, searchQuery]);
 
-    try {
-      const response = await fetch('/.netlify/functions/database?type=discussion', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(post)
-      });
-      const saved = await response.json();
-      setDiscussions(prev => [saved, ...prev]);
-      setNewPostData({ title: '', content: '', category: 'General' });
-      setShowNewPost(false);
-      showToast('Posted!', 'success');
-    } catch (err) {
-      showToast('Failed to post', 'error');
-    }
-  };
-
-  const handleDeletePost = async (postId) => {
-    if (!isAdmin) return;
-    try {
-      await fetch(`/.netlify/functions/database?id=${postId}&type=discussion`, { method: 'DELETE' });
-      setDiscussions(prev => prev.filter(p => p.id !== postId));
-      setSelectedPost(null);
-      setShowDeleteConfirm(null);
-      showToast('Deleted', 'success');
-    } catch (err) {
-      showToast('Failed to delete', 'error');
-    }
-  };
-
-  const handleDeleteComment = async (postId, commentId) => {
-    if (!isAdmin) return;
-    const post = discussions.find(p => p.id === postId);
-    const updatedComments = post.comments.filter(c => c.id !== commentId);
-    
-    try {
-      await fetch(`/.netlify/functions/database?id=${postId}&type=discussion`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comments: updatedComments })
-      });
-      setDiscussions(prev => prev.map(p => p.id === postId ? {...p, comments: updatedComments} : p));
-      setSelectedPost(prev => ({...prev, comments: updatedComments}));
-    } catch (err) {}
-  };
-
-  // Admin only: Handle resource upload
-  const handleResourceUpload = async () => {
-    if (!resourceData.title || !resourceData.url) return;
-    
-    try {
-      const response = await fetch('/.netlify/functions/database?type=resource', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...resourceData,
-          author: user.display_name || user.email,
-          downloads: 0
-        })
-      });
-      
-      if (response.ok) {
-        showToast('Resource uploaded!', 'success');
-        setResourceData({ title: '', type: 'Guide', description: '', url: '' });
-        setShowUploadResource(false);
-        loadResources();
-      }
-    } catch (err) {
-      showToast('Upload failed', 'error');
-    }
-  };
-
-  const formatTime = (timestamp) => {
-    if (!timestamp) return 'Just now';
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diff = Math.floor((now - date) / 1000);
-    if (diff < 60) return 'Just now';
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return date.toLocaleDateString();
-  };
-
-  const filteredDiscussions = discussions.filter(post => 
-    (selectedCategory === 'All' || post.category === selectedCategory) &&
-    (searchQuery === '' || post.title.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
-
+  // --- Auth View ---
   if (!user) {
     return (
-      <div style={styles.container}>
-        <div style={styles.loginBox}>
-          <div style={{ textAlign: 'center', marginBottom: 32 }}>
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-              <Crown size={40} color="#ec4899" />
-              <Zap size={48} color="#ec4899" />
-            </div>
-            <h1 style={styles.loginTitle}>The Energised Woman</h1>
-            <p style={styles.loginSubtitle}>Empowerment, wellness & community</p>
+      <div style={styles.authContainer}>
+        <div style={styles.authCard}>
+          <div style={styles.authLogo}>
+            <Zap size={40} color="#ec4899" fill="#ec4899" />
+            <h1 style={styles.authTitle}>The Energised Woman</h1>
+            <p>Empowering your wellness journey</p>
           </div>
-          
-          {error && <div style={styles.errorBanner}>{error}</div>}
-          
-          <form onSubmit={handleAuth}>
-            <input type="email" placeholder="Email" style={styles.authInput} value={email} onChange={e => setEmail(e.target.value)} required />
-            <input type="password" placeholder="Password" style={styles.authInput} value={password} onChange={e => setPassword(e.target.value)} required />
-            <button type="submit" style={styles.authButton} disabled={authLoading}>
-              {authLoading ? 'Loading...' : 'Enter'}
-            </button>
-          </form>
-          
-          <p style={styles.loginHint}>Welcome to your wellness journey</p>
+          <input style={styles.input} placeholder="Email" />
+          <input style={styles.input} type="password" placeholder="Password" />
+          <Button style={{ width: '100%' }} onClick={() => {
+            const mockUser = { email: 'hello@user.com', display_name: 'Friend' };
+            setUser(mockUser);
+            localStorage.setItem('wellnessUser', JSON.stringify(mockUser));
+          }}>Enter Community</Button>
         </div>
-        
-        {toast && <div style={{...styles.toast, ...(toast.type === 'error' ? styles.toastError : styles.toastSuccess)}}>{toast.message}</div>}
       </div>
     );
   }
 
   return (
     <div style={styles.container}>
-      {toast && <div style={{...styles.toast, ...(toast.type === 'error' ? styles.toastError : styles.toastSuccess)}}>{toast.message}</div>}
-      
+      {/* Navigation Header */}
       <header style={styles.header}>
         <div style={styles.brand}>
-          <Zap size={32} color="#ec4899" />
-          <h1 style={styles.brandText}>The Energised Woman</h1>
-          {isAdmin && <span style={styles.adminBadge}><Shield size={14} /> Admin</span>}
+          <Zap size={28} color="#ec4899" fill="#ec4899" />
+          <span style={styles.brandText}>Energised</span>
         </div>
         
-        {/* Resources button visible to ALL users, not just admin */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <nav style={styles.navLinks}>
           <button 
-            onClick={() => setShowResourcesPanel(true)} 
-            style={styles.resourceButton}
+            style={{ ...styles.tab, ...(activeTab === 'community' ? styles.tabActive : {}) }}
+            onClick={() => setActiveTab('community')}
           >
-            <FileText size={18} />
+            Community
+          </button>
+          <button 
+            style={{ ...styles.tab, ...(activeTab === 'resources' ? styles.tabActive : {}) }}
+            onClick={() => setActiveTab('resources')}
+          >
             Resources
           </button>
-          
-          <div style={styles.nav}>
-            <button style={{...styles.navButton, ...styles.navButtonActive}}>
-              <MessageCircle size={18} />
-              Community
-            </button>
-          </div>
-        </div>
-        
-        <div style={styles.userActions}>
-          <button onClick={() => setShowProfile(true)} style={styles.iconButton}><User size={20} color="#64748b" /></button>
-          <button onClick={() => {setUser(null); localStorage.removeItem('wellnessUser');}} style={styles.iconButton}><LogOut size={20} color="#64748b" /></button>
+        </nav>
+
+        <div style={styles.headerActions}>
+          <Button variant="ghost" size="icon" onClick={() => setModals(m => ({...m, profile: true}))}>
+            <User size={20} />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => { setUser(null); localStorage.removeItem('wellnessUser'); }}>
+            <LogOut size={20} />
+          </Button>
         </div>
       </header>
 
       <main style={styles.main}>
-        <div style={styles.section}>
-          <div style={styles.sectionHeader}>
-            <div>
-              <h2 style={styles.sectionTitle}>Community</h2>
-              <p style={styles.sectionSubtitle}>Connect and share with other energised women</p>
-            </div>
-            <button style={styles.primaryButton} onClick={() => setShowNewPost(true)}>
-              <MessageSquare size={16} /> New Discussion
-            </button>
-          </div>
-
-          <div style={styles.controlsBar}>
-            <div style={styles.searchBox}>
-              <Search size={18} color="#94a3b8" />
-              <input type="text" placeholder="Search discussions..." style={styles.searchInput} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
-            </div>
-          </div>
-
-          <div style={styles.categoryPills}>
-            {['All', ...CATEGORIES.discussion].map(cat => (
-              <button key={cat} onClick={() => setSelectedCategory(cat)} style={{...styles.pill, ...(selectedCategory === cat ? styles.pillActive : {})}}>
-                {cat}
-              </button>
-            ))}
-          </div>
-
-          {discussionsLoading ? (
-            <div style={styles.skeletonList}>
-              {[1,2,3].map(i => <div key={i} style={styles.skeletonCard} />)}
-            </div>
-          ) : (
-            <div style={styles.cardList}>
-              {filteredDiscussions.map(post => (
-                <article key={post.id} style={{...styles.discussionCard, ...(post.isPinned ? styles.pinnedCard : {})}} onClick={() => setSelectedPost(post)}>
-                  {post.isPinned && <div style={styles.pinnedBadge}><Sparkles size={12} /> Featured</div>}
-                  <div style={styles.cardMeta}>
-                    <span style={styles.categoryTag}>{post.category}</span>
-                    <span style={styles.timestamp}>{formatTime(post.created_at)}</span>
-                  </div>
-                  <h3 style={styles.cardTitle}>{post.title}</h3>
-                  <p style={styles.cardContent}>{post.content}</p>
-                  <div style={styles.cardFooter}>
-                    <div style={styles.authorInfo}>
-                      <div style={styles.avatarSmall}><User size={16} color="#94a3b8" /></div>
-                      <span style={styles.authorName}>{post.author}</span>
-                    </div>
-                    <div style={styles.cardStats}>
-                      <button style={{...styles.statButton, ...(post.liked_by?.includes(user.email) ? styles.statButtonActive : {})}} onClick={(e) => { e.stopPropagation(); handleLike(post.id); }}>
-                        <ThumbsUp size={16} fill={post.liked_by?.includes(user.email) ? "#ec4899" : "none"} />
-                        {post.likes || 0}
-                      </button>
-                      <span style={styles.statButton}><MessageSquare size={16} /> {post.comments?.length || 0}</span>
-                      {isAdmin && (
-                        <button style={styles.deleteButtonSmall} onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(post.id); }}>
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
-
-      {/* Post Detail Modal */}
-      {selectedPost && (
-        <div style={styles.modalOverlay} onClick={() => setSelectedPost(null)}>
-          <div style={styles.detailModal} onClick={e => e.stopPropagation()}>
-            <div style={styles.detailHeader}>
-              <button style={styles.backButton} onClick={() => setSelectedPost(null)}><ChevronLeft size={20} /> Back</button>
-              <span style={styles.detailCategory}>{selectedPost.category}</span>
-              {isAdmin && <button style={styles.adminDeleteBtn} onClick={() => setShowDeleteConfirm(selectedPost.id)}><Trash2 size={18} /> Delete</button>}
-            </div>
-
-            <div style={styles.detailContent}>
-              <h2 style={styles.detailTitle}>{selectedPost.title}</h2>
-              <div style={styles.detailAuthor}>
-                <div style={styles.avatarLarge}><User size={24} /></div>
-                <div>
-                  <div style={styles.detailAuthorName}>{selectedPost.author}</div>
-                  <div style={styles.detailTime}>{formatTime(selectedPost.created_at)}</div>
-                </div>
+        {activeTab === 'community' ? (
+          <>
+            <section style={styles.hero}>
+              <div>
+                <h1 style={styles.pageTitle}>Welcome back, {user.display_name}!</h1>
+                <p style={styles.pageSubtitle}>What's on your mind today?</p>
               </div>
-              <div style={styles.detailBody}>{selectedPost.content}</div>
-              
-              <div style={styles.detailActions}>
-                <button style={{...styles.actionButton, ...(selectedPost.liked_by?.includes(user.email) ? styles.actionButtonActive : {})}} onClick={() => handleLike(selectedPost.id)}>
-                  <ThumbsUp fill={selectedPost.liked_by?.includes(user.email) ? "#ec4899" : "none"} />
-                  {selectedPost.likes || 0} likes
-                </button>
-                <button style={styles.actionButton}><Flag size={20} /> Report</button>
-              </div>
-            </div>
+              <Button onClick={() => setModals(m => ({ ...m, post: true }))}>
+                <Plus size={18} /> New Post
+              </Button>
+            </section>
 
-            <div style={styles.commentsSection}>
-              <h3 style={styles.commentsTitle}>Comments ({selectedPost.comments?.length || 0})</h3>
-              <div style={styles.commentInputArea}>
-                <div style={styles.avatarSmall}><User size={16} /></div>
-                <div style={styles.commentInputWrapper}>
-                  <input type="text" placeholder="Add to the discussion..." style={styles.commentInput} value={commentText} onChange={e => setCommentText(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleAddComment()} />
-                  <button style={styles.sendButton} onClick={handleAddComment} disabled={!commentText.trim()}><Send size={18} /></button>
-                </div>
+            {/* Filter Bar */}
+            <div style={styles.filterBar}>
+              <div style={styles.searchWrapper}>
+                <Search size={18} style={styles.searchIcon} />
+                <input 
+                  style={styles.searchInput} 
+                  placeholder="Search discussions..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
               </div>
-
-              <div style={styles.commentsList}>
-                {selectedPost.comments?.map(comment => (
-                  <div key={comment.id} style={styles.comment}>
-                    <div style={styles.avatarSmall}><User size={16} /></div>
-                    <div style={styles.commentContent}>
-                      <div style={styles.commentHeader}>
-                        <span style={styles.commentAuthor}>{comment.author} {comment.isAdmin && <span style={styles.adminLabel}><Shield size={12} /> Admin</span>}</span>
-                        <span style={styles.commentTime}>{formatTime(comment.created_at)}</span>
-                      </div>
-                      <p style={styles.commentText}>{comment.content}</p>
-                      {isAdmin && <button style={styles.commentDeleteBtn} onClick={() => handleDeleteComment(selectedPost.id, comment.id)}>Delete</button>}
-                    </div>
-                  </div>
+              <div style={styles.categoryScroll}>
+                {['All', ...CATEGORIES].map(cat => (
+                  <button 
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    style={{ ...styles.pill, ...(selectedCategory === cat ? styles.pillActive : {}) }}
+                  >
+                    {cat}
+                  </button>
                 ))}
               </div>
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* Resources Panel - Visible to ALL users, but upload restricted to admin */}
-      {showResourcesPanel && (
-        <div style={styles.modalOverlay} onClick={() => setShowResourcesPanel(false)}>
-          <div style={{...styles.detailModal, maxWidth: 800}} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}>
-              <h3>Resources Library</h3>
-              <button onClick={() => setShowResourcesPanel(false)} style={styles.closeButton}><X size={20} /></button>
-            </div>
-            <div style={{padding: 24}}>
-              <p style={{marginBottom: 16, color: '#64748b'}}>Download guides, templates, and wellness resources curated for energised women.</p>
-              
-              {/* Upload button ONLY visible to admin */}
-              {isAdmin && (
-                <button style={styles.primaryButton} onClick={() => setShowUploadResource(true)}>
-                  <Upload size={16} /> Upload New Resource
-                </button>
-              )}
-
-              <div style={{marginTop: 24, display: 'flex', flexDirection: 'column', gap: 12}}>
-                {resourcesLoading ? (
-                  <div style={{textAlign: 'center', padding: 40, color: '#94a3b8'}}>
-                    <Loader2 size={32} style={{animation: 'spin 1s linear infinite', margin: '0 auto 16px'}} />
-                    Loading resources...
-                  </div>
-                ) : (
-                  <>
-                    {resources.map(resource => (
-                      <div key={resource.id} style={{padding: 16, background: '#f8fafc', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                        <div>
-                          <div style={{fontWeight: 700}}>{resource.title}</div>
-                          <div style={{fontSize: 13, color: '#64748b'}}>{resource.type} • {resource.downloads || 0} downloads</div>
-                          {resource.description && <div style={{fontSize: 13, color: '#94a3b8', marginTop: 4}}>{resource.description}</div>}
-                        </div>
-                        <div style={{display: 'flex', gap: 8}}>
-                          <a href={resource.url} target="_blank" rel="noopener noreferrer" style={styles.downloadButton}>
-                            <FileText size={18} /> Download
-                          </a>
-                          {/* Delete option only for admin */}
-                          {isAdmin && (
-                            <button style={styles.deleteButtonSmall} onClick={() => {/* Add delete resource handler */}}>
-                              <Trash2 size={16} />
-                            </button>
-                          )}
-                        </div>
+            {/* Discussion List */}
+            <div style={styles.grid}>
+              {loading.discussions ? (
+                [1,2,3].map(i => <div key={i} style={styles.skeleton} />)
+              ) : filteredDiscussions.length > 0 ? (
+                filteredDiscussions.map(post => (
+                  <Card key={post.id} style={styles.postCard} onClick={() => setModals(m => ({...m, detail: post}))}>
+                    <div style={styles.cardHeader}>
+                      <span style={styles.tag}>{post.category}</span>
+                      <span style={styles.date}>{new Date(post.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <h3 style={styles.cardTitle}>{post.title}</h3>
+                    <p style={styles.cardExcerpt}>{post.content.substring(0, 120)}...</p>
+                    <div style={styles.cardFooter}>
+                      <div style={styles.author}>
+                        <div style={styles.avatar}>{post.author?.[0]}</div>
+                        <span>{post.author}</span>
                       </div>
-                    ))}
-                    {resources.length === 0 && <p style={{color: '#94a3b8', textAlign: 'center', padding: 40}}>No resources available yet. Check back soon!</p>}
-                  </>
-                )}
-              </div>
+                      <div style={styles.stats}>
+                        <span onClick={(e) => { e.stopPropagation(); handleLike(post); }} style={styles.statItem}>
+                          <ThumbsUp size={14} fill={post.liked_by?.includes(user.email) ? "#ec4899" : "none"} />
+                          {post.likes || 0}
+                        </span>
+                        <span style={styles.statItem}><MessageSquare size={14} /> {post.comments?.length || 0}</span>
+                      </div>
+                    </div>
+                  </Card>
+                ))
+              ) : (
+                <div style={styles.emptyState}>
+                  <Sparkles size={48} color="#e2e8f0" />
+                  <p>No discussions found in this category.</p>
+                </div>
+              )}
             </div>
+          </>
+        ) : (
+          <div style={styles.resourceGrid}>
+            <div style={styles.resourceHero}>
+              <h2>Resource Library</h2>
+              <p>Hand-picked tools for your growth.</p>
+              {isAdmin && <Button variant="secondary" onClick={() => setModals(m => ({...m, resource: true}))}>Upload Resource</Button>}
+            </div>
+            {resources.map(res => (
+              <Card key={res.id} style={styles.resCard}>
+                <div style={styles.resIcon}><FileText size={24} color="#ec4899" /></div>
+                <div style={{ flex: 1 }}>
+                  <h4 style={{ margin: '0 0 4px 0' }}>{res.title}</h4>
+                  <p style={styles.resDesc}>{res.description}</p>
+                </div>
+                <a href={res.url} target="_blank" rel="noreferrer">
+                  <Button variant="outline" size="sm"><ExternalLink size={14} /> View</Button>
+                </a>
+              </Card>
+            ))}
+          </div>
+        )}
+      </main>
+
+      {/* Detail Modal Component */}
+      {modals.detail && (
+        <div style={styles.modalOverlay} onClick={() => setModals(m => ({...m, detail: null}))}>
+          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+             <div style={styles.modalHeader}>
+                <Button variant="ghost" size="icon" onClick={() => setModals(m => ({...m, detail: null}))}>
+                  <X size={20} />
+                </Button>
+                <span style={styles.tag}>{modals.detail.category}</span>
+             </div>
+             <h2 style={{ fontSize: '24px', marginBottom: '16px' }}>{modals.detail.title}</h2>
+             <div style={{ color: '#475569', lineHeight: '1.6', marginBottom: '32px' }}>
+                {modals.detail.content}
+             </div>
+             <div style={styles.commentSection}>
+                <h4>Comments</h4>
+                <div style={styles.inputGroup}>
+                  <input style={styles.input} placeholder="Write a supportive comment..." />
+                  <Button size="sm"><Send size={16} /></Button>
+                </div>
+             </div>
           </div>
         </div>
       )}
 
-      {/* Admin Only: Upload Resource Modal */}
-      {isAdmin && showUploadResource && (
-        <div style={styles.modalOverlay} onClick={() => setShowUploadResource(false)}>
-          <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}>
-              <h3>Upload Resource (Admin Only)</h3>
-              <button style={styles.closeButton} onClick={() => setShowUploadResource(false)}><X size={20} /></button>
-            </div>
-            <input style={styles.input} placeholder="Resource Title" value={resourceData.title} onChange={e => setResourceData({...resourceData, title: e.target.value})} />
-            <select style={styles.input} value={resourceData.type} onChange={e => setResourceData({...resourceData, type: e.target.value})}>
-              <option>Guide</option>
-              <option>Template</option>
-              <option>E-book</option>
-              <option>Article</option>
-              <option>Worksheet</option>
-            </select>
-            <textarea style={styles.textarea} placeholder="Description" rows={3} value={resourceData.description} onChange={e => setResourceData({...resourceData, description: e.target.value})} />
-            <input style={styles.input} placeholder="File URL (Google Drive, Dropbox, etc.)" value={resourceData.url} onChange={e => setResourceData({...resourceData, url: e.target.value})} />
-            <button style={styles.primaryButton} onClick={handleResourceUpload} disabled={!resourceData.title || !resourceData.url}>Upload to Database</button>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirm */}
-      {showDeleteConfirm && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.confirmBox}>
-            <Trash2 size={32} color="#ef4444" />
-            <h3>Delete this post?</h3>
-            <div style={styles.confirmActions}>
-              <button style={styles.cancelButton} onClick={() => setShowDeleteConfirm(null)}>Cancel</button>
-              <button style={styles.confirmDeleteBtn} onClick={() => handleDeletePost(showDeleteConfirm)}>Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* New Post Modal */}
-      {showNewPost && (
-        <div style={styles.modalOverlay} onClick={() => setShowNewPost(false)}>
-          <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}>
-              <h3>Start a Discussion</h3>
-              <button style={styles.closeButton} onClick={() => setShowNewPost(false)}><X size={20} /></button>
-            </div>
-            <select style={styles.input} value={newPostData.category} onChange={e => setNewPostData({...newPostData, category: e.target.value})}>
-              {CATEGORIES.discussion.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <input style={styles.input} placeholder="Title" value={newPostData.title} onChange={e => setNewPostData({...newPostData, title: e.target.value})} />
-            <textarea style={styles.textarea} placeholder="Share your thoughts..." rows={5} value={newPostData.content} onChange={e => setNewPostData({...newPostData, content: e.target.value})} />
-            <button style={styles.primaryButton} onClick={handleNewPost} disabled={!newPostData.title.trim() || !newPostData.content.trim()}>Post</button>
-          </div>
-        </div>
-      )}
-
-      {/* Profile Modal */}
-      {showProfile && (
-        <div style={styles.modalOverlay} onClick={() => setShowProfile(false)}>
-          <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}>
-              <h3>Profile</h3>
-              <button style={styles.closeButton} onClick={() => setShowProfile(false)}><X size={20} /></button>
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Display Name</label>
-              <input style={styles.input} value={profileForm.displayName} onChange={e => setProfileForm({...profileForm, displayName: e.target.value})} />
-            </div>
-            <button style={styles.primaryButton} onClick={() => { const updated = {...user, display_name: profileForm.displayName}; setUser(updated); localStorage.setItem('wellnessUser', JSON.stringify(updated)); setShowProfile(false); showToast('Profile updated'); }}>Save</button>
-          </div>
+      {/* Toast Notification */}
+      {toast && (
+        <div style={{ ...styles.toast, backgroundColor: toast.type === 'error' ? '#ef4444' : '#10b981' }}>
+          {toast.message}
         </div>
       )}
     </div>
   );
 };
 
+// --- Enhanced Styles Object ---
 const styles = {
-  container: { minHeight: '100vh', background: '#fafaf9', color: '#1e293b', fontFamily: 'system-ui, -apple-system, sans-serif' },
-  
-  // Auth
-  loginBox: { maxWidth: 420, margin: '80px auto', padding: 48, background: 'white', borderRadius: 20, boxShadow: '0 10px 40px rgba(0,0,0,0.1)' },
-  loginTitle: { fontSize: 28, fontWeight: 700, margin: '16px 0 4px' },
-  loginSubtitle: { color: '#64748b', fontSize: 16 },
-  authInput: { width: '100%', padding: 14, marginBottom: 12, borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 15, boxSizing: 'border-box' },
-  authButton: { width: '100%', padding: 14, background: '#ec4899', color: 'white', border: 'none', borderRadius: 10, fontSize: 16, fontWeight: 600, cursor: 'pointer' },
-  errorBanner: { background: '#fef2f2', color: '#ef4444', padding: 12, borderRadius: 8, marginBottom: 16, textAlign: 'center' },
-  loginHint: { textAlign: 'center', color: '#94a3b8', fontSize: 13, marginTop: 16 },
-  
-  // Toast
-  toast: { position: 'fixed', top: 20, right: 20, padding: '16px 20px', borderRadius: 12, color: 'white', zIndex: 1000 },
-  toastSuccess: { background: '#10b981' },
-  toastError: { background: '#ef4444' },
-  
-  // Header
-  header: { position: 'sticky', top: 0, background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)', borderBottom: '1px solid #f1f5f9', padding: '16px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 50 },
-  brand: { display: 'flex', alignItems: 'center', gap: 12 },
-  brandText: { fontSize: 20, fontWeight: 700 },
-  adminBadge: { display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', background: '#fef3c7', color: '#d97706', fontSize: 11, fontWeight: 700, borderRadius: 20 },
-  nav: { display: 'flex', gap: 4, background: '#f1f5f9', padding: 4, borderRadius: 10 },
-  navButton: { padding: '8px 16px', borderRadius: 8, border: 'none', background: 'transparent', color: '#64748b', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 },
-  navButtonActive: { background: 'white', color: '#1e293b', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
-  userActions: { display: 'flex', gap: 8 },
-  iconButton: { width: 36, height: 36, borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  resourceButton: { padding: '8px 16px', background: '#faf5ff', color: '#9333ea', border: '1px solid #e9d5ff', borderRadius: 8, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 },
-  downloadButton: { padding: '8px 16px', background: '#ec4899', color: 'white', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none' },
-  
-  // Main
-  main: { maxWidth: 800, margin: '0 auto', padding: '32px 20px' },
-  sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 },
-  sectionTitle: { fontSize: 28, fontWeight: 700, margin: 0 },
-  sectionSubtitle: { color: '#64748b', margin: '4px 0 0 0' },
-  primaryButton: { padding: '10px 20px', background: '#ec4899', color: 'white', border: 'none', borderRadius: 10, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 },
-  
-  // Controls
-  controlsBar: { display: 'flex', gap: 12, marginBottom: 20 },
-  searchBox: { flex: 1, position: 'relative', display: 'flex', alignItems: 'center' },
-  searchInput: { width: '100%', padding: '10px 16px 10px 40px', borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 14 },
-  
-  // Categories
-  categoryPills: { display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 24, paddingBottom: 8 },
-  pill: { padding: '8px 16px', borderRadius: 20, border: '1px solid #e2e8f0', background: 'white', color: '#64748b', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' },
-  pillActive: { background: '#fce7f3', color: '#ec4899', borderColor: '#fce7f3' },
-  
-  // Cards
-  cardList: { display: 'flex', flexDirection: 'column', gap: 16 },
-  discussionCard: { background: 'white', padding: 24, borderRadius: 16, border: '1px solid #f1f5f9', cursor: 'pointer', position: 'relative' },
-  pinnedCard: { background: '#fffbeb', borderColor: '#fef3c7' },
-  pinnedBadge: { position: 'absolute', top: 12, right: 12, display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', background: '#fef3c7', color: '#d97706', fontSize: 11, fontWeight: 700, borderRadius: 20 },
-  cardMeta: { display: 'flex', justifyContent: 'space-between', marginBottom: 12 },
-  categoryTag: { fontSize: 12, fontWeight: 700, color: '#059669', textTransform: 'uppercase' },
-  timestamp: { fontSize: 13, color: '#94a3b8' },
-  cardTitle: { fontSize: 18, fontWeight: 700, margin: '0 0 8px 0' },
-  cardContent: { color: '#475569', fontSize: 15, lineHeight: 1.6, margin: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' },
-  cardFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 16, borderTop: '1px solid #f8fafc' },
-  authorInfo: { display: 'flex', alignItems: 'center', gap: 8 },
-  avatarSmall: { width: 28, height: 28, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  authorName: { fontSize: 14, fontWeight: 600, color: '#475569' },
-  cardStats: { display: 'flex', gap: 12, alignItems: 'center' },
-  statButton: { display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 6, border: 'none', background: '#f8fafc', color: '#64748b', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
-  statButtonActive: { background: '#fce7f3', color: '#ec4899' },
-  deleteButtonSmall: { padding: 6, border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer' },
-  
-  // Skeleton
-  skeletonList: { display: 'flex', flexDirection: 'column', gap: 16 },
-  skeletonCard: { height: 140, background: '#f1f5f9', borderRadius: 16, animation: 'pulse 2s infinite' },
-  
-  // Modals
-  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 20 },
-  modal: { background: 'white', borderRadius: 20, width: '100%', maxWidth: 500, maxHeight: '90vh', overflow: 'auto' },
-  detailModal: { background: 'white', borderRadius: 20, width: '100%', maxWidth: 700, maxHeight: '90vh', overflow: 'auto' },
-  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #f1f5f9' },
-  closeButton: { width: 32, height: 32, borderRadius: 8, border: 'none', background: '#f8fafc', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  input: { width: '100%', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0', marginBottom: 12, fontSize: 14, boxSizing: 'border-box' },
-  textarea: { width: '100%', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0', minHeight: 100, fontSize: 14, resize: 'vertical', boxSizing: 'border-box' },
-  label: { display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 6 },
-  formGroup: { padding: '0 24px', marginBottom: 16 },
-  
-  // Detail View
-  detailHeader: { display: 'flex', alignItems: 'center', gap: 16, padding: '16px 24px', borderBottom: '1px solid #f1f5f9' },
-  backButton: { display: 'flex', alignItems: 'center', gap: 4, padding: '8px 12px', borderRadius: 8, border: 'none', background: '#f8fafc', color: '#64748b', fontWeight: 600, cursor: 'pointer' },
-  detailCategory: { flex: 1, textAlign: 'center', fontSize: 13, fontWeight: 700, color: '#059669' },
-  adminDeleteBtn: { display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: '#fef2f2', color: '#ef4444', border: 'none', borderRadius: 8, fontWeight: 600, cursor: 'pointer' },
-  detailContent: { padding: 24 },
-  detailTitle: { fontSize: 24, fontWeight: 700, margin: '0 0 20px 0' },
-  detailAuthor: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 },
-  avatarLarge: { width: 48, height: 48, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  detailAuthorName: { fontWeight: 700 },
-  detailTime: { fontSize: 13, color: '#94a3b8' },
-  detailBody: { fontSize: 16, lineHeight: 1.8, color: '#475569', marginBottom: 24 },
-  detailActions: { display: 'flex', gap: 12, padding: '16px 0', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' },
-  actionButton: { display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 8, border: 'none', background: '#f8fafc', color: '#64748b', fontWeight: 600, cursor: 'pointer' },
-  actionButtonActive: { background: '#fce7f3', color: '#ec4899' },
-  
-  // Comments
-  commentsSection: { padding: 24, background: '#fafaf9' },
-  commentsTitle: { fontSize: 18, fontWeight: 700, margin: '0 0 20px 0' },
-  commentInputArea: { display: 'flex', gap: 12, marginBottom: 24 },
-  commentInputWrapper: { flex: 1, display: 'flex', gap: 8, background: 'white', padding: 4, borderRadius: 24, border: '1px solid #e2e8f0' },
-  commentInput: { flex: 1, border: 'none', outline: 'none', padding: '8px 16px', fontSize: 14 },
-  sendButton: { width: 36, height: 36, borderRadius: '50%', background: '#ec4899', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  commentsList: { display: 'flex', flexDirection: 'column', gap: 16 },
-  comment: { display: 'flex', gap: 12 },
-  commentContent: { flex: 1, background: 'white', padding: 16, borderRadius: 12, border: '1px solid #f1f5f9' },
-  commentHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: 4 },
-  commentAuthor: { fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 },
-  adminLabel: { fontSize: 10, background: '#fef3c7', color: '#d97706', padding: '2px 6px', borderRadius: 4, fontWeight: 800 },
-  commentTime: { fontSize: 12, color: '#94a3b8' },
-  commentText: { margin: 0, color: '#475569', fontSize: 14, lineHeight: 1.5 },
-  commentDeleteBtn: { fontSize: 12, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', marginTop: 8 },
-  
-  // Confirm
-  confirmBox: { background: 'white', padding: 32, borderRadius: 20, textAlign: 'center', maxWidth: 360 },
-  confirmActions: { display: 'flex', gap: 12, marginTop: 24, justifyContent: 'center' },
-  cancelButton: { padding: '10px 24px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', fontWeight: 600 },
-  confirmDeleteBtn: { padding: '10px 24px', borderRadius: 8, border: 'none', background: '#ef4444', color: 'white', cursor: 'pointer', fontWeight: 600 }
+  container: { minHeight: '100vh', background: '#fdfcfd', fontFamily: 'Inter, system-ui, sans-serif' },
+  header: { 
+    position: 'sticky', top: 0, zIndex: 100, background: 'white', borderBottom: '1px solid #f1f5f9',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', height: '70px' 
+  },
+  brand: { display: 'flex', alignItems: 'center', gap: '8px' },
+  brandText: { fontSize: '20px', fontWeight: '800', background: 'linear-gradient(to right, #ec4899, #8b5cf6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' },
+  navLinks: { display: 'flex', gap: '8px' },
+  tab: { padding: '8px 16px', borderRadius: '20px', border: 'none', background: 'transparent', cursor: 'pointer', fontWeight: '500', color: '#64748b' },
+  tabActive: { background: '#fce7f3', color: '#be185d' },
+  main: { maxWidth: '1000px', margin: '0 auto', padding: '40px 20px' },
+  hero: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' },
+  pageTitle: { fontSize: '32px', fontWeight: '800', margin: 0, color: '#1e293b' },
+  pageSubtitle: { margin: '4px 0 0 0', color: '#64748b' },
+  filterBar: { marginBottom: '32px' },
+  searchWrapper: { position: 'relative', marginBottom: '16px' },
+  searchIcon: { position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' },
+  searchInput: { width: '100%', padding: '12px 12px 12px 40px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '15px' },
+  categoryScroll: { display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px' },
+  pill: { whiteSpace: 'nowrap', padding: '6px 14px', borderRadius: '20px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', fontSize: '14px', color: '#64748b' },
+  pillActive: { background: '#1e293b', color: 'white', borderColor: '#1e293b' },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '24px' },
+  postCard: { cursor: 'pointer', transition: 'transform 0.2s', ':hover': { transform: 'translateY(-4px)' } },
+  cardHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px' },
+  tag: { padding: '4px 8px', background: '#f1f5f9', borderRadius: '6px', fontSize: '12px', fontWeight: '600', color: '#475569' },
+  cardTitle: { fontSize: '18px', fontWeight: '700', margin: '0 0 8px 0', color: '#1e293b' },
+  cardExcerpt: { fontSize: '14px', color: '#64748b', lineHeight: '1.5' },
+  cardFooter: { marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  author: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: '500' },
+  avatar: { width: '24px', height: '24px', borderRadius: '50%', background: '#ec4899', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px' },
+  stats: { display: 'flex', gap: '12px', color: '#94a3b8' },
+  statItem: { display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px' },
+  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
+  modalContent: { background: 'white', width: '90%', maxWidth: '600px', borderRadius: '24px', padding: '32px', maxHeight: '90vh', overflowY: 'auto' },
+  toast: { position: 'fixed', bottom: '24px', right: '24px', padding: '12px 24px', color: 'white', borderRadius: '12px', fontWeight: '600', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 2000 },
+  authContainer: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fdfcfd' },
+  authCard: { background: 'white', padding: '48px', borderRadius: '24px', width: '400px', textAlign: 'center', border: '1px solid #f1f5f9' },
+  authLogo: { marginBottom: '32px' },
+  authTitle: { fontSize: '24px', fontWeight: '800', marginTop: '16px', marginBottom: '4px' },
+  input: { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '16px', boxSizing: 'border-box' },
+  emptyState: { gridColumn: '1/-1', textAlign: 'center', padding: '80px 0', color: '#94a3b8' },
+  resourceGrid: { display: 'flex', flexDirection: 'column', gap: '16px' },
+  resCard: { display: 'flex', gap: '20px', alignItems: 'center' },
+  resDesc: { fontSize: '14px', color: '#64748b', margin: 0 }
 };
 
 export default Dashboard;
