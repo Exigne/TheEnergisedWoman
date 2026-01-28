@@ -393,7 +393,7 @@ const Dashboard = () => {
         <div style={{background: 'white', padding: '40px', borderRadius: '20px', width: '100%', maxWidth: '400px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)'}}>
           <div style={{textAlign: 'center', marginBottom: '20px'}}>
             <Crown size={40} color="#ec4899" />
-            <h2>Collective Login</h2>
+            <h2>The Energised Woman Collective Login</h2>
           </div>
           <form onSubmit={handleAuth}>
             <input 
@@ -432,7 +432,7 @@ const Dashboard = () => {
       <header style={{background: 'white', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 40px', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 100}}>
         <div style={{display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold', fontSize: '20px'}}>
           <Crown color="#ec4899" /> 
-          <span>The Collective</span>
+          <span>The Energised Woman Collective</span>
         </div>
         <nav style={{display: 'flex', gap: '8px', background: '#f1f5f9', padding: '5px', borderRadius: '12px'}}>
           <button 
