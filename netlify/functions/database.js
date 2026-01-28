@@ -133,12 +133,74 @@ exports.handler = async (event) => {
           ? `${userData.first_name} ${userData.last_name}`.trim()
           : (userData.display_name || 'Anonymous');
         
-        // Insert with BOTH author_id and author
+        // Insert with BOTH author_id and author, plus empty likes array
         const res = await pool.query(
-          `INSERT INTO discussions (author_id, author, title, content, category, comments, created_at) 
-           VALUES ($1, $2, $3, $4, $5, '[]'::jsonb, NOW()) RETURNING *`,
+          `INSERT INTO discussions (author_id, author, title, content, category, comments, likes, created_at) 
+           VALUES ($1, $2, $3, $4, $5, '[]'::jsonb, '[]'::jsonb, NOW()) RETURNING *`,
           [authorId, authorName, title, content, category]
         );
+        return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
+      }
+
+      // Add comment to discussion
+      if (type === 'addComment') {
+        const { postId, comment, author } = data;
+        
+        if (!postId || !comment || !author) {
+          return { statusCode: 400, headers, body: JSON.stringify({ message: 'Missing required fields' }) };
+        }
+
+        const newComment = {
+          text: comment,
+          author: author,
+          timestamp: new Date().toISOString()
+        };
+
+        const res = await pool.query(
+          `UPDATE discussions 
+           SET comments = comments || $1::jsonb 
+           WHERE id = $2 
+           RETURNING *`,
+          [JSON.stringify(newComment), postId]
+        );
+
+        return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
+      }
+
+      // Like/unlike a post
+      if (type === 'likePost') {
+        const { postId, userId } = data;
+        
+        if (!postId || !userId) {
+          return { statusCode: 400, headers, body: JSON.stringify({ message: 'Missing postId or userId' }) };
+        }
+
+        // Check if user already liked the post
+        const checkRes = await pool.query(
+          'SELECT likes FROM discussions WHERE id = $1',
+          [postId]
+        );
+
+        if (checkRes.rows.length === 0) {
+          return { statusCode: 404, headers, body: JSON.stringify({ message: 'Post not found' }) };
+        }
+
+        const currentLikes = checkRes.rows[0].likes || [];
+        let newLikes;
+
+        if (currentLikes.includes(userId)) {
+          // Unlike - remove userId
+          newLikes = currentLikes.filter(id => id !== userId);
+        } else {
+          // Like - add userId
+          newLikes = [...currentLikes, userId];
+        }
+
+        const res = await pool.query(
+          'UPDATE discussions SET likes = $1 WHERE id = $2 RETURNING *',
+          [JSON.stringify(newLikes), postId]
+        );
+
         return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
       }
       
