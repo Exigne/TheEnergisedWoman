@@ -85,11 +85,7 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'GET') {
       let query = '';
       if (type === 'discussions') {
-        query = `SELECT d.*, 
-                 COALESCE(u.first_name || ' ' || u.last_name, u.display_name, 'Anonymous') as author
-                 FROM discussions d 
-                 LEFT JOIN users u ON d.author_id = u.id 
-                 ORDER BY d.created_at DESC`;
+        query = 'SELECT * FROM discussions ORDER BY created_at DESC';
       } else if (type === 'video') {
         query = 'SELECT * FROM videos ORDER BY created_at DESC';
       } else if (type === 'resources') {
@@ -115,8 +111,12 @@ exports.handler = async (event) => {
           };
         }
         
-        // Get user ID from email
-        const userResult = await pool.query('SELECT id FROM users WHERE email = $1', [userEmail]);
+        // Get user info from email
+        const userResult = await pool.query(
+          'SELECT id, first_name, last_name, display_name FROM users WHERE email = $1', 
+          [userEmail]
+        );
+        
         if (userResult.rows.length === 0) {
           return { 
             statusCode: 400, 
@@ -125,12 +125,19 @@ exports.handler = async (event) => {
           };
         }
         
-        const authorId = userResult.rows[0].id;
+        const userData = userResult.rows[0];
+        const authorId = userData.id;
         
+        // Create author name from first_name + last_name, or fall back to display_name
+        const authorName = (userData.first_name && userData.last_name)
+          ? `${userData.first_name} ${userData.last_name}`.trim()
+          : (userData.display_name || 'Anonymous');
+        
+        // Insert with BOTH author_id and author
         const res = await pool.query(
-          `INSERT INTO discussions (author_id, title, content, category, comments, created_at) 
-           VALUES ($1, $2, $3, $4, '[]'::jsonb, NOW()) RETURNING *`,
-          [authorId, title, content, category]
+          `INSERT INTO discussions (author_id, author, title, content, category, comments, created_at) 
+           VALUES ($1, $2, $3, $4, $5, '[]'::jsonb, NOW()) RETURNING *`,
+          [authorId, authorName, title, content, category]
         );
         return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
       }
