@@ -27,7 +27,7 @@ const Dashboard = () => {
 
   // Forms
   const [postForm, setPostForm] = useState({ title: '', content: '', category: 'General' });
-  const [videoForm, setVideoForm] = useState({ title: '', url: '', description: '' });
+  const [videoForm, setVideoForm] = useState({ title: '', url: '', description: '', thumbnail: '' });
   const [resourceForm, setResourceForm] = useState({ title: '', url: '', category: 'General' });
   const [profileForm, setProfileForm] = useState({ firstName: '', lastName: '', profilePic: '' });
 
@@ -149,6 +149,31 @@ const Dashboard = () => {
     reader.onerror = () => {
       alert('Failed to read image');
       setUploadingImage(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // NEW: Thumbnail upload handler for videos
+  const handleThumbnailUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Image must be smaller than 2MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setVideoForm({...videoForm, thumbnail: e.target.result});
+    };
+    reader.onerror = () => {
+      alert('Failed to read image');
     };
     reader.readAsDataURL(file);
   };
@@ -299,11 +324,16 @@ const Dashboard = () => {
       const res = await fetch('/.netlify/functions/database?type=video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(videoForm)
+        body: JSON.stringify({
+          title: videoForm.title,
+          url: videoForm.url,
+          description: videoForm.description,
+          thumbnail: videoForm.thumbnail
+        })
       });
       
       if (res.ok) {
-        setVideoForm({ title: '', url: '', description: '' });
+        setVideoForm({ title: '', url: '', description: '', thumbnail: '' });
         setShowModal(null);
         loadAllData();
       } else {
@@ -497,8 +527,8 @@ const Dashboard = () => {
 
             {videos.map(v => {
               const videoId = getVideoId(v.url);
-              // YouTube thumbnail URLs - try hqdefault first for better quality
-              const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
+              // Use custom thumbnail if available, otherwise fallback to YouTube thumbnail
+              const thumbnailUrl = v.thumbnail || (videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null);
               
               return (
                 <div key={v.id} style={{background: 'white', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0'}}>
@@ -513,7 +543,7 @@ const Dashboard = () => {
                     }}
                     onClick={() => openVideoPopup(v.url)}
                   >
-                    {videoId ? (
+                    {thumbnailUrl ? (
                       <>
                         <img 
                           src={thumbnailUrl}
@@ -526,13 +556,14 @@ const Dashboard = () => {
                           }}
                           onError={(e) => {
                             console.error("Thumbnail failed to load:", thumbnailUrl);
-                            // Fallback to default quality
-                            e.target.src = `https://img.youtube.com/vi/${videoId}/default.jpg`;
-                            // If that also fails, hide image and show placeholder div
-                            e.target.onerror = () => {
+                            // If custom thumbnail fails, try YouTube fallback
+                            if (v.thumbnail && videoId) {
+                              e.target.src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+                            } else {
+                              // Show placeholder
                               e.target.style.display = 'none';
                               e.target.parentElement.querySelector('.fallback-placeholder').style.display = 'flex';
-                            };
+                            }
                           }}
                         />
                         {/* Fallback placeholder - hidden by default */}
@@ -939,7 +970,7 @@ const Dashboard = () => {
 
       {showModal === 'addVideo' && (
         <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}} onClick={() => setShowModal(null)}>
-          <div style={{background: 'white', padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px'}} onClick={e => e.stopPropagation()}>
+          <div style={{background: 'white', padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto'}} onClick={e => e.stopPropagation()}>
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px'}}>
               <h3>Add Video</h3>
               <button onClick={() => setShowModal(null)} style={{background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8'}}>
@@ -964,6 +995,49 @@ const Dashboard = () => {
               value={videoForm.description}
               onChange={e => setVideoForm({...videoForm, description: e.target.value})} 
             />
+            
+            {/* Thumbnail Upload Section */}
+            <div style={{marginBottom: '20px'}}>
+              <label style={{fontSize: '14px', color: '#64748b', marginBottom: '8px', display: 'block', fontWeight: '500'}}>
+                Thumbnail Image
+              </label>
+              <div style={{display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px'}}>
+                <label style={{display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 15px', background: '#f1f5f9', border: '2px dashed #cbd5e1', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', color: '#64748b', flex: 1}}>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleThumbnailUpload}
+                    style={{display: 'none'}}
+                  />
+                  <Upload size={18} />
+                  {videoForm.thumbnail ? 'Change Thumbnail' : 'Upload Thumbnail'}
+                </label>
+                {videoForm.thumbnail && (
+                  <button 
+                    onClick={() => setVideoForm({...videoForm, thumbnail: ''})}
+                    style={{background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '13px', padding: '8px'}}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              
+              {/* Preview */}
+              {videoForm.thumbnail && (
+                <div style={{marginTop: '10px', marginBottom: '10px'}}>
+                  <img 
+                    src={videoForm.thumbnail} 
+                    alt="Thumbnail preview" 
+                    style={{width: '100%', height: '120px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #e2e8f0'}} 
+                  />
+                </div>
+              )}
+              
+              <p style={{fontSize: '12px', color: '#94a3b8', margin: 0}}>
+                Optional: Upload a custom thumbnail (Max 2MB). If left empty, YouTube thumbnail will be used.
+              </p>
+            </div>
+
             <button style={{background: '#ec4899', color: 'white', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', width: '100%'}} onClick={handleAddVideo}>
               Add to Hub
             </button>
