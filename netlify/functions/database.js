@@ -23,6 +23,9 @@ exports.handler = async (event) => {
     // --- 1. AUTHENTICATION ---
     if (type === 'register' && event.httpMethod === 'POST') {
       const { email, password } = data;
+      if (!email || !password) {
+        return { statusCode: 400, headers, body: JSON.stringify({ message: 'Email and password required' }) };
+      }
       const cleanEmail = email.toLowerCase().trim();
       const check = await pool.query('SELECT email FROM users WHERE email = $1', [cleanEmail]);
       if (check.rows.length > 0) return { statusCode: 400, headers, body: JSON.stringify({ message: 'User already exists' }) };
@@ -37,6 +40,9 @@ exports.handler = async (event) => {
 
     if (type === 'login' && event.httpMethod === 'POST') {
       const { email, password } = data;
+      if (!email || !password) {
+        return { statusCode: 400, headers, body: JSON.stringify({ message: 'Email and password required' }) };
+      }
       const result = await pool.query(
         `SELECT email, display_name as "displayName", first_name as "firstName", 
          last_name as "lastName", profile_pic as "profilePic", is_admin as "isAdmin", password_hash 
@@ -63,9 +69,16 @@ exports.handler = async (event) => {
 
     // --- 3. GET DATA ---
     if (event.httpMethod === 'GET') {
-      let query = 'SELECT * FROM discussions ORDER BY created_at DESC';
-      if (type === 'video') query = 'SELECT * FROM videos ORDER BY created_at DESC';
-      if (type === 'resources') query = 'SELECT * FROM resources ORDER BY created_at DESC';
+      let query = '';
+      if (type === 'discussions') {
+        query = 'SELECT * FROM discussions ORDER BY created_at DESC';
+      } else if (type === 'video') {
+        query = 'SELECT * FROM videos ORDER BY created_at DESC';
+      } else if (type === 'resources') {
+        query = 'SELECT * FROM resources ORDER BY created_at DESC';
+      } else {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid type parameter' }) };
+      }
       const result = await pool.query(query);
       return { statusCode: 200, headers, body: JSON.stringify(result.rows) };
     }
@@ -74,6 +87,9 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'POST') {
       if (type === 'discussion') {
         const { author, title, content, category } = data;
+        if (!author || !title || !content || !category) {
+          return { statusCode: 400, headers, body: JSON.stringify({ message: 'Missing required fields' }) };
+        }
         const res = await pool.query(
           `INSERT INTO discussions (author, title, content, category, comments, created_at) 
            VALUES ($1, $2, $3, $4, '[]'::jsonb, NOW()) RETURNING *`,
@@ -83,6 +99,9 @@ exports.handler = async (event) => {
       }
       if (type === 'video') {
         const { title, url, description } = data;
+        if (!title || !url) {
+          return { statusCode: 400, headers, body: JSON.stringify({ message: 'Title and URL required' }) };
+        }
         const res = await pool.query(
           `INSERT INTO videos (title, url, description, comments, created_at) 
            VALUES ($1, $2, $3, '[]'::jsonb, NOW()) RETURNING *`,
@@ -92,10 +111,13 @@ exports.handler = async (event) => {
       }
       if (type === 'resource') {
         const { title, url, category } = data;
+        if (!title || !url) {
+          return { statusCode: 400, headers, body: JSON.stringify({ message: 'Title and URL required' }) };
+        }
         const res = await pool.query(
           `INSERT INTO resources (title, url, category, created_at) 
            VALUES ($1, $2, $3, NOW()) RETURNING *`,
-          [title, url, category]
+          [title, url, category || 'General']
         );
         return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
       }
@@ -103,16 +125,20 @@ exports.handler = async (event) => {
 
     // --- 5. DELETE DATA ---
     if (event.httpMethod === 'DELETE') {
+      if (!id) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'ID required for deletion' }) };
+      }
       let table = 'discussions';
       if (type === 'video') table = 'videos';
       if (type === 'resource') table = 'resources';
+      if (type === 'discussion') table = 'discussions';
       await pool.query(`DELETE FROM ${table} WHERE id = $1`, [id]);
       return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
     }
 
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Action not handled' }) };
   } catch (err) {
-    console.error(err);
+    console.error('Database error:', err);
     return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
   }
 };
