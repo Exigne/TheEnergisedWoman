@@ -9,19 +9,17 @@
 [[headers]]
   for = "/*"
   [headers.values]
-    # Updated CSP: Added 'self' and https to scripts/connect to help the player load
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.youtube.com https://s.ytimg.com; frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://youtube.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://www.youtube.com;"
+    # Simplified CSP: removed restricted default-src to prevent accidental blocking
+    Content-Security-Policy = "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://youtube.com; script-src 'self' 'unsafe-inline' https://www.youtube.com https://s.ytimg.com;"
     
-    # Removed X-Frame-Options (CSP frame-ancestors is the modern equivalent, but usually not needed for a dashboard)
-    Referrer-Policy = "strict-origin-when-cross-origin"
+    # REMOVED X-Frame-Options entirely. It often conflicts with YouTube's own security.
+    # ADDED Cross-Origin-Embedder-Policy to allow the iframe to load
+    Cross-Origin-Embedder-Policy = "unsafe-none"
     
-    # Fixed Permissions-Policy: Allow 'self' and the YouTube domains to use necessary player features
-    Permissions-Policy = "accelerometer=(self \"https://www.youtube.com\"), autoplay=(self \"https://www.youtube.com\"), gyroscope=(self \"https://www.youtube.com\"), picture-in-picture=(self \"https://www.youtube.com\")"
+    # Simplified Permissions-Policy
+    Permissions-Policy = "accelerometer=*, autoplay=*, gyroscope=*, picture-in-picture=*"
 
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-
-[context.production]
-  command = "npm run build"
