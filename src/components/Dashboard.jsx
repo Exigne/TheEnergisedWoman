@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, LogOut, Crown, Plus, Video, Upload, FileText, User, 
   Trash2, Hash, Send, MessageCircle, PlayCircle, BookOpen, 
-  Utensils, LayoutGrid, Settings, ExternalLink, ChevronRight, Heart
+  Utensils, LayoutGrid, Settings, ExternalLink, ChevronRight, Heart, ExternalLinkIcon
 } from 'lucide-react';
 
 const GROUPS = ['All Discussions', 'General', 'Mental Health', 'Self Care', 'Relationships', 'Career', 'Motherhood', 'Fitness', 'Nutrition'];
@@ -120,9 +120,7 @@ const Dashboard = () => {
     try {
       const res = await fetch('/.netlify/functions/database?type=discussion', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       
@@ -196,6 +194,12 @@ const Dashboard = () => {
       return;
     }
     
+    // Basic validation
+    if (!getVideoEmbedUrl(videoForm.url)) {
+      alert('Please enter a valid YouTube URL');
+      return;
+    }
+    
     try {
       const res = await fetch('/.netlify/functions/database?type=video', {
         method: 'POST',
@@ -255,23 +259,44 @@ const Dashboard = () => {
     }
   };
 
-  // FIXED: Removed space in embed URL
+  // FIXED: Robust YouTube URL parsing with nocookie domain
   const getVideoEmbedUrl = (url) => {
-    if (!url) return '';
-    let id = '';
+    if (!url) return null;
     
-    if (url.includes('youtube.com/watch?v=')) {
-      id = url.split('v=')[1]?.split('&')[0];
-    } else if (url.includes('youtu.be/')) {
-      id = url.split('youtu.be/')[1]?.split('?')[0];
-    } else if (url.includes('youtube.com/embed/')) {
-      return url;
-    } else {
-      id = url.split('/').pop();
+    try {
+      let videoId = '';
+      const cleanUrl = url.trim();
+      
+      // Handle youtu.be/ID format
+      if (cleanUrl.includes('youtu.be/')) {
+        videoId = cleanUrl.split('youtu.be/')[1].split('?')[0].split('#')[0];
+      } 
+      // Handle youtube.com/watch?v=ID format (including shorts)
+      else if (cleanUrl.includes('v=') || cleanUrl.includes('/shorts/')) {
+        if (cleanUrl.includes('/shorts/')) {
+          videoId = cleanUrl.split('/shorts/')[1].split('?')[0].split('#')[0];
+        } else {
+          videoId = cleanUrl.split('v=')[1].split('&')[0].split('#')[0];
+        }
+      } 
+      // Handle existing embed URLs
+      else if (cleanUrl.includes('embed/')) {
+        videoId = cleanUrl.split('embed/')[1].split('?')[0].split('#')[0];
+      }
+      // Fallback: last path segment
+      else {
+        videoId = cleanUrl.split('/').pop().split('?')[0].split('#')[0];
+      }
+      
+      // Validate ID length (YouTube IDs are 11 characters, sometimes different in old links but usually 11)
+      if (!videoId || videoId.length < 5) return null;
+      
+      // Use nocookie domain for better privacy and fewer CSP issues
+      return `https://www.youtube-nocookie.com/embed/${videoId}`;
+    } catch (e) {
+      console.error("YouTube URL parse error:", e, url);
+      return null;
     }
-    
-    if (!id) return '';
-    return `https://www.youtube.com/embed/${id}`;
   };
 
   const openPostDetail = (post) => {
@@ -378,27 +403,42 @@ const Dashboard = () => {
                <h2>Video Hub</h2>
                {isAdmin && <button style={styles.primaryButton} onClick={() => setShowModal('addVideo')}><Upload size={18}/> Add Video</button>}
             </div>
-            {videos.map(v => (
-              <div key={v.id} style={styles.videoCard}>
-                <div style={styles.videoFrameWrapper}>
-                  <iframe 
-                    src={getVideoEmbedUrl(v.url)} 
-                    style={styles.videoIframe} 
-                    frameBorder="0" 
-                    allowFullScreen
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    title={v.title}
-                  ></iframe>
+            {videos.map(v => {
+              const embedUrl = getVideoEmbedUrl(v.url);
+              return (
+                <div key={v.id} style={styles.videoCard}>
+                  <div style={styles.videoFrameWrapper}>
+                    {embedUrl ? (
+                      <iframe 
+                        src={embedUrl}
+                        style={styles.videoIframe}
+                        frameBorder="0"
+                        allowFullScreen
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        referrerPolicy="strict-origin-when-cross-origin"
+                        title={v.title}
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div style={styles.videoPlaceholder}>
+                        <Video size={48} color="#cbd5e1" />
+                        <p style={{marginTop: '10px', color: '#64748b'}}>Video unavailable</p>
+                        <a href={v.url} target="_blank" rel="noopener noreferrer" style={styles.externalLink}>
+                          Watch on YouTube <ExternalLinkIcon size={14} style={{marginLeft: '4px'}}/>
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{padding: '15px'}}>
+                     <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                       <h4>{v.title}</h4>
+                       {isAdmin && <button onClick={() => handleDelete(v.id, 'video')} style={styles.delBtn}><Trash2 size={14}/></button>}
+                     </div>
+                     <p style={styles.cardExcerpt}>{v.description}</p>
+                  </div>
                 </div>
-                <div style={{padding: '15px'}}>
-                   <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                     <h4>{v.title}</h4>
-                     {isAdmin && <button onClick={() => handleDelete(v.id, 'video')} style={styles.delBtn}><Trash2 size={14}/></button>}
-                   </div>
-                   <p style={styles.cardExcerpt}>{v.description}</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -551,6 +591,9 @@ const Dashboard = () => {
               value={videoForm.url}
               onChange={e => setVideoForm({...videoForm, url: e.target.value})} 
             />
+            {videoForm.url && !getVideoEmbedUrl(videoForm.url) && (
+              <p style={{color: '#ef4444', fontSize: '12px', marginTop: '-10px', marginBottom: '10px'}}>Invalid YouTube URL format</p>
+            )}
             <textarea 
               style={styles.input} 
               placeholder="Description" 
@@ -615,7 +658,7 @@ const styles = {
   sidebarBtn: { textAlign: 'left', padding: '12px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '10px' },
   sidebarBtnActive: { textAlign: 'left', padding: '12px', background: '#fdf2f8', border: 'none', cursor: 'pointer', borderRadius: '10px', color: '#ec4899', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' },
   sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' },
-  card: { background: 'white', padding: '25px', borderRadius: '20px', border: '1px solid #e2e8f0', marginBottom: '20px', cursor: 'pointer', transition: 'all 0.2s', ':hover': {boxShadow: '0 4px 6px rgba(0,0,0,0.1)'} },
+  card: { background: 'white', padding: '25px', borderRadius: '20px', border: '1px solid #e2e8f0', marginBottom: '20px', cursor: 'pointer', transition: 'all 0.2s' },
   cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
   tag: { fontSize: '10px', background: '#fdf2f8', color: '#ec4899', padding: '4px 10px', borderRadius: '20px', fontWeight: 'bold' },
   cardExcerpt: { color: '#64748b', fontSize: '14px', lineHeight: '1.5' },
@@ -649,7 +692,7 @@ const styles = {
   videoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '25px' },
   videoCard: { background: 'white', borderRadius: '20px', overflow: 'hidden', border: '1px solid #e2e8f0' },
   videoFrameWrapper: { position: 'relative', paddingTop: '56.25%' },
-  videoIframe: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
+  videoIframe: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' },
   subNavContainer: { display: 'flex', gap: '10px', marginBottom: '30px' },
   subNavBtn: { padding: '10px 20px', borderRadius: '20px', border: '1px solid #e2e8f0', background: 'white', color: '#64748b', cursor: 'pointer' },
   subNavBtnActive: { padding: '10px 20px', borderRadius: '20px', background: '#1e293b', color: 'white', border: 'none', cursor: 'pointer' },
@@ -663,7 +706,30 @@ const styles = {
   loginContainer: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' },
   loginCard: { background: 'white', padding: '40px', borderRadius: '20px', width: '350px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' },
   ghostButtonFull: { background: 'none', border: 'none', color: '#ec4899', cursor: 'pointer', width: '100%', marginTop: '10px' },
-  feed: { flex: 1 }
+  feed: { flex: 1 },
+  // NEW STYLES FOR VIDEO PLACEHOLDER
+  videoPlaceholder: { 
+    position: 'absolute', 
+    top: 0, 
+    left: 0, 
+    width: '100%', 
+    height: '100%', 
+    background: '#f1f5f9',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    textAlign: 'center',
+    padding: '20px'
+  },
+  externalLink: {
+    color: '#ec4899',
+    textDecoration: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    marginTop: '8px',
+    fontSize: '14px'
+  }
 };
 
 export default Dashboard;
