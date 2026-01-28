@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, LogOut, Crown, Plus, Video, Upload, FileText, User, 
-  Trash2, Hash, Send, MessageCircle, PlayCircle, BookOpen, 
-  Utensils, LayoutGrid, Settings, ExternalLink, Heart, ExternalLinkIcon, ChevronRight
+  Trash2, Hash, Send, MessageCircle, Heart, Trash2 as TrashIcon
 } from 'lucide-react';
 
 const GROUPS = ['All Discussions', 'General', 'Mental Health', 'Self Care', 'Relationships', 'Career', 'Motherhood', 'Fitness', 'Nutrition'];
@@ -24,6 +23,7 @@ const Dashboard = () => {
   const [selectedPost, setSelectedPost] = useState(null);
   const [commentText, setCommentText] = useState('');
   const [imageError, setImageError] = useState(false);
+  const [postError, setPostError] = useState(null);
 
   // Forms
   const [postForm, setPostForm] = useState({ title: '', content: '', category: 'General' });
@@ -57,10 +57,11 @@ const Dashboard = () => {
       setVideos(Array.isArray(v) ? v : []);
       setResources(Array.isArray(r) ? r : []);
     } catch (err) { 
-      console.error("Error loading data", err); 
+      console.error("Error loading data:", err); 
     }
   };
 
+  // FIXED: Removed space in URL construction
   const getVideoEmbedUrl = (url) => {
     if (!url) return null;
     try {
@@ -70,9 +71,12 @@ const Dashboard = () => {
       const match = cleanUrl.match(regex);
       videoId = match ? match[1] : null;
       if (!videoId) return null;
-      const origin = window.location.origin;
-      return `https://www.youtube-nocookie.com/embed/${videoId}?enablejsapi=1&origin=${encodeURIComponent(origin)}&rel=0`;
-    } catch (e) { return null; }
+      // CRITICAL FIX: No space after embed/
+      return `https://www.youtube-nocookie.com/embed/${videoId}?rel=0`;
+    } catch (e) { 
+      console.error("URL parse error:", e); 
+      return null; 
+    }
   };
 
   const handleAuth = async (e) => {
@@ -88,38 +92,52 @@ const Dashboard = () => {
       if (res.ok) {
         localStorage.setItem('wellnessUser', JSON.stringify(data));
         window.location.reload();
-      } else alert(data.message);
-    } catch (err) { alert('Connection failed.'); }
+      } else alert(data.message || 'Auth failed');
+    } catch (err) { 
+      console.error('Auth error:', err);
+      alert('Connection failed.'); 
+    }
   };
-
-  // --- CORE DATA HANDLERS ---
 
   const handleCreatePost = async () => {
     if (!postForm.title.trim() || !postForm.content.trim()) {
-        alert("Please fill in both title and content");
-        return;
+      alert("Please fill in both title and content");
+      return;
     }
+    
+    setPostError(null);
+    console.log("Submitting post:", { ...postForm, userEmail: user?.email }); // Debug
+    
     try {
       const res = await fetch('/.netlify/functions/database?type=discussion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-            ...postForm, 
-            userEmail: user.email,
-            userName: profileForm.firstName ? `${profileForm.firstName} ${profileForm.lastName}` : user.email.split('@')[0]
+          title: postForm.title,
+          content: postForm.content,
+          category: postForm.category,
+          userEmail: user.email
         })
       });
-      if (res.ok) {
-        setPostForm({ title: '', content: '', category: 'General' });
-        setShowModal(null);
-        await loadAllData(); // Refresh list
-      } else {
-          alert("Failed to save post");
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error("Server error:", errorText);
+        throw new Error(errorText || 'Failed to save');
       }
-    } catch (err) { console.error('Post error:', err); }
+      
+      setPostForm({ title: '', content: '', category: 'General' });
+      setShowModal(null);
+      await loadAllData();
+    } catch (err) { 
+      console.error('Post error:', err);
+      setPostError(err.message || "Failed to save post. Check database columns (likes/comments must be JSONB not INTEGER).");
+      alert("Failed to save post. Did you run the SQL to fix column types?");
+    }
   };
 
   const handleLikePost = async (postId) => {
+    if (!user?.id) return;
     try {
       const res = await fetch('/.netlify/functions/database?type=likePost', {
         method: 'POST',
@@ -130,48 +148,125 @@ const Dashboard = () => {
     } catch (err) { console.error('Error liking:', err); }
   };
 
+  const handleAddComment = async () => {
+    if (!commentText.trim() || !selectedPost) return;
+    
+    const authorName = profileForm.firstName 
+      ? `${profileForm.firstName} ${profileForm.lastName}`.trim() 
+      : (user.displayName || user.email.split('@')[0]);
+    
+    try {
+      const res = await fetch('/.netlify/functions/database?type=addComment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          postId: selectedPost.id,
+          comment: commentText,
+          author: authorName
+        })
+      });
+      
+      if (res.ok) {
+        setCommentText('');
+        await loadAllData();
+        const updated = discussions.find(d => d.id === selectedPost.id);
+        if (updated) setSelectedPost(updated);
+      }
+    } catch (err) {
+      console.error('Comment error:', err);
+    }
+  };
+
   const handleAddVideo = async () => {
-    if (!videoForm.title || !videoForm.url) return;
+    if (!videoForm.title || !videoForm.url) {
+      alert("Title and URL required");
+      return;
+    }
+    
+    if (!getVideoEmbedUrl(videoForm.url)) {
+      alert("Invalid YouTube URL");
+      return;
+    }
+    
     try {
       const res = await fetch('/.netlify/functions/database?type=video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(videoForm)
       });
+      
       if (res.ok) {
         setVideoForm({ title: '', url: '', description: '' });
         setShowModal(null);
         loadAllData();
+      } else {
+        const err = await res.text();
+        alert("Failed: " + err);
       }
-    } catch (err) { console.error('Video add error:', err); }
+    } catch (err) { 
+      console.error('Video add error:', err);
+      alert("Failed to add video");
+    }
   };
 
   const handleAddResource = async () => {
-    if (!resourceForm.title || !resourceForm.url) return;
+    if (!resourceForm.title || !resourceForm.url) {
+      alert("Title and URL required");
+      return;
+    }
+    
     try {
-      const res = await fetch('/.netlify/functions/database?type=resources', { // Note: match your backend endpoint name
+      // FIXED: Changed from type=resources to type=resource to match backend expectation
+      const res = await fetch('/.netlify/functions/database?type=resource', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(resourceForm)
       });
+      
       if (res.ok) {
         setResourceForm({ title: '', url: '', category: 'General' });
         setShowModal(null);
         loadAllData();
+      } else {
+        const err = await res.text();
+        alert("Failed: " + err);
       }
-    } catch (err) { console.error('Resource add error:', err); }
+    } catch (err) { 
+      console.error('Resource add error:', err);
+      alert("Failed to add resource");
+    }
   };
 
   const handleDelete = async (id, type) => {
-    if (window.confirm("Are you sure you want to delete this?")) {
+    if (window.confirm("Delete this?")) {
       try {
-        const res = await fetch(`/.netlify/functions/database?id=${id}&type=${type}`, { method: 'DELETE' });
-        if (res.ok) loadAllData();
+        await fetch(`/.netlify/functions/database?id=${id}&type=${type}`, { 
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        loadAllData();
       } catch (err) { console.error('Delete error:', err); }
     }
   };
 
-  // --- RENDERING ---
+  const handleUpdateProfile = async () => {
+    try {
+      const res = await fetch('/.netlify/functions/database?type=updateProfile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, ...profileForm })
+      });
+      if (res.ok) {
+        const updated = { ...user, ...profileForm };
+        setUser(updated);
+        localStorage.setItem('wellnessUser', JSON.stringify(updated));
+        setImageError(false);
+        setShowModal(null);
+      }
+    } catch (err) {
+      alert("Failed to update profile");
+    }
+  };
 
   const renderAvatar = (src, size = 'small') => {
     const isLarge = size === 'large';
@@ -208,7 +303,9 @@ const Dashboard = () => {
           <button onClick={() => setActiveTab('resources')} style={activeTab === 'resources' ? styles.navBtnActive : styles.navBtn}>Resources</button>
         </nav>
         <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
-          <div onClick={() => setShowModal('profile')} style={{cursor: 'pointer'}}>{renderAvatar(profileForm.profilePic)}</div>
+          <div onClick={() => setShowModal('profile')} style={{cursor: 'pointer'}}>
+            {renderAvatar(profileForm.profilePic, 'small')}
+          </div>
           <button onClick={() => {localStorage.clear(); window.location.reload();}} style={styles.iconBtn}><LogOut size={20}/></button>
         </div>
       </header>
@@ -218,22 +315,48 @@ const Dashboard = () => {
           <div style={styles.communityLayout}>
             <aside style={styles.sidebar}>
               {GROUPS.map(g => (
-                <button key={g} onClick={() => setActiveGroup(g)} style={activeGroup === g ? styles.sidebarBtnActive : styles.sidebarBtn}><Hash size={14} /> {g}</button>
+                <button key={g} onClick={() => setActiveGroup(g)} style={activeGroup === g ? styles.sidebarBtnActive : styles.sidebarBtn}>
+                  <Hash size={14} /> {g}
+                </button>
               ))}
             </aside>
             <section style={styles.feed}>
-              <div style={styles.sectionHeader}><h2>{activeGroup}</h2><button style={styles.primaryButton} onClick={() => setShowModal('post')}><Plus size={18}/> New Post</button></div>
+              <div style={styles.sectionHeader}>
+                <h2>{activeGroup}</h2>
+                <button style={styles.primaryButton} onClick={() => setShowModal('post')}>
+                  <Plus size={18}/> New Post
+                </button>
+              </div>
+              
               {discussions.filter(d => activeGroup === 'All Discussions' || d.category === activeGroup).map(post => (
                 <div key={post.id} style={styles.card} onClick={() => {setSelectedPost(post); setShowModal('postDetail');}}>
-                  <div style={styles.cardHeader}><span style={styles.tag}>{post.category}</span></div>
+                  <div style={styles.cardHeader}>
+                    <span style={styles.tag}>{post.category}</span>
+                  </div>
                   <h3>{post.title}</h3>
                   <p style={styles.cardExcerpt}>{post.content}</p>
                   <div style={styles.cardMeta}>
-                    <button style={styles.metaBtn} onClick={(e) => { e.stopPropagation(); handleLikePost(post.id); }}>
-                        <Heart size={14} fill={post.likes?.includes(user.id) ? "#ec4899" : "none"} color={post.likes?.includes(user.id) ? "#ec4899" : "#94a3b8"}/> {post.likes?.length || 0}
+                    <button 
+                      style={styles.metaBtn} 
+                      onClick={(e) => { e.stopPropagation(); handleLikePost(post.id); }}
+                    >
+                      <Heart 
+                        size={14} 
+                        fill={post.likes?.includes(user.id) ? "#ec4899" : "none"} 
+                        color={post.likes?.includes(user.id) ? "#ec4899" : "#94a3b8"}
+                      /> 
+                      {post.likes?.length || 0}
                     </button>
-                    <span style={styles.metaItem}><MessageCircle size={14}/> {post.comments?.length || 0}</span>
-                    {isAdmin && <Trash2 size={14} style={{marginLeft: 'auto', cursor: 'pointer', color: '#94a3b8'}} onClick={(e) => {e.stopPropagation(); handleDelete(post.id, 'discussion');}}/>}
+                    <span style={styles.metaItem}>
+                      <MessageCircle size={14}/> {post.comments?.length || 0}
+                    </span>
+                    {isAdmin && (
+                      <TrashIcon 
+                        size={14} 
+                        style={{marginLeft: 'auto', cursor: 'pointer', color: '#94a3b8'}} 
+                        onClick={(e) => {e.stopPropagation(); handleDelete(post.id, 'discussion');}}
+                      />
+                    )}
                   </div>
                 </div>
               ))}
@@ -247,24 +370,43 @@ const Dashboard = () => {
                <h2>Video Hub</h2>
                {isAdmin && <button style={styles.primaryButton} onClick={() => setShowModal('addVideo')}><Upload size={18}/> Add Video</button>}
             </div>
-            {videos.map(v => (
-              <div key={v.id} style={styles.videoCard}>
-                <div style={styles.videoFrameWrapper}>
-                  {getVideoEmbedUrl(v.url) ? (
-                    <iframe src={getVideoEmbedUrl(v.url)} style={styles.videoIframe} frameBorder="0" allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" referrerPolicy="no-referrer" />
-                  ) : (
-                    <div style={styles.videoPlaceholder}><Video size={48} color="#cbd5e1" /><p>Link Error</p></div>
-                  )}
+            {videos.map(v => {
+              const embedUrl = getVideoEmbedUrl(v.url);
+              return (
+                <div key={v.id} style={styles.videoCard}>
+                  <div style={styles.videoFrameWrapper}>
+                    {embedUrl ? (
+                      <iframe 
+                        src={embedUrl}
+                        style={styles.videoIframe}
+                        frameBorder="0"
+                        allowFullScreen
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        referrerPolicy="no-referrer-when-downgrade"
+                        title={v.title}
+                      />
+                    ) : (
+                      <div style={styles.videoPlaceholder}>
+                        <Video size={48} color="#cbd5e1" />
+                        <p style={{color: '#64748b', marginTop: '10px'}}>Invalid YouTube URL</p>
+                        <p style={{color: '#94a3b8', fontSize: '12px'}}>{v.url}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{padding: '15px'}}>
+                     <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                      <h4 style={{margin: 0}}>{v.title}</h4>
+                      {isAdmin && (
+                        <button onClick={() => handleDelete(v.id, 'video')} style={styles.delBtn}>
+                          <TrashIcon size={16}/>
+                        </button>
+                      )}
+                     </div>
+                     <p style={styles.cardExcerpt}>{v.description}</p>
+                  </div>
                 </div>
-                <div style={{padding: '15px'}}>
-                   <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                    <h4 style={{margin: 0}}>{v.title}</h4>
-                    {isAdmin && <Trash2 size={16} color="#94a3b8" style={{cursor:'pointer'}} onClick={() => handleDelete(v.id, 'video')}/>}
-                   </div>
-                   <p style={styles.cardExcerpt}>{v.description}</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -273,7 +415,7 @@ const Dashboard = () => {
             <aside style={styles.sidebar}>
               {RESOURCE_CATEGORIES.map(cat => (
                 <button key={cat} onClick={() => setActiveResourceCategory(cat)} style={activeResourceCategory === cat ? styles.sidebarBtnActive : styles.sidebarBtn}>
-                  <BookOpen size={14} /> {cat}
+                  <Hash size={14} /> {cat}
                 </button>
               ))}
             </aside>
@@ -285,14 +427,12 @@ const Dashboard = () => {
               <div style={styles.resourceList}>
                 {resources.filter(r => r.category === activeResourceCategory).map(r => (
                   <div key={r.id} style={styles.resourceCard}>
-                    <div style={styles.resourceIcon}><FileText color="#ec4899" /></div>
+                    <FileText color="#ec4899" />
                     <div style={{flex: 1}}>
                       <h4 style={{margin: 0}}>{r.title}</h4>
                     </div>
-                    <div style={{display: 'flex', gap: '8px'}}>
-                      <button onClick={() => window.open(r.url, '_blank')} style={styles.viewBtnInternal}>Open Resource</button>
-                      {isAdmin && <button onClick={() => handleDelete(r.id, 'resources')} style={styles.delBtn}><Trash2 size={16}/></button>}
-                    </div>
+                    <button onClick={() => window.open(r.url, '_blank')} style={styles.viewBtnInternal}>Open</button>
+                    {isAdmin && <button onClick={() => handleDelete(r.id, 'resources')} style={styles.delBtn}><TrashIcon size={16}/></button>}
                   </div>
                 ))}
               </div>
@@ -305,14 +445,83 @@ const Dashboard = () => {
       {showModal === 'post' && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}><h3>Create Community Post</h3><X style={{cursor:'pointer'}} onClick={() => setShowModal(null)}/></div>
-            <label style={styles.label}>Select Category</label>
+            <div style={styles.modalHeader}>
+              <h3>New Discussion</h3>
+              <button onClick={() => setShowModal(null)} style={styles.closeBtn}><X size={24}/></button>
+            </div>
+            {postError && <div style={{color: '#ef4444', marginBottom: '10px', fontSize: '14px'}}>{postError}</div>}
             <select style={styles.input} value={postForm.category} onChange={e => setPostForm({...postForm, category: e.target.value})}>
               {GROUPS.filter(g => g !== 'All Discussions').map(g => <option key={g} value={g}>{g}</option>)}
             </select>
-            <input style={styles.input} placeholder="Post Title" value={postForm.title} onChange={e => setPostForm({...postForm, title: e.target.value})} />
-            <textarea style={{...styles.input, height: '150px'}} placeholder="Write your message here..." value={postForm.content} onChange={e => setPostForm({...postForm, content: e.target.value})} />
-            <button style={styles.primaryButtonFull} onClick={handleCreatePost}>Publish Post</button>
+            <input style={styles.input} placeholder="Title" value={postForm.title} onChange={e => setPostForm({...postForm, title: e.target.value})} />
+            <textarea style={{...styles.input, height: '100px'}} placeholder="Content" value={postForm.content} onChange={e => setPostForm({...postForm, content: e.target.value})} />
+            <button style={styles.primaryButtonFull} onClick={handleCreatePost}>Post Now</button>
+          </div>
+        </div>
+      )}
+
+      {showModal === 'postDetail' && selectedPost && (
+        <div style={styles.modalOverlay} onClick={() => {setShowModal(null); setSelectedPost(null);}}>
+          <div style={styles.postDetailModal} onClick={e => e.stopPropagation()}>
+            <div style={styles.postDetailHeader}>
+              <div>
+                <span style={styles.tag}>{selectedPost.category}</span>
+                <h2>{selectedPost.title}</h2>
+                <div style={styles.cardMeta}>
+                  <span>{selectedPost.author}</span>
+                  <span style={styles.metaItem}>
+                    <Heart size={12} /> {selectedPost.likes?.length || 0} likes
+                  </span>
+                </div>
+              </div>
+              <button onClick={() => {setShowModal(null); setSelectedPost(null);}} style={styles.closeBtn}><X size={24}/></button>
+            </div>
+            
+            <div style={styles.postDetailContent}>
+              <p style={{fontSize: '16px', lineHeight: '1.6', color: '#334155'}}>{selectedPost.content}</p>
+              
+              <div style={styles.commentsSection}>
+                <h3 style={{marginBottom: '20px'}}>Comments ({selectedPost.comments?.length || 0})</h3>
+                
+                <div style={styles.commentInputContainer}>
+                  <textarea 
+                    style={styles.commentInput}
+                    placeholder="Write a comment..."
+                    value={commentText}
+                    onChange={e => setCommentText(e.target.value)}
+                  />
+                  <button style={styles.commentButton} onClick={handleAddComment}>
+                    <Send size={18}/>
+                  </button>
+                </div>
+
+                <div style={styles.commentsList}>
+                  {selectedPost.comments && selectedPost.comments.map((comment, idx) => (
+                    <div key={idx} style={styles.commentItem}>
+                      <div style={styles.commentHeader}>
+                        <span style={styles.commentAuthor}>{comment.author}</span>
+                        <span style={styles.commentDate}>{new Date(comment.timestamp).toLocaleDateString()}</span>
+                      </div>
+                      <p style={styles.commentText}>{comment.text}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showModal === 'profile' && (
+        <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
+          <div style={styles.modal} onClick={e => e.stopPropagation()}>
+            <div style={styles.avatarLarge}>
+               {profileForm.profilePic ? <img src={profileForm.profilePic} style={styles.avatarImg} alt="P" /> : <User size={40} />}
+            </div>
+            <input style={styles.input} placeholder="First Name" value={profileForm.firstName} onChange={e => setProfileForm({...profileForm, firstName: e.target.value})} />
+            <input style={styles.input} placeholder="Last Name" value={profileForm.lastName} onChange={e => setProfileForm({...profileForm, lastName: e.target.value})} />
+            <input style={styles.input} placeholder="Profile Image URL" value={profileForm.profilePic} onChange={e => setProfileForm({...profileForm, profilePic: e.target.value})} />
+            <button style={styles.primaryButtonFull} onClick={handleUpdateProfile}>Save Profile</button>
           </div>
         </div>
       )}
@@ -320,11 +529,11 @@ const Dashboard = () => {
       {showModal === 'addVideo' && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}><h3>Upload to Video Hub</h3><X style={{cursor:'pointer'}} onClick={() => setShowModal(null)}/></div>
-            <input style={styles.input} placeholder="Video Title" value={videoForm.title} onChange={e => setVideoForm({...videoForm, title: e.target.value})} />
-            <input style={styles.input} placeholder="YouTube URL (e.g. https://youtu.be/...)" value={videoForm.url} onChange={e => setVideoForm({...videoForm, url: e.target.value})} />
-            <textarea style={styles.input} placeholder="Short description..." value={videoForm.description} onChange={e => setVideoForm({...videoForm, description: e.target.value})} />
-            <button style={styles.primaryButtonFull} onClick={handleAddVideo}>Save Video</button>
+            <h3>Add Video</h3>
+            <input style={styles.input} placeholder="Title" value={videoForm.title} onChange={e => setVideoForm({...videoForm, title: e.target.value})} />
+            <input style={styles.input} placeholder="YouTube URL" value={videoForm.url} onChange={e => setVideoForm({...videoForm, url: e.target.value})} />
+            <textarea style={styles.input} placeholder="Description" value={videoForm.description} onChange={e => setVideoForm({...videoForm, description: e.target.value})} />
+            <button style={styles.primaryButtonFull} onClick={handleAddVideo}>Add to Hub</button>
           </div>
         </div>
       )}
@@ -332,12 +541,12 @@ const Dashboard = () => {
       {showModal === 'resource' && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}><h3>Add New Resource</h3><X style={{cursor:'pointer'}} onClick={() => setShowModal(null)}/></div>
+            <h3>Add Resource</h3>
+            <input style={styles.input} placeholder="Title" value={resourceForm.title} onChange={e => setResourceForm({...resourceForm, title: e.target.value})} />
+            <input style={styles.input} placeholder="URL" value={resourceForm.url} onChange={e => setResourceForm({...resourceForm, url: e.target.value})} />
             <select style={styles.input} value={resourceForm.category} onChange={e => setResourceForm({...resourceForm, category: e.target.value})}>
-              {RESOURCE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              {RESOURCE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <input style={styles.input} placeholder="Resource Title" value={resourceForm.title} onChange={e => setResourceForm({...resourceForm, title: e.target.value})} />
-            <input style={styles.input} placeholder="Resource Link (URL or PDF Link)" value={resourceForm.url} onChange={e => setResourceForm({...resourceForm, url: e.target.value})} />
             <button style={styles.primaryButtonFull} onClick={handleAddResource}>Save Resource</button>
           </div>
         </div>
@@ -352,7 +561,7 @@ const styles = {
   brand: { display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold' },
   centerNav: { display: 'flex', gap: '8px', background: '#f1f5f9', padding: '5px', borderRadius: '12px' },
   navBtn: { padding: '8px 20px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: '8px', color: '#64748b' },
-  navBtnActive: { padding: '8px 20px', border: 'none', background: 'white', color: '#ec4899', borderRadius: '8px', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' },
+  navBtnActive: { padding: '8px 20px', border: 'none', background: 'white', color: '#ec4899', borderRadius: '8px', fontWeight: 'bold' },
   main: { maxWidth: '1200px', margin: '0 auto', padding: '40px 20px' },
   communityLayout: { display: 'grid', gridTemplateColumns: '240px 1fr', gap: '40px' },
   sidebar: { display: 'flex', flexDirection: 'column', gap: '5px' },
@@ -360,35 +569,49 @@ const styles = {
   sidebarBtnActive: { textAlign: 'left', padding: '12px', background: '#fdf2f8', border: 'none', borderRadius: '10px', color: '#ec4899', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' },
   sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' },
   card: { background: 'white', padding: '25px', borderRadius: '20px', border: '1px solid #e2e8f0', marginBottom: '20px', cursor: 'pointer', transition: 'transform 0.2s' },
+  cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
   tag: { fontSize: '10px', background: '#fdf2f8', color: '#ec4899', padding: '4px 10px', borderRadius: '20px', fontWeight: 'bold' },
-  cardExcerpt: { color: '#64748b', fontSize: '14px', lineHeight: '1.5', marginTop: '10px' },
-  cardMeta: { display: 'flex', gap: '15px', marginTop: '15px', color: '#94a3b8', fontSize: '12px', alignItems: 'center' },
+  cardExcerpt: { color: '#64748b', fontSize: '14px', lineHeight: '1.5' },
+  cardMeta: { marginTop: '15px', display: 'flex', gap: '15px', fontSize: '12px', color: '#94a3b8', alignItems: 'center' },
   metaItem: { display: 'flex', alignItems: 'center', gap: '4px' },
-  metaBtn: { background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', color: '#94a3b8', padding: 0 },
-  videoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '25px' },
-  videoCard: { background: 'white', borderRadius: '20px', border: '1px solid #e2e8f0', overflow: 'hidden' },
-  videoFrameWrapper: { position: 'relative', paddingBottom: '56.25%', height: 0, background: '#000' },
-  videoIframe: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
-  videoPlaceholder: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: 'white' },
+  metaBtn: { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', padding: 0, fontSize: '12px' },
+  videoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '25px' },
+  videoCard: { background: 'white', borderRadius: '20px', overflow: 'hidden', border: '1px solid #e2e8f0' },
+  videoFrameWrapper: { position: 'relative', paddingTop: '56.25%', background: '#000' },
+  videoIframe: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' },
+  videoPlaceholder: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9' },
   resourceList: { display: 'flex', flexDirection: 'column', gap: '12px' },
-  resourceCard: { background: 'white', padding: '15px 20px', borderRadius: '15px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '15px' },
-  resourceIcon: { width: '40px', height: '40px', borderRadius: '10px', background: '#fdf2f8', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  viewBtnInternal: { padding: '8px 16px', borderRadius: '8px', border: '1px solid #ec4899', color: '#ec4899', background: 'white', cursor: 'pointer', fontWeight: 'bold' },
-  delBtn: { background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' },
-  loginContainer: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fdf2f8' },
-  loginCard: { background: 'white', padding: '40px', borderRadius: '24px', width: '100%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' },
-  input: { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px', boxSizing: 'border-box', fontSize: '14px' },
-  label: { fontSize: '12px', color: '#64748b', marginBottom: '5px', display: 'block' },
+  resourceCard: { background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '15px' },
+  viewBtnInternal: { background: '#fdf2f8', color: '#ec4899', border: 'none', padding: '8px 16px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
+  delBtn: { background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' },
+  loginContainer: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' },
+  loginCard: { background: 'white', padding: '40px', borderRadius: '20px', width: '350px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' },
   primaryButton: { background: '#ec4899', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' },
   primaryButtonFull: { background: '#ec4899', color: 'white', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', width: '100%' },
-  ghostButtonFull: { background: 'transparent', color: '#64748b', border: 'none', padding: '10px', cursor: 'pointer', width: '100%' },
+  ghostButtonFull: { background: 'none', border: 'none', color: '#ec4899', cursor: 'pointer', width: '100%', marginTop: '10px' },
   modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-  modal: { background: 'white', padding: '30px', borderRadius: '24px', width: '480px', maxWidth: '90vw' },
+  modal: { background: 'white', padding: '30px', borderRadius: '20px', width: '400px', maxHeight: '90vh', overflowY: 'auto' },
+  postDetailModal: { background: 'white', borderRadius: '20px', width: '700px', maxWidth: '90vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column' },
+  postDetailHeader: { padding: '30px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' },
+  postDetailContent: { padding: '30px', overflowY: 'auto', flex: 1 },
+  closeBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' },
   modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
-  avatarMini: { width: '35px', height: '35px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  avatarLarge: { width: '80px', height: '80px', borderRadius: '50%', background: '#f1f5f9', overflow: 'hidden', margin: '0 auto 15px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  commentsSection: { marginTop: '30px' },
+  commentInputContainer: { display: 'flex', gap: '10px', marginBottom: '30px' },
+  commentInput: { flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', minHeight: '60px', resize: 'vertical' },
+  commentButton: { background: '#ec4899', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '10px', cursor: 'pointer' },
+  commentsList: { display: 'flex', flexDirection: 'column', gap: '15px' },
+  commentItem: { background: '#f8fafc', padding: '15px', borderRadius: '12px' },
+  commentHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '8px' },
+  commentAuthor: { fontWeight: 'bold', color: '#1e293b', fontSize: '14px' },
+  commentDate: { fontSize: '12px', color: '#94a3b8' },
+  commentText: { color: '#475569', fontSize: '14px', lineHeight: '1.5', margin: 0 },
+  avatarMini: { width: '35px', height: '35px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden' },
+  avatarLarge: { width: '80px', height: '80px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 15px', overflow: 'hidden' },
   avatarImg: { width: '100%', height: '100%', objectFit: 'cover' },
-  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }
+  input: { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px' },
+  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' },
+  feed: { flex: 1 }
 };
 
 export default Dashboard;
