@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, LogOut, Crown, Plus, Video, Upload, FileText, User, 
-  Trash2, Hash, Send, MessageCircle, Heart, Trash2 as TrashIcon
+  Trash2, Hash, Send, MessageCircle, Heart, PlayCircle, ExternalLink
 } from 'lucide-react';
 
 const GROUPS = ['All Discussions', 'General', 'Mental Health', 'Self Care', 'Relationships', 'Career', 'Motherhood', 'Fitness', 'Nutrition'];
@@ -23,7 +23,7 @@ const Dashboard = () => {
   const [selectedPost, setSelectedPost] = useState(null);
   const [commentText, setCommentText] = useState('');
   const [imageError, setImageError] = useState(false);
-  const [postError, setPostError] = useState(null);
+  const [profileUpdateSuccess, setProfileUpdateSuccess] = useState(false);
 
   // Forms
   const [postForm, setPostForm] = useState({ title: '', content: '', category: 'General' });
@@ -34,15 +34,21 @@ const Dashboard = () => {
   useEffect(() => {
     const saved = localStorage.getItem('wellnessUser');
     if (saved) {
-      const userData = JSON.parse(saved);
-      setUser(userData);
-      setIsAdmin(userData.isAdmin || false);
-      setProfileForm({
-        firstName: userData.firstName || '',
-        lastName: userData.lastName || '',
-        profilePic: userData.profilePic || ''
-      });
-      loadAllData();
+      try {
+        const userData = JSON.parse(saved);
+        setUser(userData);
+        setIsAdmin(userData.isAdmin || false);
+        setProfileForm({
+          firstName: userData.firstName || '',
+          lastName: userData.lastName || '',
+          profilePic: userData.profilePic || ''
+        });
+        setImageError(false);
+        loadAllData();
+      } catch (e) {
+        console.error("Error parsing user data", e);
+        localStorage.removeItem('wellnessUser');
+      }
     }
   }, []);
 
@@ -57,25 +63,7 @@ const Dashboard = () => {
       setVideos(Array.isArray(v) ? v : []);
       setResources(Array.isArray(r) ? r : []);
     } catch (err) { 
-      console.error("Error loading data:", err); 
-    }
-  };
-
-  // FIXED: Removed space in URL construction
-  const getVideoEmbedUrl = (url) => {
-    if (!url) return null;
-    try {
-      let videoId = '';
-      const cleanUrl = url.trim();
-      const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-      const match = cleanUrl.match(regex);
-      videoId = match ? match[1] : null;
-      if (!videoId) return null;
-      // CRITICAL FIX: No space after embed/
-      return `https://www.youtube-nocookie.com/embed/${videoId}?rel=0`;
-    } catch (e) { 
-      console.error("URL parse error:", e); 
-      return null; 
+      console.error("Error loading data", err); 
     }
   };
 
@@ -92,10 +80,47 @@ const Dashboard = () => {
       if (res.ok) {
         localStorage.setItem('wellnessUser', JSON.stringify(data));
         window.location.reload();
-      } else alert(data.message || 'Auth failed');
+      } else {
+        alert(data.message || 'Authentication failed');
+      }
     } catch (err) { 
-      console.error('Auth error:', err);
-      alert('Connection failed.'); 
+      alert('Connection failed. Please try again.'); 
+    }
+  };
+
+  const handleUpdateProfile = async () => {
+    try {
+      const res = await fetch('/.netlify/functions/database?type=updateProfile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: user.email, 
+          firstName: profileForm.firstName,
+          lastName: profileForm.lastName,
+          profilePic: profileForm.profilePic 
+        })
+      });
+      
+      if (res.ok) {
+        const updatedUser = { 
+          ...user, 
+          firstName: profileForm.firstName,
+          lastName: profileForm.lastName,
+          profilePic: profileForm.profilePic 
+        };
+        setUser(updatedUser);
+        localStorage.setItem('wellnessUser', JSON.stringify(updatedUser));
+        setImageError(false);
+        setProfileUpdateSuccess(true);
+        setTimeout(() => {
+          setShowModal(null);
+          setProfileUpdateSuccess(false);
+        }, 1000);
+      } else {
+        alert('Failed to update profile');
+      }
+    } catch (err) {
+      alert('Failed to update profile');
     }
   };
 
@@ -104,9 +129,6 @@ const Dashboard = () => {
       alert("Please fill in both title and content");
       return;
     }
-    
-    setPostError(null);
-    console.log("Submitting post:", { ...postForm, userEmail: user?.email }); // Debug
     
     try {
       const res = await fetch('/.netlify/functions/database?type=discussion', {
@@ -120,19 +142,16 @@ const Dashboard = () => {
         })
       });
       
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("Server error:", errorText);
-        throw new Error(errorText || 'Failed to save');
+      if (res.ok) {
+        setPostForm({ title: '', content: '', category: 'General' });
+        setShowModal(null);
+        await loadAllData();
+      } else {
+        const error = await res.json();
+        alert(error.message || "Failed to create post. Check database columns are JSONB type.");
       }
-      
-      setPostForm({ title: '', content: '', category: 'General' });
-      setShowModal(null);
-      await loadAllData();
     } catch (err) { 
-      console.error('Post error:', err);
-      setPostError(err.message || "Failed to save post. Check database columns (likes/comments must be JSONB not INTEGER).");
-      alert("Failed to save post. Did you run the SQL to fix column types?");
+      alert('Failed to create post'); 
     }
   };
 
@@ -144,7 +163,13 @@ const Dashboard = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ postId, userId: user.id })
       });
-      if (res.ok) loadAllData();
+      if (res.ok) {
+        await loadAllData();
+        if (selectedPost && selectedPost.id === postId) {
+          const updated = discussions.find(d => d.id === postId);
+          if (updated) setSelectedPost(updated);
+        }
+      }
     } catch (err) { console.error('Error liking:', err); }
   };
 
@@ -183,8 +208,8 @@ const Dashboard = () => {
       return;
     }
     
-    if (!getVideoEmbedUrl(videoForm.url)) {
-      alert("Invalid YouTube URL");
+    if (!getVideoId(videoForm.url)) {
+      alert("Invalid YouTube URL. Use format: https://youtube.com/watch?v=VIDEOID or https://youtu.be/VIDEOID");
       return;
     }
     
@@ -200,12 +225,11 @@ const Dashboard = () => {
         setShowModal(null);
         loadAllData();
       } else {
-        const err = await res.text();
-        alert("Failed: " + err);
+        const err = await res.json();
+        alert(err.message || "Failed to add video");
       }
     } catch (err) { 
-      console.error('Video add error:', err);
-      alert("Failed to add video");
+      alert("Failed to add video"); 
     }
   };
 
@@ -216,7 +240,6 @@ const Dashboard = () => {
     }
     
     try {
-      // FIXED: Changed from type=resources to type=resource to match backend expectation
       const res = await fetch('/.netlify/functions/database?type=resource', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -228,12 +251,10 @@ const Dashboard = () => {
         setShowModal(null);
         loadAllData();
       } else {
-        const err = await res.text();
-        alert("Failed: " + err);
+        alert("Failed to add resource");
       }
     } catch (err) { 
-      console.error('Resource add error:', err);
-      alert("Failed to add resource");
+      alert("Failed to add resource"); 
     }
   };
 
@@ -249,43 +270,94 @@ const Dashboard = () => {
     }
   };
 
-  const handleUpdateProfile = async () => {
+  // Extract just the video ID
+  const getVideoId = (url) => {
+    if (!url) return null;
     try {
-      const res = await fetch('/.netlify/functions/database?type=updateProfile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: user.email, ...profileForm })
-      });
-      if (res.ok) {
-        const updated = { ...user, ...profileForm };
-        setUser(updated);
-        localStorage.setItem('wellnessUser', JSON.stringify(updated));
-        setImageError(false);
-        setShowModal(null);
-      }
-    } catch (err) {
-      alert("Failed to update profile");
+      const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+      const match = url.match(regex);
+      return match ? match[1] : null;
+    } catch (e) { 
+      return null; 
     }
+  };
+
+  // Check if URL is valid image
+  const isValidImageUrl = (url) => {
+    if (!url) return false;
+    return url.match(/\.(jpeg|jpg|gif|png|webp)$/) != null || url.includes('http');
   };
 
   const renderAvatar = (src, size = 'small') => {
     const isLarge = size === 'large';
-    const containerStyle = isLarge ? styles.avatarLarge : styles.avatarMini;
-    if (!src || imageError) return <div style={containerStyle}><User size={isLarge ? 40 : 18} color="#64748b" /></div>;
-    return <div style={containerStyle}><img src={src} style={styles.avatarImg} alt="Profile" onError={() => setImageError(true)} /></div>;
+    const baseStyle = {
+      width: isLarge ? '80px' : '35px',
+      height: isLarge ? '80px' : '35px',
+      borderRadius: '50%',
+      background: '#f1f5f9',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+      cursor: 'pointer'
+    };
+    
+    if (!src || imageError || !isValidImageUrl(src)) {
+      return (
+        <div style={baseStyle}>
+          <User size={isLarge ? 40 : 18} color="#64748b" />
+        </div>
+      );
+    }
+    
+    return (
+      <div style={baseStyle}>
+        <img 
+          src={src} 
+          alt="Profile" 
+          style={{width: '100%', height: '100%', objectFit: 'cover'}}
+          onError={() => {
+            console.log('Image failed to load:', src);
+            setImageError(true);
+          }}
+        />
+      </div>
+    );
   };
 
   if (!user) {
     return (
       <div style={styles.loginContainer}>
         <div style={styles.loginCard}>
-          <div style={{textAlign: 'center', marginBottom: '20px'}}><Crown size={40} color="#ec4899" /><h2>Collective Login</h2></div>
+          <div style={{textAlign: 'center', marginBottom: '20px'}}>
+            <Crown size={40} color="#ec4899" />
+            <h2>Collective Login</h2>
+          </div>
           <form onSubmit={handleAuth}>
-            <input style={styles.input} type="email" placeholder="Email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} />
-            <input style={styles.input} type="password" placeholder="Password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} />
-            <button style={styles.primaryButtonFull}>{isRegistering ? 'Register' : 'Login'}</button>
+            <input 
+              style={styles.input} 
+              type="email" 
+              placeholder="Email" 
+              value={loginEmail} 
+              onChange={e => setLoginEmail(e.target.value)} 
+              required
+            />
+            <input 
+              style={styles.input} 
+              type="password" 
+              placeholder="Password" 
+              value={loginPassword} 
+              onChange={e => setLoginPassword(e.target.value)} 
+              required
+            />
+            <button type="submit" style={styles.primaryButtonFull}>
+              {isRegistering ? 'Register' : 'Login'}
+            </button>
           </form>
-          <button style={styles.ghostButtonFull} onClick={() => setIsRegistering(!isRegistering)}>
+          <button 
+            style={styles.ghostButtonFull} 
+            onClick={() => setIsRegistering(!isRegistering)}
+          >
             {isRegistering ? 'Already a member? Login' : 'Need an account? Register'}
           </button>
         </div>
@@ -296,26 +368,54 @@ const Dashboard = () => {
   return (
     <div style={styles.container}>
       <header style={styles.header}>
-        <div style={styles.brand}><Crown color="#ec4899" /> <span>The Collective</span></div>
+        <div style={styles.brand}>
+          <Crown color="#ec4899" /> 
+          <span>The Collective</span>
+        </div>
         <nav style={styles.centerNav}>
-          <button onClick={() => setActiveTab('community')} style={activeTab === 'community' ? styles.navBtnActive : styles.navBtn}>Community</button>
-          <button onClick={() => setActiveTab('video')} style={activeTab === 'video' ? styles.navBtnActive : styles.navBtn}>Video Hub</button>
-          <button onClick={() => setActiveTab('resources')} style={activeTab === 'resources' ? styles.navBtnActive : styles.navBtn}>Resources</button>
+          <button 
+            onClick={() => setActiveTab('community')} 
+            style={activeTab === 'community' ? styles.navBtnActive : styles.navBtn}
+          >
+            Community
+          </button>
+          <button 
+            onClick={() => setActiveTab('video')} 
+            style={activeTab === 'video' ? styles.navBtnActive : styles.navBtn}
+          >
+            Video Hub
+          </button>
+          <button 
+            onClick={() => setActiveTab('resources')} 
+            style={activeTab === 'resources' ? styles.navBtnActive : styles.navBtn}
+          >
+            Resources
+          </button>
         </nav>
         <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
-          <div onClick={() => setShowModal('profile')} style={{cursor: 'pointer'}}>
+          <div onClick={() => setShowModal('profile')}>
             {renderAvatar(profileForm.profilePic, 'small')}
           </div>
-          <button onClick={() => {localStorage.clear(); window.location.reload();}} style={styles.iconBtn}><LogOut size={20}/></button>
+          <button 
+            onClick={() => {localStorage.clear(); window.location.reload();}} 
+            style={styles.iconBtn}
+          >
+            <LogOut size={20}/>
+          </button>
         </div>
       </header>
 
       <main style={styles.main}>
+        {/* Community Tab */}
         {activeTab === 'community' && (
           <div style={styles.communityLayout}>
             <aside style={styles.sidebar}>
               {GROUPS.map(g => (
-                <button key={g} onClick={() => setActiveGroup(g)} style={activeGroup === g ? styles.sidebarBtnActive : styles.sidebarBtn}>
+                <button 
+                  key={g} 
+                  onClick={() => setActiveGroup(g)} 
+                  style={activeGroup === g ? styles.sidebarBtnActive : styles.sidebarBtn}
+                >
                   <Hash size={14} /> {g}
                 </button>
               ))}
@@ -327,82 +427,112 @@ const Dashboard = () => {
                   <Plus size={18}/> New Post
                 </button>
               </div>
-              
-              {discussions.filter(d => activeGroup === 'All Discussions' || d.category === activeGroup).map(post => (
-                <div key={post.id} style={styles.card} onClick={() => {setSelectedPost(post); setShowModal('postDetail');}}>
-                  <div style={styles.cardHeader}>
-                    <span style={styles.tag}>{post.category}</span>
+              {discussions
+                .filter(d => activeGroup === 'All Discussions' || d.category === activeGroup)
+                .map(post => (
+                  <div 
+                    key={post.id} 
+                    style={styles.card} 
+                    onClick={() => {setSelectedPost(post); setShowModal('postDetail');}}
+                  >
+                    <div style={styles.cardHeader}>
+                      <span style={styles.tag}>{post.category}</span>
+                      {isAdmin && (
+                        <button 
+                          onClick={(e) => {e.stopPropagation(); handleDelete(post.id, 'discussion');}} 
+                          style={styles.delBtn}
+                        >
+                          <Trash2 size={14}/>
+                        </button>
+                      )}
+                    </div>
+                    <h3>{post.title}</h3>
+                    <p style={styles.cardExcerpt}>{post.content}</p>
+                    <div style={styles.cardMeta}>
+                      <span style={styles.metaItem}>
+                        <User size={12}/> {post.author}
+                      </span>
+                      <button 
+                        style={styles.metaBtn} 
+                        onClick={(e) => { e.stopPropagation(); handleLikePost(post.id); }}
+                      >
+                        <Heart 
+                          size={12} 
+                          fill={post.likes?.includes(user.id) ? "#ec4899" : "none"} 
+                          color={post.likes?.includes(user.id) ? "#ec4899" : "#94a3b8"}
+                        /> 
+                        {post.likes?.length || 0}
+                      </button>
+                      <span style={styles.metaItem}>
+                        <MessageCircle size={12}/> {post.comments?.length || 0}
+                      </span>
+                    </div>
                   </div>
-                  <h3>{post.title}</h3>
-                  <p style={styles.cardExcerpt}>{post.content}</p>
-                  <div style={styles.cardMeta}>
-                    <button 
-                      style={styles.metaBtn} 
-                      onClick={(e) => { e.stopPropagation(); handleLikePost(post.id); }}
-                    >
-                      <Heart 
-                        size={14} 
-                        fill={post.likes?.includes(user.id) ? "#ec4899" : "none"} 
-                        color={post.likes?.includes(user.id) ? "#ec4899" : "#94a3b8"}
-                      /> 
-                      {post.likes?.length || 0}
-                    </button>
-                    <span style={styles.metaItem}>
-                      <MessageCircle size={14}/> {post.comments?.length || 0}
-                    </span>
-                    {isAdmin && (
-                      <TrashIcon 
-                        size={14} 
-                        style={{marginLeft: 'auto', cursor: 'pointer', color: '#94a3b8'}} 
-                        onClick={(e) => {e.stopPropagation(); handleDelete(post.id, 'discussion');}}
-                      />
-                    )}
-                  </div>
-                </div>
-              ))}
+                ))}
             </section>
           </div>
         )}
 
+        {/* Video Hub Tab - Using Thumbnail Approach for Reliability */}
         {activeTab === 'video' && (
           <div style={styles.videoGrid}>
             <div style={{gridColumn: '1/-1', display: 'flex', justifyContent: 'space-between', marginBottom: '20px'}}>
                <h2>Video Hub</h2>
-               {isAdmin && <button style={styles.primaryButton} onClick={() => setShowModal('addVideo')}><Upload size={18}/> Add Video</button>}
+               {isAdmin && (
+                 <button style={styles.primaryButton} onClick={() => setShowModal('addVideo')}>
+                   <Upload size={18}/> Add Video
+                 </button>
+               )}
             </div>
             {videos.map(v => {
-              const embedUrl = getVideoEmbedUrl(v.url);
+              const videoId = getVideoId(v.url);
               return (
                 <div key={v.id} style={styles.videoCard}>
-                  <div style={styles.videoFrameWrapper}>
-                    {embedUrl ? (
-                      <iframe 
-                        src={embedUrl}
-                        style={styles.videoIframe}
-                        frameBorder="0"
-                        allowFullScreen
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        referrerPolicy="no-referrer-when-downgrade"
-                        title={v.title}
-                      />
+                  <div 
+                    style={styles.videoThumbnailContainer}
+                    onClick={() => window.open(v.url, '_blank')}
+                  >
+                    {videoId ? (
+                      <>
+                        <img 
+                          src={`https://img.youtube.com/vi/${videoId}/mqdefault.jpg`} 
+                          alt={v.title}
+                          style={styles.videoThumbnail}
+                        />
+                        <div style={styles.playButtonOverlay}>
+                          <PlayCircle size={48} color="white" fill="rgba(236, 72, 153, 0.9)" />
+                        </div>
+                      </>
                     ) : (
                       <div style={styles.videoPlaceholder}>
                         <Video size={48} color="#cbd5e1" />
-                        <p style={{color: '#64748b', marginTop: '10px'}}>Invalid YouTube URL</p>
-                        <p style={{color: '#94a3b8', fontSize: '12px'}}>{v.url}</p>
+                        <p style={{color: '#64748b', marginTop: '10px'}}>Invalid URL</p>
                       </div>
                     )}
                   </div>
                   <div style={{padding: '15px'}}>
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                      <h4 style={{margin: 0}}>{v.title}</h4>
+                     <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+                      <h4 style={{margin: 0, flex: 1}}>{v.title}</h4>
                       {isAdmin && (
-                        <button onClick={() => handleDelete(v.id, 'video')} style={styles.delBtn}>
-                          <TrashIcon size={16}/>
+                        <button 
+                          onClick={() => handleDelete(v.id, 'video')} 
+                          style={styles.delBtn}
+                        >
+                          <Trash2 size={16}/>
                         </button>
                       )}
                      </div>
                      <p style={styles.cardExcerpt}>{v.description}</p>
+                     {videoId && (
+                       <a 
+                         href={v.url} 
+                         target="_blank" 
+                         rel="noopener noreferrer" 
+                         style={styles.videoLink}
+                       >
+                         Watch on YouTube <ExternalLink size={12}/>
+                       </a>
+                     )}
                   </div>
                 </div>
               );
@@ -410,11 +540,16 @@ const Dashboard = () => {
           </div>
         )}
 
+        {/* Resources Tab */}
         {activeTab === 'resources' && (
           <div style={styles.communityLayout}>
             <aside style={styles.sidebar}>
               {RESOURCE_CATEGORIES.map(cat => (
-                <button key={cat} onClick={() => setActiveResourceCategory(cat)} style={activeResourceCategory === cat ? styles.sidebarBtnActive : styles.sidebarBtn}>
+                <button 
+                  key={cat} 
+                  onClick={() => setActiveResourceCategory(cat)} 
+                  style={activeResourceCategory === cat ? styles.sidebarBtnActive : styles.sidebarBtn}
+                >
                   <Hash size={14} /> {cat}
                 </button>
               ))}
@@ -422,66 +557,125 @@ const Dashboard = () => {
             <section style={styles.feed}>
               <div style={styles.sectionHeader}>
                 <h2>{activeResourceCategory} Resources</h2>
-                {isAdmin && <button style={styles.primaryButton} onClick={() => setShowModal('resource')}><Plus size={18}/> Add Resource</button>}
+                {isAdmin && (
+                  <button style={styles.primaryButton} onClick={() => setShowModal('resource')}>
+                    <Plus size={18}/> Add Resource
+                  </button>
+                )}
               </div>
               <div style={styles.resourceList}>
-                {resources.filter(r => r.category === activeResourceCategory).map(r => (
-                  <div key={r.id} style={styles.resourceCard}>
-                    <FileText color="#ec4899" />
-                    <div style={{flex: 1}}>
-                      <h4 style={{margin: 0}}>{r.title}</h4>
+                {resources
+                  .filter(r => r.category === activeResourceCategory)
+                  .map(r => (
+                    <div key={r.id} style={styles.resourceCard}>
+                      <FileText color="#ec4899" />
+                      <div style={{flex: 1}}>
+                        <h4 style={{margin: 0}}>{r.title}</h4>
+                      </div>
+                      <div style={{display: 'flex', gap: '8px'}}>
+                        <button 
+                          onClick={() => window.open(r.url, '_blank')} 
+                          style={styles.viewBtnInternal}
+                        >
+                          Open
+                        </button>
+                        {isAdmin && (
+                          <button 
+                            onClick={() => handleDelete(r.id, 'resources')} 
+                            style={styles.delBtn}
+                          >
+                            <Trash2 size={16}/>
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <button onClick={() => window.open(r.url, '_blank')} style={styles.viewBtnInternal}>Open</button>
-                    {isAdmin && <button onClick={() => handleDelete(r.id, 'resources')} style={styles.delBtn}><TrashIcon size={16}/></button>}
-                  </div>
-                ))}
+                  ))}
               </div>
             </section>
           </div>
         )}
       </main>
 
-      {/* MODALS */}
+      {/* Post Modal */}
       {showModal === 'post' && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
             <div style={styles.modalHeader}>
               <h3>New Discussion</h3>
-              <button onClick={() => setShowModal(null)} style={styles.closeBtn}><X size={24}/></button>
+              <button onClick={() => setShowModal(null)} style={styles.closeBtn}>
+                <X size={24}/>
+              </button>
             </div>
-            {postError && <div style={{color: '#ef4444', marginBottom: '10px', fontSize: '14px'}}>{postError}</div>}
-            <select style={styles.input} value={postForm.category} onChange={e => setPostForm({...postForm, category: e.target.value})}>
-              {GROUPS.filter(g => g !== 'All Discussions').map(g => <option key={g} value={g}>{g}</option>)}
+            <select 
+              style={styles.input} 
+              value={postForm.category} 
+              onChange={e => setPostForm({...postForm, category: e.target.value})}
+            >
+              {GROUPS.filter(g => g !== 'All Discussions').map(g => (
+                <option key={g} value={g}>{g}</option>
+              ))}
             </select>
-            <input style={styles.input} placeholder="Title" value={postForm.title} onChange={e => setPostForm({...postForm, title: e.target.value})} />
-            <textarea style={{...styles.input, height: '100px'}} placeholder="Content" value={postForm.content} onChange={e => setPostForm({...postForm, content: e.target.value})} />
-            <button style={styles.primaryButtonFull} onClick={handleCreatePost}>Post Now</button>
+            <input 
+              style={styles.input} 
+              placeholder="Title" 
+              value={postForm.title}
+              onChange={e => setPostForm({...postForm, title: e.target.value})} 
+            />
+            <textarea 
+              style={{...styles.input, height: '100px'}} 
+              placeholder="Content" 
+              value={postForm.content}
+              onChange={e => setPostForm({...postForm, content: e.target.value})} 
+            />
+            <button style={styles.primaryButtonFull} onClick={handleCreatePost}>
+              Post Now
+            </button>
           </div>
         </div>
       )}
 
+      {/* Post Detail Modal */}
       {showModal === 'postDetail' && selectedPost && (
         <div style={styles.modalOverlay} onClick={() => {setShowModal(null); setSelectedPost(null);}}>
           <div style={styles.postDetailModal} onClick={e => e.stopPropagation()}>
             <div style={styles.postDetailHeader}>
               <div>
                 <span style={styles.tag}>{selectedPost.category}</span>
-                <h2>{selectedPost.title}</h2>
+                <h2 style={{margin: '10px 0'}}>{selectedPost.title}</h2>
                 <div style={styles.cardMeta}>
-                  <span>{selectedPost.author}</span>
-                  <span style={styles.metaItem}>
-                    <Heart size={12} /> {selectedPost.likes?.length || 0} likes
-                  </span>
+                  <span><User size={12}/> {selectedPost.author}</span>
                 </div>
               </div>
-              <button onClick={() => {setShowModal(null); setSelectedPost(null);}} style={styles.closeBtn}><X size={24}/></button>
+              <button 
+                onClick={() => {setShowModal(null); setSelectedPost(null);}} 
+                style={styles.closeBtn}
+              >
+                <X size={24}/>
+              </button>
             </div>
             
             <div style={styles.postDetailContent}>
-              <p style={{fontSize: '16px', lineHeight: '1.6', color: '#334155'}}>{selectedPost.content}</p>
+              <p style={{fontSize: '16px', lineHeight: '1.6', color: '#334155'}}>
+                {selectedPost.content}
+              </p>
               
+              <div style={styles.postActions}>
+                <button 
+                  onClick={() => handleLikePost(selectedPost.id)} 
+                  style={selectedPost.likes?.includes(user.id) ? styles.likeButtonActive : styles.likeButton}
+                >
+                  <Heart 
+                    size={18} 
+                    fill={selectedPost.likes?.includes(user.id) ? "#ec4899" : "none"} 
+                  /> 
+                  {selectedPost.likes?.length || 0} likes
+                </button>
+              </div>
+
               <div style={styles.commentsSection}>
-                <h3 style={{marginBottom: '20px'}}>Comments ({selectedPost.comments?.length || 0})</h3>
+                <h3 style={{marginBottom: '20px'}}>
+                  Comments ({selectedPost.comments?.length || 0})
+                </h3>
                 
                 <div style={styles.commentInputContainer}>
                   <textarea 
@@ -500,7 +694,9 @@ const Dashboard = () => {
                     <div key={idx} style={styles.commentItem}>
                       <div style={styles.commentHeader}>
                         <span style={styles.commentAuthor}>{comment.author}</span>
-                        <span style={styles.commentDate}>{new Date(comment.timestamp).toLocaleDateString()}</span>
+                        <span style={styles.commentDate}>
+                          {new Date(comment.timestamp).toLocaleDateString()}
+                        </span>
                       </div>
                       <p style={styles.commentText}>{comment.text}</p>
                     </div>
@@ -512,42 +708,122 @@ const Dashboard = () => {
         </div>
       )}
 
+      {/* Profile Modal */}
       {showModal === 'profile' && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={styles.avatarLarge}>
-               {profileForm.profilePic ? <img src={profileForm.profilePic} style={styles.avatarImg} alt="P" /> : <User size={40} />}
+            <div style={{textAlign: 'center', marginBottom: '20px'}}>
+              {renderAvatar(profileForm.profilePic, 'large')}
+              {profileUpdateSuccess && (
+                <p style={{color: '#22c55e', fontSize: '14px', marginTop: '10px'}}>
+                  Profile updated!
+                </p>
+              )}
             </div>
-            <input style={styles.input} placeholder="First Name" value={profileForm.firstName} onChange={e => setProfileForm({...profileForm, firstName: e.target.value})} />
-            <input style={styles.input} placeholder="Last Name" value={profileForm.lastName} onChange={e => setProfileForm({...profileForm, lastName: e.target.value})} />
-            <input style={styles.input} placeholder="Profile Image URL" value={profileForm.profilePic} onChange={e => setProfileForm({...profileForm, profilePic: e.target.value})} />
-            <button style={styles.primaryButtonFull} onClick={handleUpdateProfile}>Save Profile</button>
+            
+            <input 
+              style={styles.input} 
+              placeholder="First Name" 
+              value={profileForm.firstName} 
+              onChange={e => setProfileForm({...profileForm, firstName: e.target.value})} 
+            />
+            <input 
+              style={styles.input} 
+              placeholder="Last Name" 
+              value={profileForm.lastName} 
+              onChange={e => setProfileForm({...profileForm, lastName: e.target.value})} 
+            />
+            <input 
+              style={styles.input} 
+              placeholder="Profile Image URL (direct link to .jpg or .png)" 
+              value={profileForm.profilePic} 
+              onChange={e => {
+                setProfileForm({...profileForm, profilePic: e.target.value});
+                setImageError(false);
+              }} 
+            />
+            <p style={{fontSize: '12px', color: '#64748b', marginTop: '-10px', marginBottom: '15px'}}>
+              Tip: Use Imgur or similar direct image links
+            </p>
+            {imageError && (
+              <p style={{color: '#ef4444', fontSize: '12px', marginBottom: '10px'}}>
+                Failed to load image. Check URL is direct link.
+              </p>
+            )}
+            <button style={styles.primaryButtonFull} onClick={handleUpdateProfile}>
+              Save Profile
+            </button>
           </div>
         </div>
       )}
 
+      {/* Add Video Modal */}
       {showModal === 'addVideo' && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <h3>Add Video</h3>
-            <input style={styles.input} placeholder="Title" value={videoForm.title} onChange={e => setVideoForm({...videoForm, title: e.target.value})} />
-            <input style={styles.input} placeholder="YouTube URL" value={videoForm.url} onChange={e => setVideoForm({...videoForm, url: e.target.value})} />
-            <textarea style={styles.input} placeholder="Description" value={videoForm.description} onChange={e => setVideoForm({...videoForm, description: e.target.value})} />
-            <button style={styles.primaryButtonFull} onClick={handleAddVideo}>Add to Hub</button>
+            <div style={styles.modalHeader}>
+              <h3>Add Video</h3>
+              <button onClick={() => setShowModal(null)} style={styles.closeBtn}>
+                <X size={24}/>
+              </button>
+            </div>
+            <input 
+              style={styles.input} 
+              placeholder="Title" 
+              value={videoForm.title}
+              onChange={e => setVideoForm({...videoForm, title: e.target.value})} 
+            />
+            <input 
+              style={styles.input} 
+              placeholder="YouTube URL" 
+              value={videoForm.url}
+              onChange={e => setVideoForm({...videoForm, url: e.target.value})} 
+            />
+            <textarea 
+              style={styles.input} 
+              placeholder="Description" 
+              value={videoForm.description}
+              onChange={e => setVideoForm({...videoForm, description: e.target.value})} 
+            />
+            <button style={styles.primaryButtonFull} onClick={handleAddVideo}>
+              Add to Hub
+            </button>
           </div>
         </div>
       )}
 
+      {/* Add Resource Modal */}
       {showModal === 'resource' && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <h3>Add Resource</h3>
-            <input style={styles.input} placeholder="Title" value={resourceForm.title} onChange={e => setResourceForm({...resourceForm, title: e.target.value})} />
-            <input style={styles.input} placeholder="URL" value={resourceForm.url} onChange={e => setResourceForm({...resourceForm, url: e.target.value})} />
-            <select style={styles.input} value={resourceForm.category} onChange={e => setResourceForm({...resourceForm, category: e.target.value})}>
+            <div style={styles.modalHeader}>
+              <h3>Add Resource</h3>
+              <button onClick={() => setShowModal(null)} style={styles.closeBtn}>
+                <X size={24}/>
+              </button>
+            </div>
+            <input 
+              style={styles.input} 
+              placeholder="Title" 
+              value={resourceForm.title}
+              onChange={e => setResourceForm({...resourceForm, title: e.target.value})} 
+            />
+            <input 
+              style={styles.input} 
+              placeholder="URL" 
+              value={resourceForm.url}
+              onChange={e => setResourceForm({...resourceForm, url: e.target.value})} 
+            />
+            <select 
+              style={styles.input} 
+              value={resourceForm.category}
+              onChange={e => setResourceForm({...resourceForm, category: e.target.value})}
+            >
               {RESOURCE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <button style={styles.primaryButtonFull} onClick={handleAddResource}>Save Resource</button>
+            <button style={styles.primaryButtonFull} onClick={handleAddResource}>
+              Save Resource
+            </button>
           </div>
         </div>
       )}
@@ -556,62 +832,74 @@ const Dashboard = () => {
 };
 
 const styles = {
-  container: { minHeight: '100vh', background: '#f8fafc', fontFamily: 'sans-serif' },
-  header: { background: 'white', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 40px', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 100 },
-  brand: { display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold' },
+  container: { minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, -apple-system, sans-serif' },
+  header: { 
+    background: 'white', 
+    height: '70px', 
+    display: 'flex', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    padding: '0 40px', 
+    borderBottom: '1px solid #e2e8f0', 
+    position: 'sticky', 
+    top: 0, 
+    zIndex: 100 
+  },
+  brand: { display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold', fontSize: '20px' },
   centerNav: { display: 'flex', gap: '8px', background: '#f1f5f9', padding: '5px', borderRadius: '12px' },
-  navBtn: { padding: '8px 20px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: '8px', color: '#64748b' },
-  navBtnActive: { padding: '8px 20px', border: 'none', background: 'white', color: '#ec4899', borderRadius: '8px', fontWeight: 'bold' },
+  navBtn: { padding: '8px 20px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: '8px', color: '#64748b', fontWeight: '500' },
+  navBtnActive: { padding: '8px 20px', border: 'none', background: 'white', color: '#ec4899', borderRadius: '8px', fontWeight: 'bold', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
   main: { maxWidth: '1200px', margin: '0 auto', padding: '40px 20px' },
   communityLayout: { display: 'grid', gridTemplateColumns: '240px 1fr', gap: '40px' },
   sidebar: { display: 'flex', flexDirection: 'column', gap: '5px' },
-  sidebarBtn: { textAlign: 'left', padding: '12px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '10px' },
-  sidebarBtnActive: { textAlign: 'left', padding: '12px', background: '#fdf2f8', border: 'none', borderRadius: '10px', color: '#ec4899', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' },
+  sidebarBtn: { textAlign: 'left', padding: '12px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px' },
+  sidebarBtnActive: { textAlign: 'left', padding: '12px', background: '#fdf2f8', border: 'none', borderRadius: '10px', color: '#ec4899', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px' },
   sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' },
-  card: { background: 'white', padding: '25px', borderRadius: '20px', border: '1px solid #e2e8f0', marginBottom: '20px', cursor: 'pointer', transition: 'transform 0.2s' },
+  card: { background: 'white', padding: '25px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '20px', cursor: 'pointer', transition: 'box-shadow 0.2s' },
   cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
-  tag: { fontSize: '10px', background: '#fdf2f8', color: '#ec4899', padding: '4px 10px', borderRadius: '20px', fontWeight: 'bold' },
-  cardExcerpt: { color: '#64748b', fontSize: '14px', lineHeight: '1.5' },
-  cardMeta: { marginTop: '15px', display: 'flex', gap: '15px', fontSize: '12px', color: '#94a3b8', alignItems: 'center' },
-  metaItem: { display: 'flex', alignItems: 'center', gap: '4px' },
-  metaBtn: { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', padding: 0, fontSize: '12px' },
-  videoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '25px' },
-  videoCard: { background: 'white', borderRadius: '20px', overflow: 'hidden', border: '1px solid #e2e8f0' },
-  videoFrameWrapper: { position: 'relative', paddingTop: '56.25%', background: '#000' },
-  videoIframe: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' },
+  tag: { fontSize: '11px', background: '#fdf2f8', color: '#ec4899', padding: '4px 12px', borderRadius: '20px', fontWeight: '600' },
+  cardExcerpt: { color: '#64748b', fontSize: '14px', lineHeight: '1.5', marginTop: '8px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' },
+  cardMeta: { marginTop: '15px', display: 'flex', gap: '20px', fontSize: '13px', color: '#94a3b8', alignItems: 'center' },
+  metaItem: { display: 'flex', alignItems: 'center', gap: '6px' },
+  metaBtn: { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: '#94a3b8', fontSize: '13px', padding: 0 },
+  videoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '25px' },
+  videoCard: { background: 'white', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0' },
+  videoThumbnailContainer: { position: 'relative', paddingTop: '56.25%', background: '#000', cursor: 'pointer' },
+  videoThumbnail: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' },
+  playButtonOverlay: { position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', opacity: 0.9 },
   videoPlaceholder: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9' },
+  videoLink: { color: '#ec4899', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '10px', textDecoration: 'none' },
   resourceList: { display: 'flex', flexDirection: 'column', gap: '12px' },
-  resourceCard: { background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '15px' },
-  viewBtnInternal: { background: '#fdf2f8', color: '#ec4899', border: 'none', padding: '8px 16px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
-  delBtn: { background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' },
+  resourceCard: { background: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '15px' },
+  viewBtnInternal: { background: '#fdf2f8', color: '#ec4899', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' },
+  delBtn: { background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', padding: '4px' },
   loginContainer: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' },
-  loginCard: { background: 'white', padding: '40px', borderRadius: '20px', width: '350px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' },
-  primaryButton: { background: '#ec4899', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' },
-  primaryButtonFull: { background: '#ec4899', color: 'white', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', width: '100%' },
-  ghostButtonFull: { background: 'none', border: 'none', color: '#ec4899', cursor: 'pointer', width: '100%', marginTop: '10px' },
-  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-  modal: { background: 'white', padding: '30px', borderRadius: '20px', width: '400px', maxHeight: '90vh', overflowY: 'auto' },
-  postDetailModal: { background: 'white', borderRadius: '20px', width: '700px', maxWidth: '90vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column' },
-  postDetailHeader: { padding: '30px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' },
+  loginCard: { background: 'white', padding: '40px', borderRadius: '20px', width: '100%', maxWidth: '400px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' },
+  input: { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px', fontSize: '14px', boxSizing: 'border-box' },
+  primaryButton: { background: '#ec4899', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px' },
+  primaryButtonFull: { background: '#ec4899', color: 'white', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', width: '100%', fontSize: '16px' },
+  ghostButtonFull: { background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', width: '100%', marginTop: '10px', fontSize: '14px' },
+  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' },
+  modal: { background: 'white', padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' },
+  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' },
+  postDetailModal: { background: 'white', borderRadius: '20px', width: '100%', maxWidth: '700px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' },
+  postDetailHeader: { padding: '30px', borderBottom: '1px solid #e2e8f0' },
   postDetailContent: { padding: '30px', overflowY: 'auto', flex: 1 },
   closeBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' },
-  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
+  postActions: { marginTop: '30px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' },
+  likeButton: { background: 'white', border: '1px solid #e2e8f0', padding: '10px 20px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontWeight: '500' },
+  likeButtonActive: { background: '#fdf2f8', border: '1px solid #ec4899', padding: '10px 20px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#ec4899', fontWeight: '500' },
   commentsSection: { marginTop: '30px' },
   commentInputContainer: { display: 'flex', gap: '10px', marginBottom: '30px' },
-  commentInput: { flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', minHeight: '60px', resize: 'vertical' },
-  commentButton: { background: '#ec4899', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '10px', cursor: 'pointer' },
+  commentInput: { flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', minHeight: '80px', resize: 'vertical', fontFamily: 'inherit' },
+  commentButton: { background: '#ec4899', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   commentsList: { display: 'flex', flexDirection: 'column', gap: '15px' },
   commentItem: { background: '#f8fafc', padding: '15px', borderRadius: '12px' },
   commentHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '8px' },
-  commentAuthor: { fontWeight: 'bold', color: '#1e293b', fontSize: '14px' },
+  commentAuthor: { fontWeight: '600', color: '#1e293b', fontSize: '14px' },
   commentDate: { fontSize: '12px', color: '#94a3b8' },
   commentText: { color: '#475569', fontSize: '14px', lineHeight: '1.5', margin: 0 },
-  avatarMini: { width: '35px', height: '35px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden' },
-  avatarLarge: { width: '80px', height: '80px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 15px', overflow: 'hidden' },
-  avatarImg: { width: '100%', height: '100%', objectFit: 'cover' },
-  input: { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px' },
-  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' },
-  feed: { flex: 1 }
+  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }
 };
 
 export default Dashboard;
