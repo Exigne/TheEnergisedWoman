@@ -54,7 +54,9 @@ const Dashboard = () => {
       setDiscussions(Array.isArray(d) ? d : []);
       setVideos(Array.isArray(v) ? v : []);
       setResources(Array.isArray(r) ? r : []);
-    } catch (err) { console.error("Error loading data", err); }
+    } catch (err) { 
+      console.error("Error loading data", err); 
+    }
   };
 
   const handleAuth = async (e) => {
@@ -85,19 +87,31 @@ const Dashboard = () => {
   };
 
   const handleCreatePost = async () => {
-    if (!postForm.title || !postForm.content) return alert("Fill in title and content");
-    const authorName = profileForm.firstName ? `${profileForm.firstName} ${profileForm.lastName}` : (user.displayName || user.email.split('@')[0]);
+    if (!postForm.title || !postForm.content) {
+      alert("Fill in title and content");
+      return;
+    }
+    
+    const payload = { 
+      ...postForm, 
+      userEmail: user.email  // Send email instead of author name
+    };
     
     try {
       const res = await fetch('/.netlify/functions/database?type=discussion', {
         method: 'POST',
-        body: JSON.stringify({ ...postForm, author: authorName })
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
       });
+      
       const data = await res.json();
+      
       if (res.ok) {
         setPostForm({ title: '', content: '', category: 'General' });
         setShowModal(null);
-        loadAllData();
+        await loadAllData();
       } else {
         alert(data.message || 'Failed to create post');
       }
