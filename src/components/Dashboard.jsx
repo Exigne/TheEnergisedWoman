@@ -328,7 +328,7 @@ const Dashboard = () => {
         <div style={styles.loginCard}>
           <div style={{textAlign: 'center', marginBottom: '20px'}}>
             <Crown size={40} color="#ec4899" />
-            <h2>Collective Login</h2>
+            <h2>The Energised Woman Collective Login</h2>
           </div>
           <form onSubmit={handleAuth}>
             <input 
@@ -367,7 +367,7 @@ const Dashboard = () => {
       <header style={styles.header}>
         <div style={styles.brand}>
           <Crown color="#ec4899" /> 
-          <span>The Collective</span>
+          <span>The Energised Woman Collective</span>
         </div>
         <nav style={styles.centerNav}>
           <button 
