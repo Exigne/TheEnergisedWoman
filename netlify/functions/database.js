@@ -25,11 +25,11 @@ exports.handler = async (event) => {
       const { email, password } = data;
       const cleanEmail = email.toLowerCase().trim();
       const check = await pool.query('SELECT email FROM users WHERE email = $1', [cleanEmail]);
-      if (check.rows.length > 0) return { statusCode: 400, headers, body: JSON.stringify({ message: 'User exists' }) };
+      if (check.rows.length > 0) return { statusCode: 400, headers, body: JSON.stringify({ message: 'User already exists' }) };
 
       const result = await pool.query(
         `INSERT INTO users (email, password_hash, display_name, created_at) 
-         VALUES ($1, $2, $3, NOW()) RETURNING email, display_name, is_admin`,
+         VALUES ($1, $2, $3, NOW()) RETURNING email, display_name as "displayName", is_admin as "isAdmin"`,
         [cleanEmail, password, cleanEmail.split('@')[0]]
       );
       return { statusCode: 200, headers, body: JSON.stringify(result.rows[0]) };
@@ -45,8 +45,9 @@ exports.handler = async (event) => {
       if (result.rows.length === 0 || result.rows[0].password_hash !== password) {
         return { statusCode: 401, headers, body: JSON.stringify({ message: 'Invalid credentials' }) };
       }
-      delete result.rows[0].password_hash;
-      return { statusCode: 200, headers, body: JSON.stringify(result.rows[0]) };
+      const user = result.rows[0];
+      delete user.password_hash;
+      return { statusCode: 200, headers, body: JSON.stringify(user) };
     }
 
     // --- 2. PROFILE UPDATE ---
@@ -54,7 +55,7 @@ exports.handler = async (event) => {
       const { email, firstName, lastName, profilePic } = data;
       const res = await pool.query(
         `UPDATE users SET first_name = $1, last_name = $2, profile_pic = $3 WHERE email = $4 
-         RETURNING first_name, last_name, profile_pic`,
+         RETURNING first_name as "firstName", last_name as "lastName", profile_pic as "profilePic"`,
         [firstName, lastName, profilePic, email]
       );
       return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
@@ -89,16 +90,29 @@ exports.handler = async (event) => {
         );
         return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
       }
+      if (type === 'resource') {
+        const { title, url, category } = data;
+        const res = await pool.query(
+          `INSERT INTO resources (title, url, category, created_at) 
+           VALUES ($1, $2, $3, NOW()) RETURNING *`,
+          [title, url, category]
+        );
+        return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
+      }
     }
 
     // --- 5. DELETE DATA ---
     if (event.httpMethod === 'DELETE') {
-      const table = type === 'video' ? 'videos' : type === 'resource' ? 'resources' : 'discussions';
+      let table = 'discussions';
+      if (type === 'video') table = 'videos';
+      if (type === 'resource') table = 'resources';
       await pool.query(`DELETE FROM ${table} WHERE id = $1`, [id]);
       return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
     }
 
+    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Action not handled' }) };
   } catch (err) {
+    console.error(err);
     return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
   }
 };
