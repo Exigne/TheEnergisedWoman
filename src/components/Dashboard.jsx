@@ -88,14 +88,22 @@ const Dashboard = () => {
     if (!postForm.title || !postForm.content) return alert("Fill in title and content");
     const authorName = profileForm.firstName ? `${profileForm.firstName} ${profileForm.lastName}` : (user.displayName || user.email.split('@')[0]);
     
-    const res = await fetch('/.netlify/functions/database?type=discussion', {
-      method: 'POST',
-      body: JSON.stringify({ ...postForm, author: authorName })
-    });
-    if (res.ok) {
-      setPostForm({ title: '', content: '', category: 'General' });
-      setShowModal(null);
-      loadAllData();
+    try {
+      const res = await fetch('/.netlify/functions/database?type=discussion', {
+        method: 'POST',
+        body: JSON.stringify({ ...postForm, author: authorName })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPostForm({ title: '', content: '', category: 'General' });
+        setShowModal(null);
+        loadAllData();
+      } else {
+        alert(data.message || 'Failed to create post');
+      }
+    } catch (err) {
+      console.error('Error creating post:', err);
+      alert('Failed to create post. Please try again.');
     }
   };
 
@@ -104,7 +112,11 @@ const Dashboard = () => {
       method: 'POST',
       body: JSON.stringify(videoForm)
     });
-    if (res.ok) { setShowModal(null); loadAllData(); }
+    if (res.ok) { 
+      setVideoForm({ title: '', url: '', description: '' });
+      setShowModal(null); 
+      loadAllData(); 
+    }
   };
 
   const handleAddResource = async () => {
@@ -112,7 +124,11 @@ const Dashboard = () => {
       method: 'POST',
       body: JSON.stringify(resourceForm)
     });
-    if (res.ok) { setShowModal(null); loadAllData(); }
+    if (res.ok) { 
+      setResourceForm({ title: '', url: '', category: 'General' });
+      setShowModal(null); 
+      loadAllData(); 
+    }
   };
 
   const handleDelete = async (id, type) => {
@@ -134,8 +150,8 @@ const Dashboard = () => {
         <div style={styles.loginCard}>
           <div style={{textAlign: 'center', marginBottom: '20px'}}><Crown size={40} color="#ec4899" /><h2>Collective Login</h2></div>
           <form onSubmit={handleAuth}>
-            <input style={styles.input} type="email" placeholder="Email" onChange={e => setLoginEmail(e.target.value)} />
-            <input style={styles.input} type="password" placeholder="Password" onChange={e => setLoginPassword(e.target.value)} />
+            <input style={styles.input} type="email" placeholder="Email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} />
+            <input style={styles.input} type="password" placeholder="Password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} />
             <button style={styles.primaryButtonFull}>{isRegistering ? 'Register' : 'Login'}</button>
           </form>
           <button style={styles.ghostButtonFull} onClick={() => setIsRegistering(!isRegistering)}>
@@ -233,11 +249,25 @@ const Dashboard = () => {
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
             <h3>New Discussion</h3>
-            <input style={styles.input} placeholder="Title" onChange={e => setPostForm({...postForm, title: e.target.value})} />
-            <select style={styles.input} onChange={e => setPostForm({...postForm, category: e.target.value})}>
+            <input 
+              style={styles.input} 
+              placeholder="Title" 
+              value={postForm.title}
+              onChange={e => setPostForm({...postForm, title: e.target.value})} 
+            />
+            <select 
+              style={styles.input} 
+              value={postForm.category}
+              onChange={e => setPostForm({...postForm, category: e.target.value})}
+            >
               {GROUPS.filter(g => g !== 'All Discussions').map(g => <option key={g} value={g}>{g}</option>)}
             </select>
-            <textarea style={{...styles.input, height: '100px'}} placeholder="Content" onChange={e => setPostForm({...postForm, content: e.target.value})} />
+            <textarea 
+              style={{...styles.input, height: '100px'}} 
+              placeholder="Content" 
+              value={postForm.content}
+              onChange={e => setPostForm({...postForm, content: e.target.value})} 
+            />
             <button style={styles.primaryButtonFull} onClick={handleCreatePost}>Post Now</button>
           </div>
         </div>
@@ -261,9 +291,24 @@ const Dashboard = () => {
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
             <h3>Add Video</h3>
-            <input style={styles.input} placeholder="Title" onChange={e => setVideoForm({...videoForm, title: e.target.value})} />
-            <input style={styles.input} placeholder="YouTube URL" onChange={e => setVideoForm({...videoForm, url: e.target.value})} />
-            <textarea style={styles.input} placeholder="Description" onChange={e => setVideoForm({...videoForm, description: e.target.value})} />
+            <input 
+              style={styles.input} 
+              placeholder="Title" 
+              value={videoForm.title}
+              onChange={e => setVideoForm({...videoForm, title: e.target.value})} 
+            />
+            <input 
+              style={styles.input} 
+              placeholder="YouTube URL" 
+              value={videoForm.url}
+              onChange={e => setVideoForm({...videoForm, url: e.target.value})} 
+            />
+            <textarea 
+              style={styles.input} 
+              placeholder="Description" 
+              value={videoForm.description}
+              onChange={e => setVideoForm({...videoForm, description: e.target.value})} 
+            />
             <button style={styles.primaryButtonFull} onClick={handleAddVideo}>Add to Hub</button>
           </div>
         </div>
@@ -273,9 +318,23 @@ const Dashboard = () => {
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
             <h3>Add Resource</h3>
-            <input style={styles.input} placeholder="Title" onChange={e => setResourceForm({...resourceForm, title: e.target.value})} />
-            <input style={styles.input} placeholder="URL" onChange={e => setResourceForm({...resourceForm, url: e.target.value})} />
-            <select style={styles.input} onChange={e => setResourceForm({...resourceForm, category: e.target.value})}>
+            <input 
+              style={styles.input} 
+              placeholder="Title" 
+              value={resourceForm.title}
+              onChange={e => setResourceForm({...resourceForm, title: e.target.value})} 
+            />
+            <input 
+              style={styles.input} 
+              placeholder="URL" 
+              value={resourceForm.url}
+              onChange={e => setResourceForm({...resourceForm, url: e.target.value})} 
+            />
+            <select 
+              style={styles.input} 
+              value={resourceForm.category}
+              onChange={e => setResourceForm({...resourceForm, category: e.target.value})}
+            >
               {RESOURCE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             <button style={styles.primaryButtonFull} onClick={handleAddResource}>Save Resource</button>
@@ -309,6 +368,7 @@ const styles = {
   sidebarBtnActive: { textAlign: 'left', padding: '12px', background: '#fdf2f8', border: 'none', cursor: 'pointer', borderRadius: '10px', color: '#ec4899', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' },
   sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' },
   card: { background: 'white', padding: '25px', borderRadius: '20px', border: '1px solid #e2e8f0', marginBottom: '20px' },
+  cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
   tag: { fontSize: '10px', background: '#fdf2f8', color: '#ec4899', padding: '4px 10px', borderRadius: '20px', fontWeight: 'bold' },
   cardExcerpt: { color: '#64748b', fontSize: '14px', lineHeight: '1.5' },
   cardMeta: { marginTop: '15px', display: 'flex', gap: '15px', fontSize: '12px', color: '#94a3b8' },
@@ -317,8 +377,8 @@ const styles = {
   input: { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px' },
   modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
   modal: { background: 'white', padding: '30px', borderRadius: '20px', width: '400px' },
-  avatarMini: { width: '35px', height: '35px', borderRadius: '50%', background: '#f1f5f9', cursor: 'pointer', overflow: 'hidden' },
-  avatarLarge: { width: '80px', height: '80px', borderRadius: '50%', background: '#f1f5f9', margin: '0 auto 15px', overflow: 'hidden' },
+  avatarMini: { width: '35px', height: '35px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden' },
+  avatarLarge: { width: '80px', height: '80px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 15px', overflow: 'hidden' },
   avatarImg: { width: '100%', height: '100%', objectFit: 'cover' },
   videoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '25px' },
   videoCard: { background: 'white', borderRadius: '20px', overflow: 'hidden', border: '1px solid #e2e8f0' },
@@ -336,7 +396,8 @@ const styles = {
   delBtn: { background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' },
   loginContainer: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' },
   loginCard: { background: 'white', padding: '40px', borderRadius: '20px', width: '350px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' },
-  ghostButtonFull: { background: 'none', border: 'none', color: '#ec4899', cursor: 'pointer', width: '100%', marginTop: '10px' }
+  ghostButtonFull: { background: 'none', border: 'none', color: '#ec4899', cursor: 'pointer', width: '100%', marginTop: '10px' },
+  feed: { flex: 1 }
 };
 
 export default Dashboard;
