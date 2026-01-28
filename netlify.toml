@@ -6,20 +6,15 @@
   NODE_VERSION = "18"
   NPM_VERSION = "9"
 
-[[headers]]
-  for = "/*"
-  [headers.values]
-    # Simplified CSP: removed restricted default-src to prevent accidental blocking
-    Content-Security-Policy = "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://youtube.com; script-src 'self' 'unsafe-inline' https://www.youtube.com https://s.ytimg.com;"
-    
-    # REMOVED X-Frame-Options entirely. It often conflicts with YouTube's own security.
-    # ADDED Cross-Origin-Embedder-Policy to allow the iframe to load
-    Cross-Origin-Embedder-Policy = "unsafe-none"
-    
-    # Simplified Permissions-Policy
-    Permissions-Policy = "accelerometer=*, autoplay=*, gyroscope=*, picture-in-picture=*"
-
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # We remove CSP and Permissions-Policy entirely for a test. 
+    # If it works, we know the issue was the header syntax.
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer-when-downgrade"
