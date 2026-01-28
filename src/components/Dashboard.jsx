@@ -59,6 +59,7 @@ const Dashboard = () => {
         fetch('/.netlify/functions/database?type=video').then(res => res.json()),
         fetch('/.netlify/functions/database?type=resources').then(res => res.json())
       ]);
+      console.log("Videos loaded:", v); // Debug log
       setDiscussions(Array.isArray(d) ? d : []);
       setVideos(Array.isArray(v) ? v : []);
       setResources(Array.isArray(r) ? r : []);
@@ -67,18 +68,40 @@ const Dashboard = () => {
     }
   };
 
+  // FIXED: More robust video ID extraction
   const getVideoId = (url) => {
-    if (!url) return null;
+    if (!url) {
+      console.log("No URL provided");
+      return null;
+    }
     try {
-      const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-      const match = url.match(regex);
-      return match ? match[1] : null;
+      // Handle youtu.be format
+      if (url.includes('youtu.be/')) {
+        const id = url.split('youtu.be/')[1].split('?')[0].split('&')[0];
+        console.log("Extracted ID from youtu.be:", id);
+        return id.length === 11 ? id : null;
+      }
+      // Handle youtube.com/watch?v= format
+      if (url.includes('v=')) {
+        const id = url.split('v=')[1].split('&')[0].split('?')[0];
+        console.log("Extracted ID from watch?v=:", id);
+        return id.length === 11 ? id : null;
+      }
+      // Handle youtube.com/embed/ format
+      if (url.includes('embed/')) {
+        const id = url.split('embed/')[1].split('?')[0].split('&')[0];
+        console.log("Extracted ID from embed:", id);
+        return id.length === 11 ? id : null;
+      }
+      console.log("Could not extract ID from URL:", url);
+      return null;
     } catch (e) { 
+      console.error("Error extracting video ID:", e);
       return null; 
     }
   };
 
-  // Open clean video player popup (video only, minimal UI)
+  // Video player popup - shows only video, minimal UI
   const openVideoPopup = (url) => {
     const videoId = getVideoId(url);
     if (!videoId) {
@@ -86,10 +109,9 @@ const Dashboard = () => {
       return;
     }
     
-    // Use embed URL with minimal UI parameters
-    const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&modestbranding=1&rel=0&showinfo=0&controls=1&iv_load_policy=3&fs=1`;
+    // Clean embed URL - shows video only
+    const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&modestbranding=1&rel=0&showinfo=0&controls=1`;
     
-    // 16:9 aspect ratio window (800x450)
     const width = 800;
     const height = 450;
     const left = (window.screen.width - width) / 2;
@@ -102,29 +124,25 @@ const Dashboard = () => {
     );
   };
 
-  // Handle image file upload and convert to base64
+  // File upload handler - converts to base64
   const handleImageUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       alert('Please select an image file');
       return;
     }
 
-    // Validate file size (max 2MB for database storage)
     if (file.size > 2 * 1024 * 1024) {
       alert('Image must be smaller than 2MB');
       return;
     }
 
     setUploadingImage(true);
-
     const reader = new FileReader();
     reader.onload = (e) => {
-      const base64String = e.target.result;
-      setProfileForm({...profileForm, profilePic: base64String});
+      setProfileForm({...profileForm, profilePic: e.target.result});
       setImageError(false);
       setUploadingImage(false);
     };
@@ -132,8 +150,6 @@ const Dashboard = () => {
       alert('Failed to read image');
       setUploadingImage(false);
     };
-    
-    // Read as data URL (base64)
     reader.readAsDataURL(file);
   };
 
@@ -275,7 +291,7 @@ const Dashboard = () => {
     }
     
     if (!getVideoId(videoForm.url)) {
-      alert("Invalid YouTube URL. Example: https://youtube.com/watch?v=dQw4w9WgXcQ");
+      alert("Invalid YouTube URL. Must be youtube.com/watch?v=XXX or youtu.be/XXX");
       return;
     }
     
@@ -346,11 +362,9 @@ const Dashboard = () => {
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
-      cursor: 'pointer',
-      border: '2px solid transparent'
+      cursor: 'pointer'
     };
     
-    // Check if src is a base64 data URL or regular URL
     const isValidSrc = src && (src.startsWith('http') || src.startsWith('data:image'));
     
     if (!isValidSrc || imageError) {
@@ -373,24 +387,17 @@ const Dashboard = () => {
     );
   };
 
-  // Get YouTube thumbnail URL with fallback options
-  const getThumbnailUrl = (videoId) => {
-    if (!videoId) return null;
-    // Try high quality first, fallback to medium
-    return `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
-  };
-
   if (!user) {
     return (
-      <div style={styles.loginContainer}>
-        <div style={styles.loginCard}>
+      <div style={{height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc'}}>
+        <div style={{background: 'white', padding: '40px', borderRadius: '20px', width: '100%', maxWidth: '400px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)'}}>
           <div style={{textAlign: 'center', marginBottom: '20px'}}>
             <Crown size={40} color="#ec4899" />
             <h2>Collective Login</h2>
           </div>
           <form onSubmit={handleAuth}>
             <input 
-              style={styles.input} 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px', fontSize: '14px'}} 
               type="email" 
               placeholder="Email" 
               value={loginEmail} 
@@ -398,19 +405,19 @@ const Dashboard = () => {
               required
             />
             <input 
-              style={styles.input} 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px', fontSize: '14px'}} 
               type="password" 
               placeholder="Password" 
               value={loginPassword} 
               onChange={e => setLoginPassword(e.target.value)} 
               required
             />
-            <button type="submit" style={styles.primaryButtonFull}>
+            <button type="submit" style={{background: '#ec4899', color: 'white', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', width: '100%', fontSize: '16px'}}>
               {isRegistering ? 'Register' : 'Login'}
             </button>
           </form>
           <button 
-            style={styles.ghostButtonFull} 
+            style={{background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', width: '100%', marginTop: '10px'}} 
             onClick={() => setIsRegistering(!isRegistering)}
           >
             {isRegistering ? 'Already a member? Login' : 'Need an account? Register'}
@@ -421,28 +428,37 @@ const Dashboard = () => {
   }
 
   return (
-    <div style={styles.container}>
-      <header style={styles.header}>
-        <div style={styles.brand}>
+    <div style={{minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif'}}>
+      <header style={{background: 'white', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 40px', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 100}}>
+        <div style={{display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold', fontSize: '20px'}}>
           <Crown color="#ec4899" /> 
           <span>The Collective</span>
         </div>
-        <nav style={styles.centerNav}>
+        <nav style={{display: 'flex', gap: '8px', background: '#f1f5f9', padding: '5px', borderRadius: '12px'}}>
           <button 
             onClick={() => setActiveTab('community')} 
-            style={activeTab === 'community' ? styles.navBtnActive : styles.navBtn}
+            style={activeTab === 'community' ? 
+              {padding: '8px 20px', border: 'none', background: 'white', color: '#ec4899', borderRadius: '8px', fontWeight: 'bold'} : 
+              {padding: '8px 20px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: '8px', color: '#64748b'}
+            }
           >
             Community
           </button>
           <button 
             onClick={() => setActiveTab('video')} 
-            style={activeTab === 'video' ? styles.navBtnActive : styles.navBtn}
+            style={activeTab === 'video' ? 
+              {padding: '8px 20px', border: 'none', background: 'white', color: '#ec4899', borderRadius: '8px', fontWeight: 'bold'} : 
+              {padding: '8px 20px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: '8px', color: '#64748b'}
+            }
           >
             Video Hub
           </button>
           <button 
             onClick={() => setActiveTab('resources')} 
-            style={activeTab === 'resources' ? styles.navBtnActive : styles.navBtn}
+            style={activeTab === 'resources' ? 
+              {padding: '8px 20px', border: 'none', background: 'white', color: '#ec4899', borderRadius: '8px', fontWeight: 'bold'} : 
+              {padding: '8px 20px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: '8px', color: '#64748b'}
+            }
           >
             Resources
           </button>
@@ -453,100 +469,48 @@ const Dashboard = () => {
           </div>
           <button 
             onClick={() => {localStorage.clear(); window.location.reload();}} 
-            style={styles.iconBtn}
+            style={{background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8'}}
           >
             <LogOut size={20}/>
           </button>
         </div>
       </header>
 
-      <main style={styles.main}>
-        {/* Community Tab */}
-        {activeTab === 'community' && (
-          <div style={styles.communityLayout}>
-            <aside style={styles.sidebar}>
-              {GROUPS.map(g => (
-                <button 
-                  key={g} 
-                  onClick={() => setActiveGroup(g)} 
-                  style={activeGroup === g ? styles.sidebarBtnActive : styles.sidebarBtn}
-                >
-                  <Hash size={14} /> {g}
-                </button>
-              ))}
-            </aside>
-            <section style={styles.feed}>
-              <div style={styles.sectionHeader}>
-                <h2>{activeGroup}</h2>
-                <button style={styles.primaryButton} onClick={() => setShowModal('post')}>
-                  <Plus size={18}/> New Post
-                </button>
-              </div>
-              {discussions
-                .filter(d => activeGroup === 'All Discussions' || d.category === activeGroup)
-                .map(post => (
-                  <div 
-                    key={post.id} 
-                    style={styles.card} 
-                    onClick={() => {setSelectedPost(post); setShowModal('postDetail');}}
-                  >
-                    <div style={styles.cardHeader}>
-                      <span style={styles.tag}>{post.category}</span>
-                      {isAdmin && (
-                        <button 
-                          onClick={(e) => {e.stopPropagation(); handleDelete(post.id, 'discussion');}} 
-                          style={styles.delBtn}
-                        >
-                          <Trash2 size={14}/>
-                        </button>
-                      )}
-                    </div>
-                    <h3>{post.title}</h3>
-                    <p style={styles.cardExcerpt}>{post.content}</p>
-                    <div style={styles.cardMeta}>
-                      <span style={styles.metaItem}>
-                        <User size={12}/> {post.author}
-                      </span>
-                      <button 
-                        style={styles.metaBtn} 
-                        onClick={(e) => { e.stopPropagation(); handleLikePost(post.id); }}
-                      >
-                        <Heart 
-                          size={12} 
-                          fill={post.likes?.includes(user.id) ? "#ec4899" : "none"} 
-                          color={post.likes?.includes(user.id) ? "#ec4899" : "#94a3b8"}
-                        /> 
-                        {post.likes?.length || 0}
-                      </button>
-                      <span style={styles.metaItem}>
-                        <MessageCircle size={12}/> {post.comments?.length || 0}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-            </section>
-          </div>
-        )}
-
-        {/* Video Hub Tab with Thumbnail Fix */}
+      <main style={{maxWidth: '1200px', margin: '0 auto', padding: '40px 20px'}}>
+        {/* Video Hub Tab */}
         {activeTab === 'video' && (
-          <div style={styles.videoGrid}>
+          <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '25px'}}>
             <div style={{gridColumn: '1/-1', display: 'flex', justifyContent: 'space-between', marginBottom: '20px'}}>
                <h2>Video Hub</h2>
                {isAdmin && (
-                 <button style={styles.primaryButton} onClick={() => setShowModal('addVideo')}>
+                 <button style={{background: '#ec4899', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'}} onClick={() => setShowModal('addVideo')}>
                    <Upload size={18}/> Add Video
                  </button>
                )}
             </div>
+            
+            {videos.length === 0 && (
+              <div style={{gridColumn: '1/-1', textAlign: 'center', padding: '40px', color: '#64748b'}}>
+                No videos yet. {isAdmin && "Add one!"}
+              </div>
+            )}
+
             {videos.map(v => {
               const videoId = getVideoId(v.url);
-              const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null;
+              // YouTube thumbnail URLs - try hqdefault first for better quality
+              const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
               
               return (
-                <div key={v.id} style={styles.videoCard}>
+                <div key={v.id} style={{background: 'white', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0'}}>
                   <div 
-                    style={styles.videoThumbnailContainer}
+                    style={{
+                      position: 'relative', 
+                      width: '100%',
+                      height: '200px',
+                      background: '#000', 
+                      cursor: 'pointer', 
+                      overflow: 'hidden'
+                    }}
                     onClick={() => openVideoPopup(v.url)}
                   >
                     {videoId ? (
@@ -554,25 +518,78 @@ const Dashboard = () => {
                         <img 
                           src={thumbnailUrl}
                           alt={v.title}
-                          style={styles.videoThumbnailImg}
+                          style={{
+                            width: '100%', 
+                            height: '100%', 
+                            objectFit: 'cover',
+                            display: 'block'
+                          }}
                           onError={(e) => {
-                            // If mqdefault fails, try default
+                            console.error("Thumbnail failed to load:", thumbnailUrl);
+                            // Fallback to default quality
                             e.target.src = `https://img.youtube.com/vi/${videoId}/default.jpg`;
+                            // If that also fails, hide image and show placeholder div
+                            e.target.onerror = () => {
+                              e.target.style.display = 'none';
+                              e.target.parentElement.querySelector('.fallback-placeholder').style.display = 'flex';
+                            };
                           }}
                         />
-                        <div style={styles.videoOverlay}>
-                          <div style={styles.playButtonCircle}>
-                            <PlayCircle size={40} color="white" fill="rgba(236, 72, 153, 0.95)" />
-                          </div>
-                          <div style={styles.videoDuration}>
-                            <span style={{color: 'white', fontSize: '12px', fontWeight: '600'}}>▶ Play</span>
+                        {/* Fallback placeholder - hidden by default */}
+                        <div className="fallback-placeholder" style={{
+                          display: 'none',
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexDirection: 'column'
+                        }}>
+                          <Video size={48} color="white" />
+                          <span style={{color: 'white', marginTop: '10px', fontSize: '14px'}}>Click to Play</span>
+                        </div>
+                        
+                        {/* Play button overlay */}
+                        <div style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: 'rgba(0,0,0,0.1)'
+                        }}>
+                          <div style={{
+                            background: 'rgba(236, 72, 153, 0.95)',
+                            borderRadius: '50%',
+                            width: '70px',
+                            height: '70px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
+                          }}>
+                            <PlayCircle size={40} color="white" fill="white" />
                           </div>
                         </div>
                       </>
                     ) : (
-                      <div style={styles.videoPlaceholder}>
+                      <div style={{
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        background: '#f1f5f9'
+                      }}>
                         <Video size={48} color="#cbd5e1" />
-                        <p style={{color: '#64748b', marginTop: '10px', fontSize: '14px'}}>Invalid YouTube URL</p>
+                        <p style={{color: '#64748b', marginTop: '10px', fontSize: '14px'}}>Invalid URL</p>
                       </div>
                     )}
                   </div>
@@ -582,13 +599,13 @@ const Dashboard = () => {
                       {isAdmin && (
                         <button 
                           onClick={(e) => {e.stopPropagation(); handleDelete(v.id, 'video');}} 
-                          style={styles.delBtn}
+                          style={{background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px'}}
                         >
                           <Trash2 size={16}/>
                         </button>
                       )}
                      </div>
-                     <p style={styles.cardExcerpt}>{v.description}</p>
+                     <p style={{color: '#64748b', fontSize: '14px', lineHeight: '1.5', marginTop: '8px'}}>{v.description}</p>
                   </div>
                 </div>
               );
@@ -596,34 +613,106 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Resources Tab */}
+        {/* Other tabs remain same... */}
+        {activeTab === 'community' && (
+          <div style={{display: 'grid', gridTemplateColumns: '240px 1fr', gap: '40px'}}>
+            <aside style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
+              {GROUPS.map(g => (
+                <button 
+                  key={g} 
+                  onClick={() => setActiveGroup(g)} 
+                  style={activeGroup === g ? 
+                    {textAlign: 'left', padding: '12px', background: '#fdf2f8', border: 'none', borderRadius: '10px', color: '#ec4899', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px'} : 
+                    {textAlign: 'left', padding: '12px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '10px'}
+                  }
+                >
+                  <Hash size={14} /> {g}
+                </button>
+              ))}
+            </aside>
+            <section>
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px'}}>
+                <h2>{activeGroup}</h2>
+                <button style={{background: '#ec4899', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'}} onClick={() => setShowModal('post')}>
+                  <Plus size={18}/> New Post
+                </button>
+              </div>
+              {discussions
+                .filter(d => activeGroup === 'All Discussions' || d.category === activeGroup)
+                .map(post => (
+                  <div 
+                    key={post.id} 
+                    style={{background: 'white', padding: '25px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '20px', cursor: 'pointer'}} 
+                    onClick={() => {setSelectedPost(post); setShowModal('postDetail');}}
+                  >
+                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
+                      <span style={{fontSize: '11px', background: '#fdf2f8', color: '#ec4899', padding: '4px 12px', borderRadius: '20px', fontWeight: 'bold'}}>{post.category}</span>
+                      {isAdmin && (
+                        <button 
+                          onClick={(e) => {e.stopPropagation(); handleDelete(post.id, 'discussion');}} 
+                          style={{background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer'}}
+                        >
+                          <Trash2 size={14}/>
+                        </button>
+                      )}
+                    </div>
+                    <h3>{post.title}</h3>
+                    <p style={{color: '#64748b', fontSize: '14px', lineHeight: '1.5', marginTop: '8px'}}>{post.content}</p>
+                    <div style={{marginTop: '15px', display: 'flex', gap: '20px', fontSize: '13px', color: '#94a3b8', alignItems: 'center'}}>
+                      <span style={{display: 'flex', alignItems: 'center', gap: '6px'}}>
+                        <User size={12}/> {post.author}
+                      </span>
+                      <button 
+                        style={{background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: '#94a3b8', padding: 0}} 
+                        onClick={(e) => { e.stopPropagation(); handleLikePost(post.id); }}
+                      >
+                        <Heart 
+                          size={12} 
+                          fill={post.likes?.includes(user.id) ? "#ec4899" : "none"} 
+                          color={post.likes?.includes(user.id) ? "#ec4899" : "#94a3b8"}
+                        /> 
+                        {post.likes?.length || 0}
+                      </button>
+                      <span style={{display: 'flex', alignItems: 'center', gap: '6px'}}>
+                        <MessageCircle size={12}/> {post.comments?.length || 0}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+            </section>
+          </div>
+        )}
+
         {activeTab === 'resources' && (
-          <div style={styles.communityLayout}>
-            <aside style={styles.sidebar}>
+          <div style={{display: 'grid', gridTemplateColumns: '240px 1fr', gap: '40px'}}>
+            <aside style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
               {RESOURCE_CATEGORIES.map(cat => (
                 <button 
                   key={cat} 
                   onClick={() => setActiveResourceCategory(cat)} 
-                  style={activeResourceCategory === cat ? styles.sidebarBtnActive : styles.sidebarBtn}
+                  style={activeResourceCategory === cat ? 
+                    {textAlign: 'left', padding: '12px', background: '#fdf2f8', border: 'none', borderRadius: '10px', color: '#ec4899', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px'} : 
+                    {textAlign: 'left', padding: '12px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '10px'}
+                  }
                 >
                   <Hash size={14} /> {cat}
                 </button>
               ))}
             </aside>
-            <section style={styles.feed}>
-              <div style={styles.sectionHeader}>
+            <section>
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px'}}>
                 <h2>{activeResourceCategory} Resources</h2>
                 {isAdmin && (
-                  <button style={styles.primaryButton} onClick={() => setShowModal('resource')}>
+                  <button style={{background: '#ec4899', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'}} onClick={() => setShowModal('resource')}>
                     <Plus size={18}/> Add Resource
                   </button>
                 )}
               </div>
-              <div style={styles.resourceList}>
+              <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
                 {resources
                   .filter(r => r.category === activeResourceCategory)
                   .map(r => (
-                    <div key={r.id} style={styles.resourceCard}>
+                    <div key={r.id} style={{background: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '15px'}}>
                       <FileText color="#ec4899" />
                       <div style={{flex: 1}}>
                         <h4 style={{margin: 0}}>{r.title}</h4>
@@ -631,14 +720,14 @@ const Dashboard = () => {
                       <div style={{display: 'flex', gap: '8px'}}>
                         <button 
                           onClick={() => window.open(r.url, '_blank')} 
-                          style={styles.viewBtnInternal}
+                          style={{background: '#fdf2f8', color: '#ec4899', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px'}}
                         >
                           Open
                         </button>
                         {isAdmin && (
                           <button 
                             onClick={() => handleDelete(r.id, 'resources')} 
-                            style={styles.delBtn}
+                            style={{background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer'}}
                           >
                             <Trash2 size={16}/>
                           </button>
@@ -652,18 +741,18 @@ const Dashboard = () => {
         )}
       </main>
 
-      {/* Post Modal */}
+      {/* Modals */}
       {showModal === 'post' && (
-        <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
-          <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}>
+        <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}} onClick={() => setShowModal(null)}>
+          <div style={{background: 'white', padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px'}} onClick={e => e.stopPropagation()}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px'}}>
               <h3>New Discussion</h3>
-              <button onClick={() => setShowModal(null)} style={styles.closeBtn}>
+              <button onClick={() => setShowModal(null)} style={{background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8'}}>
                 <X size={24}/>
               </button>
             </div>
             <select 
-              style={styles.input} 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px'}} 
               value={postForm.category} 
               onChange={e => setPostForm({...postForm, category: e.target.value})}
             >
@@ -672,53 +761,54 @@ const Dashboard = () => {
               ))}
             </select>
             <input 
-              style={styles.input} 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px'}} 
               placeholder="Title" 
               value={postForm.title}
               onChange={e => setPostForm({...postForm, title: e.target.value})} 
             />
             <textarea 
-              style={{...styles.input, height: '100px'}} 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px', height: '100px'}} 
               placeholder="Content" 
               value={postForm.content}
               onChange={e => setPostForm({...postForm, content: e.target.value})} 
             />
-            <button style={styles.primaryButtonFull} onClick={handleCreatePost}>
+            <button style={{background: '#ec4899', color: 'white', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', width: '100%'}} onClick={handleCreatePost}>
               Post Now
             </button>
           </div>
         </div>
       )}
 
-      {/* Post Detail Modal */}
       {showModal === 'postDetail' && selectedPost && (
-        <div style={styles.modalOverlay} onClick={() => {setShowModal(null); setSelectedPost(null);}}>
-          <div style={styles.postDetailModal} onClick={e => e.stopPropagation()}>
-            <div style={styles.postDetailHeader}>
-              <div>
-                <span style={styles.tag}>{selectedPost.category}</span>
-                <h2 style={{margin: '10px 0'}}>{selectedPost.title}</h2>
-                <div style={styles.cardMeta}>
-                  <span><User size={12}/> {selectedPost.author}</span>
+        <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px'}} onClick={() => {setShowModal(null); setSelectedPost(null);}}>
+          <div style={{background: 'white', borderRadius: '20px', width: '100%', maxWidth: '700px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden'}} onClick={e => e.stopPropagation()}>
+            <div style={{padding: '30px', borderBottom: '1px solid #e2e8f0'}}>
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+                <div>
+                  <span style={{fontSize: '11px', background: '#fdf2f8', color: '#ec4899', padding: '4px 12px', borderRadius: '20px', fontWeight: 'bold'}}>{selectedPost.category}</span>
+                  <h2 style={{margin: '10px 0'}}>{selectedPost.title}</h2>
+                  <div style={{fontSize: '13px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px'}}>
+                    <User size={12}/> {selectedPost.author}
+                  </div>
                 </div>
+                <button onClick={() => {setShowModal(null); setSelectedPost(null);}} style={{background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8'}}>
+                  <X size={24}/>
+                </button>
               </div>
-              <button 
-                onClick={() => {setShowModal(null); setSelectedPost(null);}} 
-                style={styles.closeBtn}
-              >
-                <X size={24}/>
-              </button>
             </div>
             
-            <div style={styles.postDetailContent}>
+            <div style={{padding: '30px', overflowY: 'auto', flex: 1}}>
               <p style={{fontSize: '16px', lineHeight: '1.6', color: '#334155'}}>
                 {selectedPost.content}
               </p>
               
-              <div style={styles.postActions}>
+              <div style={{marginTop: '30px', paddingTop: '20px', borderTop: '1px solid #e2e8f0'}}>
                 <button 
                   onClick={() => handleLikePost(selectedPost.id)} 
-                  style={selectedPost.likes?.includes(user.id) ? styles.likeButtonActive : styles.likeButton}
+                  style={selectedPost.likes?.includes(user.id) ? 
+                    {background: '#fdf2f8', border: '1px solid #ec4899', padding: '10px 20px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#ec4899'} : 
+                    {background: 'white', border: '1px solid #e2e8f0', padding: '10px 20px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b'}
+                  }
                 >
                   <Heart 
                     size={18} 
@@ -728,33 +818,33 @@ const Dashboard = () => {
                 </button>
               </div>
 
-              <div style={styles.commentsSection}>
+              <div style={{marginTop: '30px'}}>
                 <h3 style={{marginBottom: '20px'}}>
                   Comments ({selectedPost.comments?.length || 0})
                 </h3>
                 
-                <div style={styles.commentInputContainer}>
+                <div style={{display: 'flex', gap: '10px', marginBottom: '30px'}}>
                   <textarea 
-                    style={styles.commentInput}
+                    style={{flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', minHeight: '80px'}}
                     placeholder="Write a comment..."
                     value={commentText}
                     onChange={e => setCommentText(e.target.value)}
                   />
-                  <button style={styles.commentButton} onClick={handleAddComment}>
+                  <button style={{background: '#ec4899', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '10px', cursor: 'pointer'}} onClick={handleAddComment}>
                     <Send size={18}/>
                   </button>
                 </div>
 
-                <div style={styles.commentsList}>
+                <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
                   {selectedPost.comments && selectedPost.comments.map((comment, idx) => (
-                    <div key={idx} style={styles.commentItem}>
-                      <div style={styles.commentHeader}>
-                        <span style={styles.commentAuthor}>{comment.author}</span>
-                        <span style={styles.commentDate}>
+                    <div key={idx} style={{background: '#f8fafc', padding: '15px', borderRadius: '12px'}}>
+                      <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '8px'}}>
+                        <span style={{fontWeight: 'bold', color: '#1e293b', fontSize: '14px'}}>{comment.author}</span>
+                        <span style={{fontSize: '12px', color: '#94a3b8'}}>
                           {new Date(comment.timestamp).toLocaleDateString()}
                         </span>
                       </div>
-                      <p style={styles.commentText}>{comment.text}</p>
+                      <p style={{color: '#475569', fontSize: '14px', lineHeight: '1.5', margin: 0}}>{comment.text}</p>
                     </div>
                   ))}
                 </div>
@@ -764,10 +854,9 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Profile Modal with File Upload */}
       {showModal === 'profile' && (
-        <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
-          <div style={styles.modal} onClick={e => e.stopPropagation()}>
+        <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}} onClick={() => setShowModal(null)}>
+          <div style={{background: 'white', padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px'}} onClick={e => e.stopPropagation()}>
             <div style={{textAlign: 'center', marginBottom: '20px'}}>
               {renderAvatar(profileForm.profilePic, 'large')}
               <p style={{fontSize: '12px', color: '#64748b', marginTop: '10px'}}>
@@ -776,25 +865,25 @@ const Dashboard = () => {
             </div>
             
             <input 
-              style={styles.input} 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px'}} 
               placeholder="First Name" 
               value={profileForm.firstName} 
               onChange={e => setProfileForm({...profileForm, firstName: e.target.value})} 
             />
             <input 
-              style={styles.input} 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px'}} 
               placeholder="Last Name" 
               value={profileForm.lastName} 
               onChange={e => setProfileForm({...profileForm, lastName: e.target.value})} 
             />
             
-            {/* File Upload Section */}
+            {/* File Upload */}
             <div style={{marginBottom: '15px'}}>
               <label style={{fontSize: '14px', color: '#64748b', marginBottom: '5px', display: 'block'}}>
                 Upload Profile Picture
               </label>
               <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
-                <label style={styles.fileUploadButton}>
+                <label style={{display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 15px', background: '#f1f5f9', border: '2px dashed #cbd5e1', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', color: '#64748b'}}>
                   <input 
                     type="file" 
                     accept="image/*" 
@@ -817,7 +906,7 @@ const Dashboard = () => {
                 )}
               </div>
               <p style={{fontSize: '11px', color: '#94a3b8', marginTop: '5px'}}>
-                Max 2MB. Stores in database (Base64).
+                Max 2MB. Stores in database.
               </p>
             </div>
 
@@ -828,8 +917,8 @@ const Dashboard = () => {
             </div>
 
             <input 
-              style={styles.input} 
-              placeholder="Paste Image URL instead" 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px'}} 
+              placeholder="Paste Image URL" 
               value={profileForm.profilePic && profileForm.profilePic.startsWith('data:') ? '' : profileForm.profilePic}
               onChange={e => {
                 setProfileForm({...profileForm, profilePic: e.target.value});
@@ -841,78 +930,76 @@ const Dashboard = () => {
                 Failed to load image
               </p>
             )}
-            <button style={styles.primaryButtonFull} onClick={handleUpdateProfile}>
+            <button style={{background: '#ec4899', color: 'white', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', width: '100%'}} onClick={handleUpdateProfile}>
               Save Profile
             </button>
           </div>
         </div>
       )}
 
-      {/* Add Video Modal */}
       {showModal === 'addVideo' && (
-        <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
-          <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}>
+        <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}} onClick={() => setShowModal(null)}>
+          <div style={{background: 'white', padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px'}} onClick={e => e.stopPropagation()}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px'}}>
               <h3>Add Video</h3>
-              <button onClick={() => setShowModal(null)} style={styles.closeBtn}>
+              <button onClick={() => setShowModal(null)} style={{background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8'}}>
                 <X size={24}/>
               </button>
             </div>
             <input 
-              style={styles.input} 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px'}} 
               placeholder="Title" 
               value={videoForm.title}
               onChange={e => setVideoForm({...videoForm, title: e.target.value})} 
             />
             <input 
-              style={styles.input} 
-              placeholder="YouTube URL (e.g. https://youtube.com/watch?v=...)" 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px'}} 
+              placeholder="YouTube URL" 
               value={videoForm.url}
               onChange={e => setVideoForm({...videoForm, url: e.target.value})} 
             />
             <textarea 
-              style={styles.input} 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px'}} 
               placeholder="Description" 
               value={videoForm.description}
               onChange={e => setVideoForm({...videoForm, description: e.target.value})} 
             />
-            <button style={styles.primaryButtonFull} onClick={handleAddVideo}>
+            <button style={{background: '#ec4899', color: 'white', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', width: '100%'}} onClick={handleAddVideo}>
               Add to Hub
             </button>
           </div>
         </div>
       )}
 
-      {/* Add Resource Modal */}
       {showModal === 'resource' && (
-        <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
-          <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}>
+        <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}} onClick={() => setShowModal(null)}>
+          <div style={{background: 'white', padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px'}} onClick={e => e.stopPropagation()}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px'}}>
               <h3>Add Resource</h3>
-              <button onClick={() => setShowModal(null)} style={styles.closeBtn}>
+              <button onClick={() => setShowModal(null)} style={{background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8'}}>
                 <X size={24}/>
               </button>
             </div>
             <input 
-              style={styles.input} 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px'}} 
               placeholder="Title" 
               value={resourceForm.title}
               onChange={e => setResourceForm({...resourceForm, title: e.target.value})} 
             />
             <input 
-              style={styles.input} 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px'}} 
               placeholder="URL" 
               value={resourceForm.url}
               onChange={e => setResourceForm({...resourceForm, url: e.target.value})} 
             />
             <select 
-              style={styles.input} 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px'}} 
               value={resourceForm.category}
               onChange={e => setResourceForm({...resourceForm, category: e.target.value})}
             >
               {RESOURCE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <button style={styles.primaryButtonFull} onClick={handleAddResource}>
+            <button style={{background: '#ec4899', color: 'white', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', width: '100%'}} onClick={handleAddResource}>
               Save Resource
             </button>
           </div>
@@ -920,149 +1007,6 @@ const Dashboard = () => {
       )}
     </div>
   );
-};
-
-const styles = {
-  container: { minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, -apple-system, sans-serif' },
-  header: { 
-    background: 'white', 
-    height: '70px', 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    padding: '0 40px', 
-    borderBottom: '1px solid #e2e8f0', 
-    position: 'sticky', 
-    top: 0, 
-    zIndex: 100 
-  },
-  brand: { display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold', fontSize: '20px' },
-  centerNav: { display: 'flex', gap: '8px', background: '#f1f5f9', padding: '5px', borderRadius: '12px' },
-  navBtn: { padding: '8px 20px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: '8px', color: '#64748b', fontWeight: '500' },
-  navBtnActive: { padding: '8px 20px', border: 'none', background: 'white', color: '#ec4899', borderRadius: '8px', fontWeight: 'bold', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
-  main: { maxWidth: '1200px', margin: '0 auto', padding: '40px 20px' },
-  communityLayout: { display: 'grid', gridTemplateColumns: '240px 1fr', gap: '40px' },
-  sidebar: { display: 'flex', flexDirection: 'column', gap: '5px' },
-  sidebarBtn: { textAlign: 'left', padding: '12px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px' },
-  sidebarBtnActive: { textAlign: 'left', padding: '12px', background: '#fdf2f8', border: 'none', borderRadius: '10px', color: '#ec4899', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px' },
-  sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' },
-  card: { background: 'white', padding: '25px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '20px', cursor: 'pointer', transition: 'box-shadow 0.2s' },
-  cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
-  tag: { fontSize: '11px', background: '#fdf2f8', color: '#ec4899', padding: '4px 12px', borderRadius: '20px', fontWeight: '600' },
-  cardExcerpt: { color: '#64748b', fontSize: '14px', lineHeight: '1.5', marginTop: '8px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' },
-  cardMeta: { marginTop: '15px', display: 'flex', gap: '20px', fontSize: '13px', color: '#94a3b8', alignItems: 'center' },
-  metaItem: { display: 'flex', alignItems: 'center', gap: '6px' },
-  metaBtn: { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: '#94a3b8', fontSize: '13px', padding: 0 },
-  
-  // Video styles with improved thumbnail display
-  videoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '25px' },
-  videoCard: { background: 'white', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },
-  videoThumbnailContainer: { 
-    position: 'relative', 
-    width: '100%',
-    height: '200px',
-    background: '#000', 
-    cursor: 'pointer', 
-    overflow: 'hidden'
-  },
-  videoThumbnailImg: { 
-    width: '100%', 
-    height: '100%', 
-    objectFit: 'cover',
-    display: 'block'
-  },
-  videoOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    background: 'rgba(0,0,0,0.0)',
-    transition: 'background 0.2s',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ':hover': {
-      background: 'rgba(0,0,0,0.1)'
-    }
-  },
-  playButtonCircle: {
-    background: 'rgba(236, 72, 153, 0.95)',
-    borderRadius: '50%',
-    width: '70px',
-    height: '70px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-    border: '3px solid rgba(255,255,255,0.3)'
-  },
-  videoDuration: {
-    position: 'absolute',
-    bottom: '10px',
-    right: '10px',
-    background: 'rgba(0,0,0,0.8)',
-    padding: '4px 8px',
-    borderRadius: '4px'
-  },
-  videoPlaceholder: { 
-    width: '100%',
-    height: '100%',
-    display: 'flex', 
-    flexDirection: 'column', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    background: '#f1f5f9' 
-  },
-  
-  resourceList: { display: 'flex', flexDirection: 'column', gap: '12px' },
-  resourceCard: { background: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '15px' },
-  viewBtnInternal: { background: '#fdf2f8', color: '#ec4899', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' },
-  delBtn: { background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', padding: '4px' },
-  loginContainer: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' },
-  loginCard: { background: 'white', padding: '40px', borderRadius: '20px', width: '100%', maxWidth: '400px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' },
-  input: { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px', fontSize: '14px', boxSizing: 'border-box' },
-  primaryButton: { background: '#ec4899', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px' },
-  primaryButtonFull: { background: '#ec4899', color: 'white', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', width: '100%', fontSize: '16px' },
-  ghostButtonFull: { background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', width: '100%', marginTop: '10px', fontSize: '14px' },
-  fileUploadButton: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: '8px', 
-    padding: '10px 15px', 
-    background: '#f1f5f9', 
-    border: '2px dashed #cbd5e1', 
-    borderRadius: '8px', 
-    cursor: 'pointer', 
-    fontSize: '14px', 
-    color: '#64748b',
-    transition: 'all 0.2s',
-    ':hover': {
-      background: '#e2e8f0',
-      borderColor: '#94a3b8'
-    }
-  },
-  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' },
-  modal: { background: 'white', padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' },
-  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' },
-  postDetailModal: { background: 'white', borderRadius: '20px', width: '100%', maxWidth: '700px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' },
-  postDetailHeader: { padding: '30px', borderBottom: '1px solid #e2e8f0' },
-  postDetailContent: { padding: '30px', overflowY: 'auto', flex: 1 },
-  closeBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' },
-  postActions: { marginTop: '30px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' },
-  likeButton: { background: 'white', border: '1px solid #e2e8f0', padding: '10px 20px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontWeight: '500' },
-  likeButtonActive: { background: '#fdf2f8', border: '1px solid #ec4899', padding: '10px 20px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#ec4899', fontWeight: '500' },
-  commentsSection: { marginTop: '30px' },
-  commentInputContainer: { display: 'flex', gap: '10px', marginBottom: '30px' },
-  commentInput: { flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', minHeight: '80px', resize: 'vertical', fontFamily: 'inherit' },
-  commentButton: { background: '#ec4899', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  commentsList: { display: 'flex', flexDirection: 'column', gap: '15px' },
-  commentItem: { background: '#f8fafc', padding: '15px', borderRadius: '12px' },
-  commentHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '8px' },
-  commentAuthor: { fontWeight: '600', color: '#1e293b', fontSize: '14px' },
-  commentDate: { fontSize: '12px', color: '#94a3b8' },
-  commentText: { color: '#475569', fontSize: '14px', lineHeight: '1.5', margin: 0 },
-  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }
 };
 
 export default Dashboard;
