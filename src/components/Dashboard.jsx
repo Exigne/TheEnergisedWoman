@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, LogOut, Crown, Plus, Video, Upload, FileText, User, 
-  Trash2, Hash, Send, MessageCircle, Heart
+  Trash2, Hash, Send, MessageCircle, Heart, PlayCircle
 } from 'lucide-react';
 
 const GROUPS = ['All Discussions', 'General', 'Mental Health', 'Self Care', 'Relationships', 'Career', 'Motherhood', 'Fitness', 'Nutrition'];
@@ -75,6 +75,20 @@ const Dashboard = () => {
     } catch (e) { 
       return null; 
     }
+  };
+
+  const openVideoPopup = (url) => {
+    // Open YouTube in a controlled popup window that feels like part of the app
+    const width = Math.min(1200, window.screen.width - 100);
+    const height = Math.min(800, window.screen.height - 100);
+    const left = (window.screen.width - width) / 2;
+    const top = (window.screen.height - height) / 2;
+    
+    window.open(
+      url, 
+      'videoPlayer', 
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
+    );
   };
 
   const handleAuth = async (e) => {
@@ -457,7 +471,7 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Video Hub Tab - Embedded YouTube */}
+        {/* Video Hub Tab - Thumbnail with Popup */}
         {activeTab === 'video' && (
           <div style={styles.videoGrid}>
             <div style={{gridColumn: '1/-1', display: 'flex', justifyContent: 'space-between', marginBottom: '20px'}}>
@@ -470,25 +484,27 @@ const Dashboard = () => {
             </div>
             {videos.map(v => {
               const videoId = getVideoId(v.url);
-              const embedUrl = videoId ? `https://www.youtube.com/embed/${videoId}` : null;
-              
               return (
                 <div key={v.id} style={styles.videoCard}>
-                  <div style={styles.videoFrameWrapper}>
-                    {embedUrl ? (
-                      <iframe 
-                        src={embedUrl}
-                        title={v.title}
-                        style={styles.videoIframe}
-                        frameBorder="0"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                        allowFullScreen
-                        referrerPolicy="strict-origin-when-cross-origin"
-                      />
+                  <div 
+                    style={styles.videoThumbnailContainer}
+                    onClick={() => openVideoPopup(v.url)}
+                  >
+                    {videoId ? (
+                      <>
+                        <img 
+                          src={`https://img.youtube.com/vi/${videoId}/mqdefault.jpg`} 
+                          alt={v.title}
+                          style={styles.videoThumbnail}
+                        />
+                        <div style={styles.playButtonOverlay}>
+                          <PlayCircle size={48} color="white" fill="rgba(236, 72, 153, 0.9)" />
+                        </div>
+                      </>
                     ) : (
                       <div style={styles.videoPlaceholder}>
                         <Video size={48} color="#cbd5e1" />
-                        <p style={{color: '#64748b', marginTop: '10px'}}>Invalid YouTube URL</p>
+                        <p style={{color: '#64748b', marginTop: '10px'}}>Invalid URL</p>
                       </div>
                     )}
                   </div>
@@ -497,7 +513,7 @@ const Dashboard = () => {
                       <h4 style={{margin: 0, flex: 1}}>{v.title}</h4>
                       {isAdmin && (
                         <button 
-                          onClick={() => handleDelete(v.id, 'video')} 
+                          onClick={(e) => {e.stopPropagation(); handleDelete(v.id, 'video');}} 
                           style={styles.delBtn}
                         >
                           <Trash2 size={16}/>
@@ -687,7 +703,7 @@ const Dashboard = () => {
             <div style={{textAlign: 'center', marginBottom: '20px'}}>
               {renderAvatar(profileForm.profilePic, 'large')}
               <p style={{fontSize: '12px', color: '#64748b', marginTop: '10px'}}>
-                Update your profile picture
+                Update your profile
               </p>
             </div>
             
@@ -742,7 +758,7 @@ const Dashboard = () => {
             />
             <input 
               style={styles.input} 
-              placeholder="YouTube URL (watch?v=... or youtu.be/...)" 
+              placeholder="YouTube URL" 
               value={videoForm.url}
               onChange={e => setVideoForm({...videoForm, url: e.target.value})} 
             />
@@ -822,7 +838,7 @@ const styles = {
   sidebarBtn: { textAlign: 'left', padding: '12px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px' },
   sidebarBtnActive: { textAlign: 'left', padding: '12px', background: '#fdf2f8', border: 'none', borderRadius: '10px', color: '#ec4899', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px' },
   sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' },
-  card: { background: 'white', padding: '25px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '20px', cursor: 'pointer', transition: 'box-shadow 0.2s', ':hover': { boxShadow: '0 4px 12px rgba(0,0,0,0.05)' } },
+  card: { background: 'white', padding: '25px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '20px', cursor: 'pointer', transition: 'box-shadow 0.2s' },
   cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
   tag: { fontSize: '11px', background: '#fdf2f8', color: '#ec4899', padding: '4px 12px', borderRadius: '20px', fontWeight: '600' },
   cardExcerpt: { color: '#64748b', fontSize: '14px', lineHeight: '1.5', marginTop: '8px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' },
@@ -831,8 +847,9 @@ const styles = {
   metaBtn: { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: '#94a3b8', fontSize: '13px', padding: 0 },
   videoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '25px' },
   videoCard: { background: 'white', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0' },
-  videoFrameWrapper: { position: 'relative', paddingTop: '56.25%', background: '#000' },
-  videoIframe: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' },
+  videoThumbnailContainer: { position: 'relative', paddingTop: '56.25%', background: '#000', cursor: 'pointer', overflow: 'hidden', borderRadius: '12px 12px 0 0' },
+  videoThumbnail: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' },
+  playButtonOverlay: { position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 2 },
   videoPlaceholder: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9' },
   resourceList: { display: 'flex', flexDirection: 'column', gap: '12px' },
   resourceCard: { background: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '15px' },
