@@ -6,6 +6,12 @@
   NODE_VERSION = "18"
   NPM_VERSION = "9"
 
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    Content-Security-Policy = "frame-src 'self' https://www.youtube.com https://youtube.com https://youtu.be;"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
