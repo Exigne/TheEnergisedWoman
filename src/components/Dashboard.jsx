@@ -78,7 +78,6 @@ const Dashboard = () => {
   };
 
   const openVideoPopup = (url) => {
-    // Open YouTube in a controlled popup window that feels like part of the app
     const width = Math.min(1200, window.screen.width - 100);
     const height = Math.min(800, window.screen.height - 100);
     const left = (window.screen.width - width) / 2;
@@ -229,7 +228,7 @@ const Dashboard = () => {
     }
     
     if (!getVideoId(videoForm.url)) {
-      alert("Invalid YouTube URL");
+      alert("Invalid YouTube URL. Example: https://youtube.com/watch?v=dQw4w9WgXcQ");
       return;
     }
     
@@ -471,7 +470,7 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Video Hub Tab - Thumbnail with Popup */}
+        {/* Video Hub Tab with Thumbnails */}
         {activeTab === 'video' && (
           <div style={styles.videoGrid}>
             <div style={{gridColumn: '1/-1', display: 'flex', justifyContent: 'space-between', marginBottom: '20px'}}>
@@ -484,33 +483,44 @@ const Dashboard = () => {
             </div>
             {videos.map(v => {
               const videoId = getVideoId(v.url);
+              const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null;
+              
               return (
                 <div key={v.id} style={styles.videoCard}>
                   <div 
-                    style={styles.videoThumbnailContainer}
+                    style={styles.videoThumbnailWrapper}
                     onClick={() => openVideoPopup(v.url)}
                   >
-                    {videoId ? (
+                    {videoId && thumbnailUrl ? (
                       <>
                         <img 
-                          src={`https://img.youtube.com/vi/${videoId}/mqdefault.jpg`} 
+                          src={thumbnailUrl}
                           alt={v.title}
                           style={styles.videoThumbnail}
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            e.target.nextSibling.style.display = 'flex';
+                          }}
                         />
+                        <div style={styles.fallbackThumbnail} className="fallback">
+                          <Video size={48} color="#cbd5e1" />
+                        </div>
                         <div style={styles.playButtonOverlay}>
-                          <PlayCircle size={48} color="white" fill="rgba(236, 72, 153, 0.9)" />
+                          <div style={styles.playCircle}>
+                            <PlayCircle size={40} color="white" fill="rgba(236, 72, 153, 0.9)" />
+                          </div>
                         </div>
                       </>
                     ) : (
                       <div style={styles.videoPlaceholder}>
                         <Video size={48} color="#cbd5e1" />
-                        <p style={{color: '#64748b', marginTop: '10px'}}>Invalid URL</p>
+                        <p style={{color: '#64748b', marginTop: '10px', fontSize: '14px'}}>Invalid YouTube URL</p>
                       </div>
                     )}
                   </div>
                   <div style={{padding: '15px'}}>
                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
-                      <h4 style={{margin: 0, flex: 1}}>{v.title}</h4>
+                      <h4 style={{margin: 0, flex: 1, fontSize: '16px'}}>{v.title}</h4>
                       {isAdmin && (
                         <button 
                           onClick={(e) => {e.stopPropagation(); handleDelete(v.id, 'video');}} 
@@ -758,7 +768,7 @@ const Dashboard = () => {
             />
             <input 
               style={styles.input} 
-              placeholder="YouTube URL" 
+              placeholder="YouTube URL (e.g. https://youtube.com/watch?v=...)" 
               value={videoForm.url}
               onChange={e => setVideoForm({...videoForm, url: e.target.value})} 
             />
@@ -845,12 +855,72 @@ const styles = {
   cardMeta: { marginTop: '15px', display: 'flex', gap: '20px', fontSize: '13px', color: '#94a3b8', alignItems: 'center' },
   metaItem: { display: 'flex', alignItems: 'center', gap: '6px' },
   metaBtn: { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: '#94a3b8', fontSize: '13px', padding: 0 },
+  
+  // Video styles with proper thumbnail display
   videoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '25px' },
   videoCard: { background: 'white', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0' },
-  videoThumbnailContainer: { position: 'relative', paddingTop: '56.25%', background: '#000', cursor: 'pointer', overflow: 'hidden', borderRadius: '12px 12px 0 0' },
-  videoThumbnail: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' },
-  playButtonOverlay: { position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 2 },
-  videoPlaceholder: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9' },
+  videoThumbnailWrapper: { 
+    position: 'relative', 
+    paddingTop: '56.25%', 
+    background: '#000', 
+    cursor: 'pointer', 
+    overflow: 'hidden'
+  },
+  videoThumbnail: { 
+    position: 'absolute', 
+    top: 0, 
+    left: 0, 
+    width: '100%', 
+    height: '100%', 
+    objectFit: 'cover',
+    display: 'block'
+  },
+  fallbackThumbnail: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    background: '#f1f5f9',
+    display: 'none',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  playButtonOverlay: { 
+    position: 'absolute', 
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'rgba(0,0,0,0.1)',
+    transition: 'background 0.2s'
+  },
+  playCircle: {
+    background: 'rgba(236, 72, 153, 0.9)',
+    borderRadius: '50%',
+    width: '70px',
+    height: '70px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+  },
+  videoPlaceholder: { 
+    position: 'absolute', 
+    top: 0, 
+    left: 0, 
+    width: '100%', 
+    height: '100%', 
+    display: 'flex', 
+    flexDirection: 'column', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    background: '#f1f5f9' 
+  },
+  
   resourceList: { display: 'flex', flexDirection: 'column', gap: '12px' },
   resourceCard: { background: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '15px' },
   viewBtnInternal: { background: '#fdf2f8', color: '#ec4899', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' },
