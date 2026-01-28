@@ -9,8 +9,9 @@
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options = "SAMEORIGIN"
-    Content-Security-Policy = "frame-src 'self' https://www.youtube.com https://youtube.com https://youtu.be;"
+    Content-Security-Policy = "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://youtube.com;"
+    X-Frame-Options = "ALLOW-FROM https://www.youtube.com/"
+    Permissions-Policy = "accelerometer=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
 
 [[redirects]]
   from = "/*"
