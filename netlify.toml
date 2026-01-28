@@ -11,10 +11,4 @@
   to = "/index.html"
   status = 200
 
-[[headers]]
-  for = "/*"
-  [headers.values]
-    # We remove CSP and Permissions-Policy entirely for a test. 
-    # If it works, we know the issue was the header syntax.
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "no-referrer-when-downgrade"
+# WE ARE REMOVING THE [[headers]] SECTION COMPLETELY FOR THIS TEST
