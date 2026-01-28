@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, LogOut, Crown, Plus, Video, Upload, FileText, User, 
-  Trash2, Hash, Send, MessageCircle, Heart, PlayCircle
+  Trash2, Hash, Send, MessageCircle, Heart, PlayCircle, Image as ImageIcon
 } from 'lucide-react';
 
 const GROUPS = ['All Discussions', 'General', 'Mental Health', 'Self Care', 'Relationships', 'Career', 'Motherhood', 'Fitness', 'Nutrition'];
@@ -23,6 +23,7 @@ const Dashboard = () => {
   const [selectedPost, setSelectedPost] = useState(null);
   const [commentText, setCommentText] = useState('');
   const [imageError, setImageError] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   // Forms
   const [postForm, setPostForm] = useState({ title: '', content: '', category: 'General' });
@@ -77,17 +78,63 @@ const Dashboard = () => {
     }
   };
 
+  // Open clean video player popup (video only, minimal UI)
   const openVideoPopup = (url) => {
-    const width = Math.min(1200, window.screen.width - 100);
-    const height = Math.min(800, window.screen.height - 100);
+    const videoId = getVideoId(url);
+    if (!videoId) {
+      window.open(url, '_blank');
+      return;
+    }
+    
+    // Use embed URL with minimal UI parameters
+    const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&modestbranding=1&rel=0&showinfo=0&controls=1&iv_load_policy=3&fs=1`;
+    
+    // 16:9 aspect ratio window (800x450)
+    const width = 800;
+    const height = 450;
     const left = (window.screen.width - width) / 2;
     const top = (window.screen.height - height) / 2;
     
     window.open(
-      url, 
+      embedUrl, 
       'videoPlayer', 
-      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no,status=no,toolbar=no,menubar=no,location=no`
     );
+  };
+
+  // Handle image file upload and convert to base64
+  const handleImageUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 2MB for database storage)
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Image must be smaller than 2MB');
+      return;
+    }
+
+    setUploadingImage(true);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const base64String = e.target.result;
+      setProfileForm({...profileForm, profilePic: base64String});
+      setImageError(false);
+      setUploadingImage(false);
+    };
+    reader.onerror = () => {
+      alert('Failed to read image');
+      setUploadingImage(false);
+    };
+    
+    // Read as data URL (base64)
+    reader.readAsDataURL(file);
   };
 
   const handleAuth = async (e) => {
@@ -299,19 +346,23 @@ const Dashboard = () => {
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
-      cursor: 'pointer'
+      cursor: 'pointer',
+      border: '2px solid transparent'
     };
     
-    if (!src || imageError) {
+    // Check if src is a base64 data URL or regular URL
+    const isValidSrc = src && (src.startsWith('http') || src.startsWith('data:image'));
+    
+    if (!isValidSrc || imageError) {
       return (
-        <div style={baseStyle}>
+        <div style={{...baseStyle, border: '2px solid #e2e8f0'}}>
           <User size={isLarge ? 40 : 18} color="#64748b" />
         </div>
       );
     }
     
     return (
-      <div style={baseStyle}>
+      <div style={{...baseStyle, border: '2px solid #ec4899'}}>
         <img 
           src={src} 
           alt="Profile" 
@@ -322,13 +373,20 @@ const Dashboard = () => {
     );
   };
 
+  // Get YouTube thumbnail URL with fallback options
+  const getThumbnailUrl = (videoId) => {
+    if (!videoId) return null;
+    // Try high quality first, fallback to medium
+    return `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+  };
+
   if (!user) {
     return (
       <div style={styles.loginContainer}>
         <div style={styles.loginCard}>
           <div style={{textAlign: 'center', marginBottom: '20px'}}>
             <Crown size={40} color="#ec4899" />
-            <h2>The Energised Woman Collective Login</h2>
+            <h2>Collective Login</h2>
           </div>
           <form onSubmit={handleAuth}>
             <input 
@@ -367,7 +425,7 @@ const Dashboard = () => {
       <header style={styles.header}>
         <div style={styles.brand}>
           <Crown color="#ec4899" /> 
-          <span>The Energised Woman Collective</span>
+          <span>The Collective</span>
         </div>
         <nav style={styles.centerNav}>
           <button 
@@ -470,7 +528,7 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Video Hub Tab with Thumbnails */}
+        {/* Video Hub Tab with Thumbnail Fix */}
         {activeTab === 'video' && (
           <div style={styles.videoGrid}>
             <div style={{gridColumn: '1/-1', display: 'flex', justifyContent: 'space-between', marginBottom: '20px'}}>
@@ -488,26 +546,26 @@ const Dashboard = () => {
               return (
                 <div key={v.id} style={styles.videoCard}>
                   <div 
-                    style={styles.videoThumbnailWrapper}
+                    style={styles.videoThumbnailContainer}
                     onClick={() => openVideoPopup(v.url)}
                   >
-                    {videoId && thumbnailUrl ? (
+                    {videoId ? (
                       <>
                         <img 
                           src={thumbnailUrl}
                           alt={v.title}
-                          style={styles.videoThumbnail}
+                          style={styles.videoThumbnailImg}
                           onError={(e) => {
-                            e.target.style.display = 'none';
-                            e.target.nextSibling.style.display = 'flex';
+                            // If mqdefault fails, try default
+                            e.target.src = `https://img.youtube.com/vi/${videoId}/default.jpg`;
                           }}
                         />
-                        <div style={styles.fallbackThumbnail} className="fallback">
-                          <Video size={48} color="#cbd5e1" />
-                        </div>
-                        <div style={styles.playButtonOverlay}>
-                          <div style={styles.playCircle}>
-                            <PlayCircle size={40} color="white" fill="rgba(236, 72, 153, 0.9)" />
+                        <div style={styles.videoOverlay}>
+                          <div style={styles.playButtonCircle}>
+                            <PlayCircle size={40} color="white" fill="rgba(236, 72, 153, 0.95)" />
+                          </div>
+                          <div style={styles.videoDuration}>
+                            <span style={{color: 'white', fontSize: '12px', fontWeight: '600'}}>▶ Play</span>
                           </div>
                         </div>
                       </>
@@ -706,14 +764,14 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Profile Modal */}
+      {/* Profile Modal with File Upload */}
       {showModal === 'profile' && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
             <div style={{textAlign: 'center', marginBottom: '20px'}}>
               {renderAvatar(profileForm.profilePic, 'large')}
               <p style={{fontSize: '12px', color: '#64748b', marginTop: '10px'}}>
-                Update your profile
+                Preview
               </p>
             </div>
             
@@ -729,10 +787,50 @@ const Dashboard = () => {
               value={profileForm.lastName} 
               onChange={e => setProfileForm({...profileForm, lastName: e.target.value})} 
             />
+            
+            {/* File Upload Section */}
+            <div style={{marginBottom: '15px'}}>
+              <label style={{fontSize: '14px', color: '#64748b', marginBottom: '5px', display: 'block'}}>
+                Upload Profile Picture
+              </label>
+              <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+                <label style={styles.fileUploadButton}>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleImageUpload}
+                    style={{display: 'none'}}
+                  />
+                  <ImageIcon size={18} />
+                  {uploadingImage ? 'Processing...' : 'Choose File'}
+                </label>
+                {profileForm.profilePic && (
+                  <button 
+                    onClick={() => {
+                      setProfileForm({...profileForm, profilePic: ''});
+                      setImageError(false);
+                    }}
+                    style={{background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '13px'}}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              <p style={{fontSize: '11px', color: '#94a3b8', marginTop: '5px'}}>
+                Max 2MB. Stores in database (Base64).
+              </p>
+            </div>
+
+            <div style={{display: 'flex', alignItems: 'center', marginBottom: '15px'}}>
+              <div style={{flex: 1, height: '1px', background: '#e2e8f0'}} />
+              <span style={{padding: '0 10px', color: '#94a3b8', fontSize: '12px'}}>OR</span>
+              <div style={{flex: 1, height: '1px', background: '#e2e8f0'}} />
+            </div>
+
             <input 
               style={styles.input} 
-              placeholder="Profile Image URL (direct link)" 
-              value={profileForm.profilePic} 
+              placeholder="Paste Image URL instead" 
+              value={profileForm.profilePic && profileForm.profilePic.startsWith('data:') ? '' : profileForm.profilePic}
               onChange={e => {
                 setProfileForm({...profileForm, profilePic: e.target.value});
                 setImageError(false);
@@ -740,7 +838,7 @@ const Dashboard = () => {
             />
             {imageError && (
               <p style={{color: '#ef4444', fontSize: '12px', marginBottom: '10px'}}>
-                Failed to load image. Try a different URL.
+                Failed to load image
               </p>
             )}
             <button style={styles.primaryButtonFull} onClick={handleUpdateProfile}>
@@ -856,64 +954,60 @@ const styles = {
   metaItem: { display: 'flex', alignItems: 'center', gap: '6px' },
   metaBtn: { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: '#94a3b8', fontSize: '13px', padding: 0 },
   
-  // Video styles with proper thumbnail display
+  // Video styles with improved thumbnail display
   videoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '25px' },
-  videoCard: { background: 'white', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0' },
-  videoThumbnailWrapper: { 
+  videoCard: { background: 'white', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },
+  videoThumbnailContainer: { 
     position: 'relative', 
-    paddingTop: '56.25%', 
+    width: '100%',
+    height: '200px',
     background: '#000', 
     cursor: 'pointer', 
     overflow: 'hidden'
   },
-  videoThumbnail: { 
-    position: 'absolute', 
-    top: 0, 
-    left: 0, 
+  videoThumbnailImg: { 
     width: '100%', 
     height: '100%', 
     objectFit: 'cover',
     display: 'block'
   },
-  fallbackThumbnail: {
+  videoOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     width: '100%',
     height: '100%',
-    background: '#f1f5f9',
-    display: 'none',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  playButtonOverlay: { 
-    position: 'absolute', 
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
+    background: 'rgba(0,0,0,0.0)',
+    transition: 'background 0.2s',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'rgba(0,0,0,0.1)',
-    transition: 'background 0.2s'
+    ':hover': {
+      background: 'rgba(0,0,0,0.1)'
+    }
   },
-  playCircle: {
-    background: 'rgba(236, 72, 153, 0.9)',
+  playButtonCircle: {
+    background: 'rgba(236, 72, 153, 0.95)',
     borderRadius: '50%',
     width: '70px',
     height: '70px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+    boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+    border: '3px solid rgba(255,255,255,0.3)'
+  },
+  videoDuration: {
+    position: 'absolute',
+    bottom: '10px',
+    right: '10px',
+    background: 'rgba(0,0,0,0.8)',
+    padding: '4px 8px',
+    borderRadius: '4px'
   },
   videoPlaceholder: { 
-    position: 'absolute', 
-    top: 0, 
-    left: 0, 
-    width: '100%', 
-    height: '100%', 
+    width: '100%',
+    height: '100%',
     display: 'flex', 
     flexDirection: 'column', 
     alignItems: 'center', 
@@ -931,6 +1025,23 @@ const styles = {
   primaryButton: { background: '#ec4899', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px' },
   primaryButtonFull: { background: '#ec4899', color: 'white', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', width: '100%', fontSize: '16px' },
   ghostButtonFull: { background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', width: '100%', marginTop: '10px', fontSize: '14px' },
+  fileUploadButton: { 
+    display: 'flex', 
+    alignItems: 'center', 
+    gap: '8px', 
+    padding: '10px 15px', 
+    background: '#f1f5f9', 
+    border: '2px dashed #cbd5e1', 
+    borderRadius: '8px', 
+    cursor: 'pointer', 
+    fontSize: '14px', 
+    color: '#64748b',
+    transition: 'all 0.2s',
+    ':hover': {
+      background: '#e2e8f0',
+      borderColor: '#94a3b8'
+    }
+  },
   modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' },
   modal: { background: 'white', padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' },
   modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' },
