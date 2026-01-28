@@ -174,7 +174,7 @@ const Dashboard = () => {
     <div style={styles.container}>
       {/* --- HEADER --- */}
       <header style={styles.header}>
-        <div style={styles.brand}><Crown color="#ec4899" size={24} /> <span>The Collective</span></div>
+        <div style={styles.brand}><Crown color="#ec4899" size={24} /> <span>The Energised Woman Collective</span></div>
         <nav style={styles.centerNav}>
           <button onClick={() => setActiveTab('community')} style={activeTab === 'community' ? styles.navBtnActive : styles.navBtn}>Community</button>
           <button onClick={() => setActiveTab('video')} style={activeTab === 'video' ? styles.navBtnActive : styles.navBtn}>Video Hub</button>
@@ -226,7 +226,7 @@ const Dashboard = () => {
         {activeTab === 'video' && (
           <div>
             <div style={styles.sectionHeader}>
-              <h2>Masterclasses & Workouts</h2>
+              <h2>Masterclasses & Conversations</h2>
               {isAdmin && <button style={styles.primaryButton} onClick={() => setShowModal('addVideo')}><Upload size={18}/> Add Video</button>}
             </div>
             <div style={styles.videoGrid}>
