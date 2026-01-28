@@ -87,7 +87,7 @@ exports.handler = async (event) => {
       if (type === 'discussions') {
         query = 'SELECT * FROM discussions ORDER BY created_at DESC';
       } else if (type === 'video') {
-        query = 'SELECT * FROM videos ORDER BY created_at DESC';
+        query = 'SELECT id, title, url, description, thumbnail, comments, created_at FROM videos ORDER BY created_at DESC';
       } else if (type === 'resources') {
         query = 'SELECT * FROM resources ORDER BY created_at DESC';
       } else {
@@ -204,15 +204,16 @@ exports.handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
       }
       
+      // FIXED: Video upload with thumbnail support
       if (type === 'video') {
-        const { title, url, description } = data;
+        const { title, url, description, thumbnail } = data;
         if (!title || !url) {
           return { statusCode: 400, headers, body: JSON.stringify({ message: 'Title and URL required' }) };
         }
         const res = await pool.query(
-          `INSERT INTO videos (title, url, description, comments, created_at) 
-           VALUES ($1, $2, $3, '[]'::jsonb, NOW()) RETURNING *`,
-          [title, url, description || '']
+          `INSERT INTO videos (title, url, description, thumbnail, comments, created_at) 
+           VALUES ($1, $2, $3, $4, '[]'::jsonb, NOW()) RETURNING *`,
+          [title, url, description || '', thumbnail || null]
         );
         return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
       }
