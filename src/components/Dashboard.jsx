@@ -36,7 +36,7 @@ const Dashboard = () => {
     if (saved) {
       const userData = JSON.parse(saved);
       setUser(userData);
-      setIsAdmin(userData.isAdmin);
+      setIsAdmin(userData.isAdmin || false);
       setProfileForm({
         firstName: userData.firstName || '',
         lastName: userData.lastName || '',
@@ -92,20 +92,42 @@ const Dashboard = () => {
     } catch (err) { alert('Connection failed.'); }
   };
 
+  // --- CORE DATA HANDLERS ---
+
   const handleCreatePost = async () => {
-    if (!postForm.title || !postForm.content) return;
+    if (!postForm.title.trim() || !postForm.content.trim()) {
+        alert("Please fill in both title and content");
+        return;
+    }
     try {
       const res = await fetch('/.netlify/functions/database?type=discussion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...postForm, userEmail: user.email })
+        body: JSON.stringify({ 
+            ...postForm, 
+            userEmail: user.email,
+            userName: profileForm.firstName ? `${profileForm.firstName} ${profileForm.lastName}` : user.email.split('@')[0]
+        })
       });
       if (res.ok) {
         setPostForm({ title: '', content: '', category: 'General' });
         setShowModal(null);
-        loadAllData();
+        await loadAllData(); // Refresh list
+      } else {
+          alert("Failed to save post");
       }
     } catch (err) { console.error('Post error:', err); }
+  };
+
+  const handleLikePost = async (postId) => {
+    try {
+      const res = await fetch('/.netlify/functions/database?type=likePost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId, userId: user.id })
+      });
+      if (res.ok) loadAllData();
+    } catch (err) { console.error('Error liking:', err); }
   };
 
   const handleAddVideo = async () => {
@@ -127,7 +149,7 @@ const Dashboard = () => {
   const handleAddResource = async () => {
     if (!resourceForm.title || !resourceForm.url) return;
     try {
-      const res = await fetch('/.netlify/functions/database?type=resource', {
+      const res = await fetch('/.netlify/functions/database?type=resources', { // Note: match your backend endpoint name
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(resourceForm)
@@ -141,13 +163,15 @@ const Dashboard = () => {
   };
 
   const handleDelete = async (id, type) => {
-    if (window.confirm("Delete this?")) {
+    if (window.confirm("Are you sure you want to delete this?")) {
       try {
-        await fetch(`/.netlify/functions/database?id=${id}&type=${type}`, { method: 'DELETE' });
-        loadAllData();
+        const res = await fetch(`/.netlify/functions/database?id=${id}&type=${type}`, { method: 'DELETE' });
+        if (res.ok) loadAllData();
       } catch (err) { console.error('Delete error:', err); }
     }
   };
+
+  // --- RENDERING ---
 
   const renderAvatar = (src, size = 'small') => {
     const isLarge = size === 'large';
@@ -190,7 +214,6 @@ const Dashboard = () => {
       </header>
 
       <main style={styles.main}>
-        {/* COMMUNITY TAB */}
         {activeTab === 'community' && (
           <div style={styles.communityLayout}>
             <aside style={styles.sidebar}>
@@ -206,9 +229,11 @@ const Dashboard = () => {
                   <h3>{post.title}</h3>
                   <p style={styles.cardExcerpt}>{post.content}</p>
                   <div style={styles.cardMeta}>
-                    <span style={styles.metaItem}><Heart size={12}/> {post.likes?.length || 0}</span>
-                    <span style={styles.metaItem}><MessageCircle size={12}/> {post.comments?.length || 0}</span>
-                    {isAdmin && <Trash2 size={12} style={{marginLeft: 'auto', cursor: 'pointer'}} onClick={(e) => {e.stopPropagation(); handleDelete(post.id, 'discussion');}}/>}
+                    <button style={styles.metaBtn} onClick={(e) => { e.stopPropagation(); handleLikePost(post.id); }}>
+                        <Heart size={14} fill={post.likes?.includes(user.id) ? "#ec4899" : "none"} color={post.likes?.includes(user.id) ? "#ec4899" : "#94a3b8"}/> {post.likes?.length || 0}
+                    </button>
+                    <span style={styles.metaItem}><MessageCircle size={14}/> {post.comments?.length || 0}</span>
+                    {isAdmin && <Trash2 size={14} style={{marginLeft: 'auto', cursor: 'pointer', color: '#94a3b8'}} onClick={(e) => {e.stopPropagation(); handleDelete(post.id, 'discussion');}}/>}
                   </div>
                 </div>
               ))}
@@ -216,7 +241,6 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* VIDEO TAB */}
         {activeTab === 'video' && (
           <div style={styles.videoGrid}>
             <div style={{gridColumn: '1/-1', display: 'flex', justifyContent: 'space-between', marginBottom: '20px'}}>
@@ -244,7 +268,6 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* RESOURCES TAB */}
         {activeTab === 'resources' && (
           <div style={styles.communityLayout}>
             <aside style={styles.sidebar}>
@@ -259,17 +282,16 @@ const Dashboard = () => {
                 <h2>{activeResourceCategory} Resources</h2>
                 {isAdmin && <button style={styles.primaryButton} onClick={() => setShowModal('resource')}><Plus size={18}/> Add Resource</button>}
               </div>
-              <div style={styles.resourceGrid}>
+              <div style={styles.resourceList}>
                 {resources.filter(r => r.category === activeResourceCategory).map(r => (
                   <div key={r.id} style={styles.resourceCard}>
                     <div style={styles.resourceIcon}><FileText color="#ec4899" /></div>
                     <div style={{flex: 1}}>
                       <h4 style={{margin: 0}}>{r.title}</h4>
-                      <p style={{fontSize: '11px', color: '#94a3b8', margin: 0}}>{r.category}</p>
                     </div>
                     <div style={{display: 'flex', gap: '8px'}}>
-                      <button onClick={() => window.open(r.url, '_blank')} style={styles.viewBtnInternal}>Open</button>
-                      {isAdmin && <button onClick={() => handleDelete(r.id, 'resource')} style={styles.delBtn}><Trash2 size={16}/></button>}
+                      <button onClick={() => window.open(r.url, '_blank')} style={styles.viewBtnInternal}>Open Resource</button>
+                      {isAdmin && <button onClick={() => handleDelete(r.id, 'resources')} style={styles.delBtn}><Trash2 size={16}/></button>}
                     </div>
                   </div>
                 ))}
@@ -283,13 +305,14 @@ const Dashboard = () => {
       {showModal === 'post' && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}><h3>Create Post</h3><X style={{cursor:'pointer'}} onClick={() => setShowModal(null)}/></div>
+            <div style={styles.modalHeader}><h3>Create Community Post</h3><X style={{cursor:'pointer'}} onClick={() => setShowModal(null)}/></div>
+            <label style={styles.label}>Select Category</label>
             <select style={styles.input} value={postForm.category} onChange={e => setPostForm({...postForm, category: e.target.value})}>
               {GROUPS.filter(g => g !== 'All Discussions').map(g => <option key={g} value={g}>{g}</option>)}
             </select>
-            <input style={styles.input} placeholder="Title" value={postForm.title} onChange={e => setPostForm({...postForm, title: e.target.value})} />
-            <textarea style={{...styles.input, height: '120px'}} placeholder="What's on your mind?" value={postForm.content} onChange={e => setPostForm({...postForm, content: e.target.value})} />
-            <button style={styles.primaryButtonFull} onClick={handleCreatePost}>Post to Community</button>
+            <input style={styles.input} placeholder="Post Title" value={postForm.title} onChange={e => setPostForm({...postForm, title: e.target.value})} />
+            <textarea style={{...styles.input, height: '150px'}} placeholder="Write your message here..." value={postForm.content} onChange={e => setPostForm({...postForm, content: e.target.value})} />
+            <button style={styles.primaryButtonFull} onClick={handleCreatePost}>Publish Post</button>
           </div>
         </div>
       )}
@@ -297,10 +320,10 @@ const Dashboard = () => {
       {showModal === 'addVideo' && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}><h3>Add Video</h3><X style={{cursor:'pointer'}} onClick={() => setShowModal(null)}/></div>
+            <div style={styles.modalHeader}><h3>Upload to Video Hub</h3><X style={{cursor:'pointer'}} onClick={() => setShowModal(null)}/></div>
             <input style={styles.input} placeholder="Video Title" value={videoForm.title} onChange={e => setVideoForm({...videoForm, title: e.target.value})} />
-            <input style={styles.input} placeholder="YouTube URL" value={videoForm.url} onChange={e => setVideoForm({...videoForm, url: e.target.value})} />
-            <textarea style={styles.input} placeholder="Description" value={videoForm.description} onChange={e => setVideoForm({...videoForm, description: e.target.value})} />
+            <input style={styles.input} placeholder="YouTube URL (e.g. https://youtu.be/...)" value={videoForm.url} onChange={e => setVideoForm({...videoForm, url: e.target.value})} />
+            <textarea style={styles.input} placeholder="Short description..." value={videoForm.description} onChange={e => setVideoForm({...videoForm, description: e.target.value})} />
             <button style={styles.primaryButtonFull} onClick={handleAddVideo}>Save Video</button>
           </div>
         </div>
@@ -309,12 +332,12 @@ const Dashboard = () => {
       {showModal === 'resource' && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}><h3>Add Resource</h3><X style={{cursor:'pointer'}} onClick={() => setShowModal(null)}/></div>
+            <div style={styles.modalHeader}><h3>Add New Resource</h3><X style={{cursor:'pointer'}} onClick={() => setShowModal(null)}/></div>
             <select style={styles.input} value={resourceForm.category} onChange={e => setResourceForm({...resourceForm, category: e.target.value})}>
               {RESOURCE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
             </select>
             <input style={styles.input} placeholder="Resource Title" value={resourceForm.title} onChange={e => setResourceForm({...resourceForm, title: e.target.value})} />
-            <input style={styles.input} placeholder="Link (PDF or URL)" value={resourceForm.url} onChange={e => setResourceForm({...resourceForm, url: e.target.value})} />
+            <input style={styles.input} placeholder="Resource Link (URL or PDF Link)" value={resourceForm.url} onChange={e => setResourceForm({...resourceForm, url: e.target.value})} />
             <button style={styles.primaryButtonFull} onClick={handleAddResource}>Save Resource</button>
           </div>
         </div>
@@ -329,38 +352,41 @@ const styles = {
   brand: { display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold' },
   centerNav: { display: 'flex', gap: '8px', background: '#f1f5f9', padding: '5px', borderRadius: '12px' },
   navBtn: { padding: '8px 20px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: '8px', color: '#64748b' },
-  navBtnActive: { padding: '8px 20px', border: 'none', background: 'white', color: '#ec4899', borderRadius: '8px', fontWeight: 'bold' },
+  navBtnActive: { padding: '8px 20px', border: 'none', background: 'white', color: '#ec4899', borderRadius: '8px', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' },
   main: { maxWidth: '1200px', margin: '0 auto', padding: '40px 20px' },
   communityLayout: { display: 'grid', gridTemplateColumns: '240px 1fr', gap: '40px' },
   sidebar: { display: 'flex', flexDirection: 'column', gap: '5px' },
   sidebarBtn: { textAlign: 'left', padding: '12px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '10px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '10px' },
   sidebarBtnActive: { textAlign: 'left', padding: '12px', background: '#fdf2f8', border: 'none', borderRadius: '10px', color: '#ec4899', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' },
   sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' },
-  card: { background: 'white', padding: '25px', borderRadius: '20px', border: '1px solid #e2e8f0', marginBottom: '20px', cursor: 'pointer' },
+  card: { background: 'white', padding: '25px', borderRadius: '20px', border: '1px solid #e2e8f0', marginBottom: '20px', cursor: 'pointer', transition: 'transform 0.2s' },
   tag: { fontSize: '10px', background: '#fdf2f8', color: '#ec4899', padding: '4px 10px', borderRadius: '20px', fontWeight: 'bold' },
   cardExcerpt: { color: '#64748b', fontSize: '14px', lineHeight: '1.5', marginTop: '10px' },
   cardMeta: { display: 'flex', gap: '15px', marginTop: '15px', color: '#94a3b8', fontSize: '12px', alignItems: 'center' },
   metaItem: { display: 'flex', alignItems: 'center', gap: '4px' },
+  metaBtn: { background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', color: '#94a3b8', padding: 0 },
   videoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '25px' },
   videoCard: { background: 'white', borderRadius: '20px', border: '1px solid #e2e8f0', overflow: 'hidden' },
   videoFrameWrapper: { position: 'relative', paddingBottom: '56.25%', height: 0, background: '#000' },
   videoIframe: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
   videoPlaceholder: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: 'white' },
-  resourceGrid: { display: 'grid', gridTemplateColumns: '1fr', gap: '12px' },
+  resourceList: { display: 'flex', flexDirection: 'column', gap: '12px' },
   resourceCard: { background: 'white', padding: '15px 20px', borderRadius: '15px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '15px' },
   resourceIcon: { width: '40px', height: '40px', borderRadius: '10px', background: '#fdf2f8', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   viewBtnInternal: { padding: '8px 16px', borderRadius: '8px', border: '1px solid #ec4899', color: '#ec4899', background: 'white', cursor: 'pointer', fontWeight: 'bold' },
   delBtn: { background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' },
   loginContainer: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fdf2f8' },
-  loginCard: { background: 'white', padding: '40px', borderRadius: '24px', width: '100%', maxWidth: '400px' },
-  input: { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px', boxSizing: 'border-box' },
+  loginCard: { background: 'white', padding: '40px', borderRadius: '24px', width: '100%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' },
+  input: { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px', boxSizing: 'border-box', fontSize: '14px' },
+  label: { fontSize: '12px', color: '#64748b', marginBottom: '5px', display: 'block' },
   primaryButton: { background: '#ec4899', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' },
   primaryButtonFull: { background: '#ec4899', color: 'white', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', width: '100%' },
   ghostButtonFull: { background: 'transparent', color: '#64748b', border: 'none', padding: '10px', cursor: 'pointer', width: '100%' },
   modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-  modal: { background: 'white', padding: '30px', borderRadius: '24px', width: '450px', maxWidth: '90vw' },
+  modal: { background: 'white', padding: '30px', borderRadius: '24px', width: '480px', maxWidth: '90vw' },
   modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
   avatarMini: { width: '35px', height: '35px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  avatarLarge: { width: '80px', height: '80px', borderRadius: '50%', background: '#f1f5f9', overflow: 'hidden', margin: '0 auto 15px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   avatarImg: { width: '100%', height: '100%', objectFit: 'cover' },
   iconBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }
 };
