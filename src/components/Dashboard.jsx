@@ -1,4 +1,4 @@
- import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, LogOut, Crown, Plus, Video, Upload, FileText, User, 
   Trash2, Hash, Send, MessageCircle, PlayCircle, BookOpen, 
@@ -24,7 +24,7 @@ const Dashboard = () => {
   const [viewingDoc, setViewingDoc] = useState(null);
   const [selectedPost, setSelectedPost] = useState(null);
   const [commentText, setCommentText] = useState('');
-  const [imageError, setImageError] = useState(false); // Track image load errors
+  const [imageError, setImageError] = useState(false);
 
   // Forms
   const [postForm, setPostForm] = useState({ title: '', content: '', category: 'General' });
@@ -43,7 +43,7 @@ const Dashboard = () => {
         lastName: userData.lastName || '',
         profilePic: userData.profilePic || ''
       });
-      setImageError(false); // Reset image error state
+      setImageError(false);
       loadAllData();
     }
   }, []);
@@ -69,7 +69,7 @@ const Dashboard = () => {
     try {
       const res = await fetch(`/.netlify/functions/database?type=${type}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }, // Added header
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: loginEmail, password: loginPassword })
       });
       const data = await res.json();
@@ -87,14 +87,14 @@ const Dashboard = () => {
     try {
       const res = await fetch('/.netlify/functions/database?type=updateProfile', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' }, // ADDED THIS HEADER
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: user.email, ...profileForm })
       });
       if (res.ok) {
         const updated = { ...user, ...profileForm };
         setUser(updated);
         localStorage.setItem('wellnessUser', JSON.stringify(updated));
-        setImageError(false); // Reset error state on successful update
+        setImageError(false);
         setShowModal(null);
       } else {
         const error = await res.json();
@@ -151,7 +151,6 @@ const Dashboard = () => {
       
       if (res.ok) {
         await loadAllData();
-        // Update selectedPost if viewing
         if (selectedPost && selectedPost.id === postId) {
           const updated = discussions.find(d => d.id === postId);
           setSelectedPost(updated);
@@ -183,7 +182,6 @@ const Dashboard = () => {
       if (res.ok) {
         setCommentText('');
         await loadAllData();
-        // Refresh the selected post
         const updated = discussions.find(d => d.id === selectedPost.id);
         setSelectedPost(updated);
       }
@@ -193,7 +191,6 @@ const Dashboard = () => {
   };
 
   const handleAddVideo = async () => {
-    // Enhanced validation for YouTube URLs
     if (!videoForm.title || !videoForm.url) {
       alert('Please enter both title and URL');
       return;
@@ -202,10 +199,9 @@ const Dashboard = () => {
     try {
       const res = await fetch('/.netlify/functions/database?type=video', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }, // ADDED HEADER
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...videoForm,
-          // Clean the URL before sending
           url: videoForm.url.trim()
         })
       });
@@ -228,7 +224,7 @@ const Dashboard = () => {
     try {
       const res = await fetch('/.netlify/functions/database?type=resource', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }, // ADDED HEADER
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(resourceForm)
       });
       
@@ -259,18 +255,17 @@ const Dashboard = () => {
     }
   };
 
-  // FIXED: Removed the space in the embed URL
+  // FIXED: Removed space in embed URL
   const getVideoEmbedUrl = (url) => {
     if (!url) return '';
     let id = '';
     
-    // Handle various YouTube URL formats
     if (url.includes('youtube.com/watch?v=')) {
       id = url.split('v=')[1]?.split('&')[0];
     } else if (url.includes('youtu.be/')) {
       id = url.split('youtu.be/')[1]?.split('?')[0];
     } else if (url.includes('youtube.com/embed/')) {
-      return url; // Already an embed URL
+      return url;
     } else {
       id = url.split('/').pop();
     }
@@ -289,7 +284,6 @@ const Dashboard = () => {
     return post.likes.includes(user.id);
   };
 
-  // Helper to render avatar with error handling
   const renderAvatar = (src, size = 'small') => {
     const isLarge = size === 'large';
     const containerStyle = isLarge ? styles.avatarLarge : styles.avatarMini;
@@ -532,7 +526,7 @@ const Dashboard = () => {
               value={profileForm.profilePic} 
               onChange={e => {
                 setProfileForm({...profileForm, profilePic: e.target.value});
-                setImageError(false); // Reset error when user types new URL
+                setImageError(false);
               }} 
             />
             {imageError && <p style={{color: '#ef4444', fontSize: '12px', marginTop: '-10px', marginBottom: '10px'}}>Failed to load image. Check URL.</p>}
