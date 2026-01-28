@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+ import React, { useState, useEffect } from 'react';
 import { 
   X, LogOut, Crown, Plus, Video, Upload, FileText, User, 
   Trash2, Hash, Send, MessageCircle, PlayCircle, BookOpen, 
@@ -24,6 +24,7 @@ const Dashboard = () => {
   const [viewingDoc, setViewingDoc] = useState(null);
   const [selectedPost, setSelectedPost] = useState(null);
   const [commentText, setCommentText] = useState('');
+  const [imageError, setImageError] = useState(false); // Track image load errors
 
   // Forms
   const [postForm, setPostForm] = useState({ title: '', content: '', category: 'General' });
@@ -42,6 +43,7 @@ const Dashboard = () => {
         lastName: userData.lastName || '',
         profilePic: userData.profilePic || ''
       });
+      setImageError(false); // Reset image error state
       loadAllData();
     }
   }, []);
@@ -64,27 +66,43 @@ const Dashboard = () => {
   const handleAuth = async (e) => {
     e.preventDefault();
     const type = isRegistering ? 'register' : 'login';
-    const res = await fetch(`/.netlify/functions/database?type=${type}`, {
-      method: 'POST',
-      body: JSON.stringify({ email: loginEmail, password: loginPassword })
-    });
-    const data = await res.json();
-    if (res.ok) {
-      localStorage.setItem('wellnessUser', JSON.stringify(data));
-      window.location.reload();
-    } else alert(data.message);
+    try {
+      const res = await fetch(`/.netlify/functions/database?type=${type}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, // Added header
+        body: JSON.stringify({ email: loginEmail, password: loginPassword })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.setItem('wellnessUser', JSON.stringify(data));
+        window.location.reload();
+      } else alert(data.message);
+    } catch (err) {
+      console.error('Auth error:', err);
+      alert('Connection failed. Please try again.');
+    }
   };
 
   const handleUpdateProfile = async () => {
-    const res = await fetch('/.netlify/functions/database?type=updateProfile', {
-      method: 'PUT',
-      body: JSON.stringify({ email: user.email, ...profileForm })
-    });
-    if (res.ok) {
-      const updated = { ...user, ...profileForm };
-      setUser(updated);
-      localStorage.setItem('wellnessUser', JSON.stringify(updated));
-      setShowModal(null);
+    try {
+      const res = await fetch('/.netlify/functions/database?type=updateProfile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' }, // ADDED THIS HEADER
+        body: JSON.stringify({ email: user.email, ...profileForm })
+      });
+      if (res.ok) {
+        const updated = { ...user, ...profileForm };
+        setUser(updated);
+        localStorage.setItem('wellnessUser', JSON.stringify(updated));
+        setImageError(false); // Reset error state on successful update
+        setShowModal(null);
+      } else {
+        const error = await res.json();
+        alert(error.message || 'Failed to update profile');
+      }
+    } catch (err) {
+      console.error('Profile update error:', err);
+      alert('Failed to update profile. Please try again.');
     }
   };
 
@@ -175,39 +193,89 @@ const Dashboard = () => {
   };
 
   const handleAddVideo = async () => {
-    const res = await fetch('/.netlify/functions/database?type=video', {
-      method: 'POST',
-      body: JSON.stringify(videoForm)
-    });
-    if (res.ok) { 
-      setVideoForm({ title: '', url: '', description: '' });
-      setShowModal(null); 
-      loadAllData(); 
+    // Enhanced validation for YouTube URLs
+    if (!videoForm.title || !videoForm.url) {
+      alert('Please enter both title and URL');
+      return;
+    }
+    
+    try {
+      const res = await fetch('/.netlify/functions/database?type=video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, // ADDED HEADER
+        body: JSON.stringify({
+          ...videoForm,
+          // Clean the URL before sending
+          url: videoForm.url.trim()
+        })
+      });
+      
+      if (res.ok) { 
+        setVideoForm({ title: '', url: '', description: '' });
+        setShowModal(null); 
+        loadAllData(); 
+      } else {
+        const error = await res.json();
+        alert(error.message || 'Failed to add video');
+      }
+    } catch (err) {
+      console.error('Error adding video:', err);
+      alert('Failed to add video. Please check your connection.');
     }
   };
 
   const handleAddResource = async () => {
-    const res = await fetch('/.netlify/functions/database?type=resource', {
-      method: 'POST',
-      body: JSON.stringify(resourceForm)
-    });
-    if (res.ok) { 
-      setResourceForm({ title: '', url: '', category: 'General' });
-      setShowModal(null); 
-      loadAllData(); 
+    try {
+      const res = await fetch('/.netlify/functions/database?type=resource', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, // ADDED HEADER
+        body: JSON.stringify(resourceForm)
+      });
+      
+      if (res.ok) { 
+        setResourceForm({ title: '', url: '', category: 'General' });
+        setShowModal(null); 
+        loadAllData(); 
+      } else {
+        const error = await res.json();
+        alert(error.message || 'Failed to add resource');
+      }
+    } catch (err) {
+      console.error('Error adding resource:', err);
     }
   };
 
   const handleDelete = async (id, type) => {
     if (window.confirm("Delete this?")) {
-      await fetch(`/.netlify/functions/database?id=${id}&type=${type}`, { method: 'DELETE' });
-      loadAllData();
+      try {
+        await fetch(`/.netlify/functions/database?id=${id}&type=${type}`, { 
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        loadAllData();
+      } catch (err) {
+        console.error('Delete error:', err);
+      }
     }
   };
 
+  // FIXED: Removed the space in the embed URL
   const getVideoEmbedUrl = (url) => {
     if (!url) return '';
-    const id = url.includes('v=') ? url.split('v=')[1].split('&')[0] : url.split('/').pop();
+    let id = '';
+    
+    // Handle various YouTube URL formats
+    if (url.includes('youtube.com/watch?v=')) {
+      id = url.split('v=')[1]?.split('&')[0];
+    } else if (url.includes('youtu.be/')) {
+      id = url.split('youtu.be/')[1]?.split('?')[0];
+    } else if (url.includes('youtube.com/embed/')) {
+      return url; // Already an embed URL
+    } else {
+      id = url.split('/').pop();
+    }
+    
+    if (!id) return '';
     return `https://www.youtube.com/embed/${id}`;
   };
 
@@ -221,11 +289,36 @@ const Dashboard = () => {
     return post.likes.includes(user.id);
   };
 
+  // Helper to render avatar with error handling
+  const renderAvatar = (src, size = 'small') => {
+    const isLarge = size === 'large';
+    const containerStyle = isLarge ? styles.avatarLarge : styles.avatarMini;
+    
+    if (!src || imageError) {
+      return (
+        <div style={containerStyle}>
+          <User size={isLarge ? 40 : 18} color="#64748b" />
+        </div>
+      );
+    }
+    
+    return (
+      <div style={containerStyle}>
+        <img 
+          src={src} 
+          style={styles.avatarImg} 
+          alt="Profile" 
+          onError={() => setImageError(true)}
+        />
+      </div>
+    );
+  };
+
   if (!user) {
     return (
       <div style={styles.loginContainer}>
         <div style={styles.loginCard}>
-          <div style={{textAlign: 'center', marginBottom: '20px'}}><Crown size={40} color="#ec4899" /><h2>The Energised Woman Collective Login</h2></div>
+          <div style={{textAlign: 'center', marginBottom: '20px'}}><Crown size={40} color="#ec4899" /><h2>Collective Login</h2></div>
           <form onSubmit={handleAuth}>
             <input style={styles.input} type="email" placeholder="Email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} />
             <input style={styles.input} type="password" placeholder="Password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} />
@@ -242,15 +335,15 @@ const Dashboard = () => {
   return (
     <div style={styles.container}>
       <header style={styles.header}>
-        <div style={styles.brand}><Crown color="#ec4899" /> <span>The Energised Woman Collective</span></div>
+        <div style={styles.brand}><Crown color="#ec4899" /> <span>The Collective</span></div>
         <nav style={styles.centerNav}>
           <button onClick={() => setActiveTab('community')} style={activeTab === 'community' ? styles.navBtnActive : styles.navBtn}>Community</button>
           <button onClick={() => setActiveTab('video')} style={activeTab === 'video' ? styles.navBtnActive : styles.navBtn}>Video Hub</button>
           <button onClick={() => setActiveTab('resources')} style={activeTab === 'resources' ? styles.navBtnActive : styles.navBtn}>Resources</button>
         </nav>
         <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
-          <div onClick={() => setShowModal('profile')} style={styles.avatarMini}>
-            {profileForm.profilePic ? <img src={profileForm.profilePic} style={styles.avatarImg} alt="P" /> : <User size={18} />}
+          <div onClick={() => setShowModal('profile')} style={{cursor: 'pointer'}}>
+            {renderAvatar(profileForm.profilePic, 'small')}
           </div>
           <button onClick={() => {localStorage.clear(); window.location.reload();}} style={styles.iconBtn}><LogOut size={20}/></button>
         </div>
@@ -293,9 +386,21 @@ const Dashboard = () => {
             </div>
             {videos.map(v => (
               <div key={v.id} style={styles.videoCard}>
-                <div style={styles.videoFrameWrapper}><iframe src={getVideoEmbedUrl(v.url)} style={styles.videoIframe} frameBorder="0" allowFullScreen></iframe></div>
+                <div style={styles.videoFrameWrapper}>
+                  <iframe 
+                    src={getVideoEmbedUrl(v.url)} 
+                    style={styles.videoIframe} 
+                    frameBorder="0" 
+                    allowFullScreen
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    title={v.title}
+                  ></iframe>
+                </div>
                 <div style={{padding: '15px'}}>
-                   <div style={{display: 'flex', justifyContent: 'space-between'}}><h4>{v.title}</h4>{isAdmin && <button onClick={() => handleDelete(v.id, 'video')} style={styles.delBtn}><Trash2 size={14}/></button>}</div>
+                   <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                     <h4>{v.title}</h4>
+                     {isAdmin && <button onClick={() => handleDelete(v.id, 'video')} style={styles.delBtn}><Trash2 size={14}/></button>}
+                   </div>
                    <p style={styles.cardExcerpt}>{v.description}</p>
                 </div>
               </div>
@@ -418,12 +523,19 @@ const Dashboard = () => {
       {showModal === 'profile' && (
         <div style={styles.modalOverlay} onClick={() => setShowModal(null)}>
           <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={styles.avatarLarge}>
-               {profileForm.profilePic ? <img src={profileForm.profilePic} style={styles.avatarImg} alt="P" /> : <User size={40} />}
-            </div>
+            {renderAvatar(profileForm.profilePic, 'large')}
             <input style={styles.input} placeholder="First Name" value={profileForm.firstName} onChange={e => setProfileForm({...profileForm, firstName: e.target.value})} />
             <input style={styles.input} placeholder="Last Name" value={profileForm.lastName} onChange={e => setProfileForm({...profileForm, lastName: e.target.value})} />
-            <input style={styles.input} placeholder="Profile GIF URL" value={profileForm.profilePic} onChange={e => setProfileForm({...profileForm, profilePic: e.target.value})} />
+            <input 
+              style={styles.input} 
+              placeholder="Profile Image URL (GIF, JPG, PNG)" 
+              value={profileForm.profilePic} 
+              onChange={e => {
+                setProfileForm({...profileForm, profilePic: e.target.value});
+                setImageError(false); // Reset error when user types new URL
+              }} 
+            />
+            {imageError && <p style={{color: '#ef4444', fontSize: '12px', marginTop: '-10px', marginBottom: '10px'}}>Failed to load image. Check URL.</p>}
             <button style={styles.primaryButtonFull} onClick={handleUpdateProfile}>Save Profile</button>
           </div>
         </div>
@@ -441,7 +553,7 @@ const Dashboard = () => {
             />
             <input 
               style={styles.input} 
-              placeholder="YouTube URL" 
+              placeholder="YouTube URL (e.g., https://youtube.com/watch?v=...)" 
               value={videoForm.url}
               onChange={e => setVideoForm({...videoForm, url: e.target.value})} 
             />
