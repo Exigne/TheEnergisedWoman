@@ -124,7 +124,6 @@ const Dashboard = () => {
     );
   };
 
-  // CLOUDINARY UPLOAD FUNCTION
   const uploadToCloudinary = async (file) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -805,7 +804,7 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Resources Tab - Now Grid Layout like Video Hub */}
+        {/* Resources Tab */}
         {activeTab === 'resources' && (
           <div style={{display: 'flex', flexDirection: 'column', gap: '25px'}}>
             <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '20px', alignItems: 'center'}}>
@@ -1042,7 +1041,6 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Resource Detail Modal */}
       {showModal === 'resourceDetail' && selectedResource && (
         <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px'}} onClick={() => {setShowModal(null); setSelectedResource(null);}}>
           <div style={{background: COLORS.white, borderRadius: '20px', width: '100%', maxWidth: '800px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden'}} onClick={e => e.stopPropagation()}>
@@ -1180,4 +1178,182 @@ const Dashboard = () => {
             <div style={{display: 'flex', alignItems: 'center', marginBottom: '15px'}}>
               <div style={{flex: 1, height: '1px', background: COLORS.gray200}} />
               <span style={{padding: '0 10px', color: COLORS.gray400, fontSize: '12px'}}>OR</span>
-              <div style
+              <div style={{flex: 1, height: '1px', background: COLORS.gray200}} />
+            </div>
+
+            <input 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} 
+              placeholder="Paste Image URL" 
+              value={profileForm.profilePic && profileForm.profilePic.startsWith('data:') ? '' : profileForm.profilePic}
+              onChange={e => {
+                setProfileForm({...profileForm, profilePic: e.target.value});
+                setImageError(false);
+              }} 
+            />
+            {imageError && (
+              <p style={{color: COLORS.red, fontSize: '12px', marginBottom: '10px'}}>
+                Failed to load image
+              </p>
+            )}
+            <button style={{background: COLORS.sage, color: COLORS.white, border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', width: '100%'}} onClick={handleUpdateProfile}>
+              Save Profile
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showModal === 'addVideo' && (
+        <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}} onClick={() => setShowModal(null)}>
+          <div style={{background: COLORS.white, padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto'}} onClick={e => e.stopPropagation()}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px'}}>
+              <h3 style={{color: COLORS.gray800}}>Add Video</h3>
+              <button onClick={() => setShowModal(null)} style={{background: 'none', border: 'none', cursor: 'pointer', color: COLORS.gray400}}>
+                <X size={24}/>
+              </button>
+            </div>
+            <input 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} 
+              placeholder="Title" 
+              value={videoForm.title}
+              onChange={e => setVideoForm({...videoForm, title: e.target.value})} 
+            />
+            <input 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} 
+              placeholder="YouTube URL" 
+              value={videoForm.url}
+              onChange={e => setVideoForm({...videoForm, url: e.target.value})} 
+            />
+            <textarea 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} 
+              placeholder="Description" 
+              value={videoForm.description}
+              onChange={e => setVideoForm({...videoForm, description: e.target.value})} 
+            />
+            
+            <div style={{marginBottom: '20px'}}>
+              <label style={{fontSize: '14px', color: COLORS.gray500, marginBottom: '8px', display: 'block', fontWeight: '500'}}>
+                Thumbnail Image
+              </label>
+              <div style={{display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px'}}>
+                <label style={{display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 15px', background: COLORS.gray100, border: `2px dashed ${COLORS.gray200}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', color: COLORS.gray500, flex: 1}}>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={(e) => handleImageUpload(e, setVideoForm, 'thumbnail')}
+                    style={{display: 'none'}}
+                  />
+                  <Upload size={18} />
+                  {videoForm.thumbnail ? 'Change Thumbnail' : 'Upload Thumbnail'}
+                </label>
+                {videoForm.thumbnail && (
+                  <button 
+                    onClick={() => setVideoForm({...videoForm, thumbnail: ''})}
+                    style={{background: 'none', border: 'none', color: COLORS.red, cursor: 'pointer', fontSize: '13px', padding: '8px'}}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              
+              {videoForm.thumbnail && (
+                <div style={{marginTop: '10px', marginBottom: '10px'}}>
+                  <img 
+                    src={videoForm.thumbnail} 
+                    alt="Thumbnail preview" 
+                    style={{width: '100%', height: '120px', objectFit: 'cover', borderRadius: '8px', border: `1px solid ${COLORS.gray200}`}} 
+                  />
+                </div>
+              )}
+              
+              <p style={{fontSize: '12px', color: COLORS.gray400, margin: 0}}>
+                Optional: Upload a custom thumbnail (Max 2MB). If left empty, YouTube thumbnail will be used.
+              </p>
+            </div>
+
+            <button style={{background: COLORS.sage, color: COLORS.white, border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', width: '100%'}} onClick={handleAddVideo}>
+              Add to Hub
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showModal === 'resource' && (
+        <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}} onClick={() => setShowModal(null)}>
+          <div style={{background: COLORS.white, padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto'}} onClick={e => e.stopPropagation()}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px'}}>
+              <h3 style={{color: COLORS.gray800}}>Add Resource</h3>
+              <button onClick={() => setShowModal(null)} style={{background: 'none', border: 'none', cursor: 'pointer', color: COLORS.gray400}}>
+                <X size={24}/>
+              </button>
+            </div>
+            <input 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} 
+              placeholder="Title" 
+              value={resourceForm.title}
+              onChange={e => setResourceForm({...resourceForm, title: e.target.value})} 
+            />
+            <input 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} 
+              placeholder="URL" 
+              value={resourceForm.url}
+              onChange={e => setResourceForm({...resourceForm, url: e.target.value})} 
+            />
+            <select 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} 
+              value={resourceForm.category}
+              onChange={e => setResourceForm({...resourceForm, category: e.target.value})}
+            >
+              {RESOURCE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            
+            <div style={{marginBottom: '20px'}}>
+              <label style={{fontSize: '14px', color: COLORS.gray500, marginBottom: '8px', display: 'block', fontWeight: '500'}}>
+                Thumbnail Image
+              </label>
+              <div style={{display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px'}}>
+                <label style={{display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 15px', background: COLORS.gray100, border: `2px dashed ${COLORS.gray200}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', color: COLORS.gray500, flex: 1}}>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={(e) => handleImageUpload(e, setResourceForm, 'thumbnail')}
+                    style={{display: 'none'}}
+                  />
+                  <Upload size={18} />
+                  {resourceForm.thumbnail ? 'Change Thumbnail' : 'Upload Thumbnail'}
+                </label>
+                {resourceForm.thumbnail && (
+                  <button 
+                    onClick={() => setResourceForm({...resourceForm, thumbnail: ''})}
+                    style={{background: 'none', border: 'none', color: COLORS.red, cursor: 'pointer', fontSize: '13px', padding: '8px'}}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              
+              {resourceForm.thumbnail && (
+                <div style={{marginTop: '10px', marginBottom: '10px'}}>
+                  <img 
+                    src={resourceForm.thumbnail} 
+                    alt="Thumbnail preview" 
+                    style={{width: '100%', height: '120px', objectFit: 'cover', borderRadius: '8px', border: `1px solid ${COLORS.gray200}`}} 
+                  />
+                </div>
+              )}
+              
+              <p style={{fontSize: '12px', color: COLORS.gray400, margin: 0}}>
+                Optional: Upload a thumbnail image (Max 2MB). If left empty, a default icon will be shown.
+              </p>
+            </div>
+
+            <button style={{background: COLORS.sage, color: COLORS.white, border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', width: '100%'}} onClick={handleAddResource}>
+              Save Resource
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Dashboard;
