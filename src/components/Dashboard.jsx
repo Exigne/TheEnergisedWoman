@@ -4,6 +4,10 @@ import {
   Trash2, Hash, Send, MessageCircle, Heart, PlayCircle, Image as ImageIcon
 } from 'lucide-react';
 
+// CLOUDINARY CONFIG
+const CLOUDINARY_CLOUD_NAME = 'dyitrwe5h';
+const CLOUDINARY_UPLOAD_PRESET = 'wellness_profile_pics';
+
 // COLOR PALETTE
 const COLORS = {
   transparent: 'rgba(0, 0, 0, 0)',
@@ -58,7 +62,7 @@ const Dashboard = () => {
         setProfileForm({
           firstName: userData.firstName || '',
           lastName: userData.lastName || '',
-          profilePic: userData.profilePic || ''
+          profilePick: userData.profilePic || ''
         });
         setImageError(false);
         loadAllData();
@@ -125,7 +129,27 @@ const Dashboard = () => {
     );
   };
 
-  const handleImageUpload = (event, formSetter, field) => {
+  // CLOUDINARY UPLOAD FUNCTION
+  const uploadToCloudinary = async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+    
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!res.ok) {
+      throw new Error('Upload failed');
+    }
+    
+    const data = await res.json();
+    return data.secure_url;
+  };
+
+  // UPDATED: Upload to Cloudinary instead of base64
+  const handleImageUpload = async (event, formSetter, field) => {
     const file = event.target.files[0];
     if (!file) return;
 
@@ -140,21 +164,21 @@ const Dashboard = () => {
     }
 
     setUploadingImage(true);
-    const reader = new FileReader();
-    reader.onload = (e) => {
+    try {
+      const imageUrl = await uploadToCloudinary(file);
+      
       if (field === 'profilePic') {
-        setProfileForm(prev => ({...prev, profilePic: e.target.result}));
+        setProfileForm(prev => ({...prev, profilePic: imageUrl}));
       } else if (field === 'thumbnail') {
-        setVideoForm(prev => ({...prev, thumbnail: e.target.result}));
+        setVideoForm(prev => ({...prev, thumbnail: imageUrl}));
       }
       setImageError(false);
+    } catch (err) {
+      console.error('Upload error:', err);
+      alert('Failed to upload image. Please try again.');
+    } finally {
       setUploadingImage(false);
-    };
-    reader.onerror = () => {
-      alert('Failed to read image');
-      setUploadingImage(false);
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   const handleAuth = async (e) => {
@@ -221,7 +245,6 @@ const Dashboard = () => {
       ? `${profileForm.firstName} ${profileForm.lastName}`.trim() 
       : (user?.displayName || user?.email?.split('@')[0] || 'Anonymous');
     
-    // Optimistic post - shows immediately
     const optimisticPost = {
       id: 'temp-' + Date.now(),
       title: postForm.title,
@@ -235,16 +258,13 @@ const Dashboard = () => {
       _optimistic: true
     };
     
-    // Add to top of list immediately (instant feedback)
     setDiscussions(prev => [optimisticPost, ...prev]);
     setPostForm({ title: '', content: '', category: 'General' });
     
-    // If creating from modal, close it
     if (showModal === 'post') {
       setShowModal(null);
     }
     
-    // Background API sync
     try {
       const res = await fetch('/.netlify/functions/database?type=discussion', {
         method: 'POST',
@@ -260,7 +280,6 @@ const Dashboard = () => {
       
       if (res.ok) {
         const newPost = await res.json();
-        // Replace optimistic with real post (preserves ID)
         setDiscussions(prev => prev.map(p => 
           p.id === optimisticPost.id ? newPost : p
         ));
@@ -269,7 +288,6 @@ const Dashboard = () => {
       }
     } catch (err) { 
       alert('Failed to save post - it will disappear on refresh');
-      // Remove optimistic post on error
       setDiscussions(prev => prev.filter(p => p.id !== optimisticPost.id));
     }
   };
@@ -278,26 +296,21 @@ const Dashboard = () => {
   const handleLikePost = async (postId) => {
     if (!user?.id) return;
     
-    // Get current state
     const targetPost = selectedPost?.id === postId ? selectedPost : discussions.find(d => d.id === postId);
     const isCurrentlyLiked = targetPost?.likes?.includes(user.id);
     
-    // Optimistic update - calculate new likes immediately
     const newLikes = isCurrentlyLiked 
       ? (targetPost.likes || []).filter(id => id !== user.id)
       : [...(targetPost.likes || []), user.id];
     
-    // Update selectedPost if viewing it
     if (selectedPost && selectedPost.id === postId) {
       setSelectedPost({...selectedPost, likes: newLikes});
     }
     
-    // Update discussions list
     setDiscussions(prev => prev.map(d => 
       d.id === postId ? {...d, likes: newLikes} : d
     ));
     
-    // Background API sync (silent)
     try {
       const res = await fetch('/.netlify/functions/database?type=likePost', {
         method: 'POST',
@@ -307,7 +320,6 @@ const Dashboard = () => {
       
       if (!res.ok) throw new Error('Failed to like');
       
-      // Optional: sync with server response to ensure consistency
       const updatedPost = await res.json();
       if (selectedPost && selectedPost.id === postId) {
         setSelectedPost(updatedPost);
@@ -317,7 +329,6 @@ const Dashboard = () => {
       ));
     } catch (err) { 
       console.error('Like error:', err);
-      // Revert on error
       loadAllData();
     }
   };
@@ -330,16 +341,14 @@ const Dashboard = () => {
       ? `${profileForm.firstName} ${profileForm.lastName}`.trim() 
       : (user.displayName || user.email.split('@')[0]);
     
-    // Create optimistic comment
     const optimisticComment = {
       text: commentText,
       author: authorName,
       authorProfilePic: profileForm.profilePic,
       timestamp: new Date().toISOString(),
-      _optimistic: true // Flag for styling if needed
+      _optimistic: true
     };
     
-    // Update selected post immediately (instant feedback)
     const updatedPost = {
       ...selectedPost,
       comments: [...(selectedPost.comments || []), optimisticComment]
@@ -350,10 +359,8 @@ const Dashboard = () => {
       d.id === selectedPost.id ? updatedPost : d
     ));
     
-    // Clear input immediately
     setCommentText('');
     
-    // Background API sync
     try {
       const res = await fetch('/.netlify/functions/database?type=addComment', {
         method: 'POST',
@@ -378,7 +385,6 @@ const Dashboard = () => {
     } catch (err) {
       console.error('Comment error:', err);
       alert('Failed to save comment. It may disappear on refresh.');
-      // Remove optimistic comment on error
       setSelectedPost(prev => ({
         ...prev,
         comments: prev.comments.filter(c => !c._optimistic)
