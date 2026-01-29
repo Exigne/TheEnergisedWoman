@@ -954,7 +954,7 @@ const Dashboard = () => {
                           boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
                           transition: 'all 0.3s ease'
                         }}
-                        onClick={() => {setSelectedResource(r); setShowModal('resourceDetail');}}
+                        onClick={() => window.open(r.url, '_blank', 'noopener,noreferrer')}  // CHANGED: Direct open in new tab
                         onMouseEnter={(e) => {
                           e.currentTarget.style.transform = 'translateY(-4px)';
                           e.currentTarget.style.boxShadow = '0 12px 24px rgba(0, 0, 0, 0.12)';
@@ -1017,7 +1017,7 @@ const Dashboard = () => {
                             )}
                           </div>
                           <p style={{color: COLORS.gray500, fontSize: '13px', margin: '0', display: 'flex', alignItems: 'center', gap: '6px'}}>
-                            <Link2 size={12} /> Click to view
+                            <ExternalLink size={12} /> Click to open
                           </p>
                         </div>
                       </div>
@@ -1191,90 +1191,6 @@ const Dashboard = () => {
                 <p style={{color: COLORS.gray600, lineHeight: '1.6', margin: 0}}>{selectedVideo.description}</p>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Resource Detail Modal - In app with iframe */}
-      {showModal === 'resourceDetail' && selectedResource && (
-        <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px'}} onClick={() => {setShowModal(null); setSelectedResource(null);}}>
-          <div style={{background: COLORS.white, borderRadius: '20px', width: '100%', maxWidth: '900px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.25)'}} onClick={e => e.stopPropagation()}>
-            {selectedResource.thumbnail && (
-              <div style={{
-                width: '100%',
-                height: '200px',
-                background: '#000',
-                position: 'relative'
-              }}>
-                <img 
-                  src={selectedResource.thumbnail} 
-                  alt={selectedResource.title}
-                  style={{width: '100%', height: '100%', objectFit: 'cover'}}
-                />
-                <div style={{
-                  position: 'absolute',
-                  top: '20px',
-                  left: '20px',
-                  background: 'rgba(255,255,255,0.95)',
-                  padding: '6px 16px',
-                  borderRadius: '20px',
-                  fontSize: '12px',
-                  fontWeight: 'bold',
-                  color: COLORS.sage,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px'
-                }}>
-                  {selectedResource.category}
-                </div>
-              </div>
-            )}
-            
-            <div style={{padding: '30px', borderBottom: `1px solid ${COLORS.gray200}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-              <div style={{flex: 1}}>
-                <h2 style={{margin: '0 0 8px 0', color: COLORS.gray800, fontSize: '24px', fontWeight: 'bold'}}>{selectedResource.title}</h2>
-                <p style={{margin: 0, color: COLORS.gray500, fontSize: '14px'}}>External Resource • {selectedResource.category}</p>
-              </div>
-              <button onClick={() => {setShowModal(null); setSelectedResource(null);}} style={{background: 'none', border: 'none', cursor: 'pointer', color: COLORS.gray400, padding: '8px'}}>
-                <X size={28}/>
-              </button>
-            </div>
-
-            <div style={{flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden'}}>
-              <div style={{flex: 1, overflow: 'hidden', background: COLORS.white}}>
-                <iframe 
-                  src={selectedResource.url}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    border: 'none',
-                    display: 'block'
-                  }}
-                  title={selectedResource.title}
-                />
-              </div>
-              
-              <div style={{padding: '20px', borderTop: `1px solid ${COLORS.gray200}`, background: COLORS.gray50, display: 'flex', justifyContent: 'center', gap: '10px', alignItems: 'center'}}>
-                <button 
-                  onClick={() => window.open(selectedResource.url, '_blank')}
-                  style={{
-                    background: COLORS.sage, 
-                    color: COLORS.white, 
-                    border: 'none', 
-                    padding: '12px 24px', 
-                    borderRadius: '12px', 
-                    fontWeight: 'bold', 
-                    cursor: 'pointer', 
-                    display: 'inline-flex', 
-                    alignItems: 'center', 
-                    gap: '10px',
-                    fontSize: '14px'
-                  }}
-                >
-                  <ExternalLink size={18} />
-                  Open in New Tab
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}
