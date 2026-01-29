@@ -5,7 +5,7 @@ import {
   ExternalLink, Link2
 } from 'lucide-react';
 
-// CLOUDINARY CONFIG
+// CLOUDINARY CONFIG (kept for profile pics and video thumbnails if needed)
 const CLOUDINARY_CLOUD_NAME = 'dyitrwe5h';
 const CLOUDINARY_UPLOAD_PRESET = 'wellness_profile_pics';
 
@@ -131,6 +131,45 @@ const Dashboard = () => {
     return data.secure_url;
   };
 
+  // NEW: Convert file to Base64 for database storage
+  const fileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  // NEW: Handle resource thumbnail upload as Base64 (stores in Neon.tech)
+  const handleResourceImageUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Image must be smaller than 2MB (database storage limit)');
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      // Convert to base64 for direct database storage
+      const base64String = await fileToBase64(file);
+      setResourceForm(prev => ({...prev, thumbnail: base64String}));
+      setImageError(false);
+    } catch (err) {
+      console.error('Conversion error:', err);
+      alert('Failed to process image. Please try again.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const handleImageUpload = async (event, formSetter, field) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -154,9 +193,8 @@ const Dashboard = () => {
       } else if (field === 'thumbnail') {
         if (formSetter === setVideoForm) {
           setVideoForm(prev => ({...prev, thumbnail: imageUrl}));
-        } else if (formSetter === setResourceForm) {
-          setResourceForm(prev => ({...prev, thumbnail: imageUrl}));
         }
+        // Note: Resources now use handleResourceImageUpload instead
       }
       setImageError(false);
     } catch (err) {
@@ -424,7 +462,7 @@ const Dashboard = () => {
           title: resourceForm.title,
           url: resourceForm.url,
           category: resourceForm.category,
-          thumbnail: resourceForm.thumbnail
+          thumbnail: resourceForm.thumbnail // This is now Base64, stored directly in Neon
         })
       });
       
@@ -1293,7 +1331,7 @@ const Dashboard = () => {
                 )}
               </div>
               <p style={{fontSize: '11px', color: COLORS.gray400, marginTop: '5px'}}>
-                Max 2MB. Stores in database.
+                Max 2MB. Stores in Cloudinary.
               </p>
             </div>
 
@@ -1439,11 +1477,11 @@ const Dashboard = () => {
                   <input 
                     type="file" 
                     accept="image/*" 
-                    onChange={(e) => handleImageUpload(e, setResourceForm, 'thumbnail')}
+                    onChange={handleResourceImageUpload}  // Now uses Base64 conversion for database storage
                     style={{display: 'none'}}
                   />
                   <Upload size={18} />
-                  {resourceForm.thumbnail ? 'Change Thumbnail' : 'Upload Thumbnail'}
+                  {uploadingImage ? 'Processing...' : resourceForm.thumbnail ? 'Change Thumbnail' : 'Upload Thumbnail'}
                 </label>
                 {resourceForm.thumbnail && (
                   <button 
@@ -1466,7 +1504,7 @@ const Dashboard = () => {
               )}
               
               <p style={{fontSize: '12px', color: COLORS.gray400, margin: 0}}>
-                Optional: Upload a thumbnail image (Max 2MB). If left empty, a default icon will be shown.
+                Stores directly in database (Base64). Max 2MB recommended.
               </p>
             </div>
 
