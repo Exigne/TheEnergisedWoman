@@ -1,15 +1,17 @@
 const { Pool } = require('pg');
 
-let pool;
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+  max: 2,
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 2000,
+});
 
-try {
-  pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
-  });
-} catch (err) {
-  console.error('Failed to initialize database pool:', err);
-}
+// Optional: Keep connection warm
+setInterval(async () => {
+  try { await pool.query('SELECT 1'); } catch (e) {}
+}, 60000);
 
 exports.handler = async (event) => {
   const headers = {
@@ -85,6 +87,7 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'GET') {
       let query = '';
       if (type === 'discussions') {
+        // FIXED: Re-include author_profile_pic (now it's just a small URL, not base64)
         query = 'SELECT id, author, author_profile_pic, title, content, category, likes, comments, created_at FROM discussions ORDER BY created_at DESC LIMIT 20';
       } else if (type === 'video') {
         query = 'SELECT id, title, url, description, thumbnail, comments, created_at FROM videos ORDER BY created_at DESC';
@@ -126,8 +129,6 @@ exports.handler = async (event) => {
         
         const userData = userResult.rows[0];
         const authorId = userData.id;
-        
-        // FIXED: Use snake_case column names (last_name not lastName)
         const authorName = (userData.first_name && userData.last_name)
           ? `${userData.first_name} ${userData.last_name}`.trim()
           : (userData.display_name || 'Anonymous');
@@ -166,7 +167,7 @@ exports.handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
       }
 
-      // Like/unlike a post
+      // Like/unlike a post - OPTIMIZED single query
       if (type === 'likePost') {
         const { postId, userId } = data;
         
@@ -174,29 +175,21 @@ exports.handler = async (event) => {
           return { statusCode: 400, headers, body: JSON.stringify({ message: 'Missing postId or userId' }) };
         }
 
-        const checkRes = await pool.query(
-          'SELECT likes FROM discussions WHERE id = $1',
-          [postId]
+        const res = await pool.query(
+          `UPDATE discussions 
+           SET likes = CASE 
+             WHEN likes @> $2::jsonb THEN likes - $3
+             ELSE likes || $2
+           END
+           WHERE id = $1
+           RETURNING *`,
+          [postId, JSON.stringify([userId]), userId]
         );
-
-        if (checkRes.rows.length === 0) {
+        
+        if (res.rows.length === 0) {
           return { statusCode: 404, headers, body: JSON.stringify({ message: 'Post not found' }) };
         }
-
-        const currentLikes = checkRes.rows[0].likes || [];
-        let newLikes;
-
-        if (currentLikes.includes(userId)) {
-          newLikes = currentLikes.filter(id => id !== userId);
-        } else {
-          newLikes = [...currentLikes, userId];
-        }
-
-        const res = await pool.query(
-          'UPDATE discussions SET likes = $1 WHERE id = $2 RETURNING *',
-          [JSON.stringify(newLikes), postId]
-        );
-
+        
         return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
       }
       
