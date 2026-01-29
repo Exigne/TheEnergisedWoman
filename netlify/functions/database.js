@@ -12,6 +12,16 @@ try {
 }
 
 exports.handler = async (event) => {
+  // NEW: Handle scheduled warmup ping (prevents cold starts)
+  if (event.type === 'schedule' || event.httpMethod === null) {
+    console.log('Function warmup ping received at', new Date().toISOString());
+    return { 
+      statusCode: 200, 
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'warm' }) 
+    };
+  }
+
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Content-Type': 'application/json',
@@ -85,11 +95,12 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'GET') {
       let query = '';
       if (type === 'discussions') {
-        query = 'SELECT * FROM discussions ORDER BY created_at DESC';
+        // OPTIMIZED: Limit to 20 most recent, select specific columns for speed
+        query = 'SELECT id, author, author_profile_pic, title, content, category, likes, comments, created_at FROM discussions ORDER BY created_at DESC LIMIT 20';
       } else if (type === 'video') {
         query = 'SELECT id, title, url, description, thumbnail, comments, created_at FROM videos ORDER BY created_at DESC';
       } else if (type === 'resources') {
-        query = 'SELECT * FROM resources ORDER BY created_at DESC';
+        query = 'SELECT id, title, url, category, created_at FROM resources ORDER BY created_at DESC';
       } else {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid type' }) };
       }
@@ -101,7 +112,6 @@ exports.handler = async (event) => {
     // --- POST DATA ---
     if (event.httpMethod === 'POST') {
       if (type === 'discussion') {
-        // UPDATED: Extract authorProfilePic from request
         const { title, content, category, userEmail, authorProfilePic } = data;
         
         if (!title || !content || !category || !userEmail) {
@@ -112,7 +122,6 @@ exports.handler = async (event) => {
           };
         }
         
-        // Get user info from email
         const userResult = await pool.query(
           'SELECT id, first_name, last_name, display_name FROM users WHERE email = $1', 
           [userEmail]
@@ -128,13 +137,10 @@ exports.handler = async (event) => {
         
         const userData = userResult.rows[0];
         const authorId = userData.id;
-        
-        // Create author name from first_name + last_name, or fall back to display_name
         const authorName = (userData.first_name && userData.last_name)
           ? `${userData.first_name} ${userData.last_name}`.trim()
           : (userData.display_name || 'Anonymous');
         
-        // UPDATED: Insert with author_profile_pic
         const res = await pool.query(
           `INSERT INTO discussions (author_id, author, author_profile_pic, title, content, category, comments, likes, created_at) 
            VALUES ($1, $2, $3, $4, $5, $6, '[]'::jsonb, '[]'::jsonb, NOW()) RETURNING *`,
@@ -145,14 +151,12 @@ exports.handler = async (event) => {
 
       // Add comment to discussion
       if (type === 'addComment') {
-        // UPDATED: Extract authorProfilePic from request
         const { postId, comment, author, authorProfilePic } = data;
         
         if (!postId || !comment || !author) {
           return { statusCode: 400, headers, body: JSON.stringify({ message: 'Missing required fields' }) };
         }
 
-        // UPDATED: Include authorProfilePic in comment object
         const newComment = {
           text: comment,
           author: author,
@@ -179,7 +183,6 @@ exports.handler = async (event) => {
           return { statusCode: 400, headers, body: JSON.stringify({ message: 'Missing postId or userId' }) };
         }
 
-        // Check if user already liked the post
         const checkRes = await pool.query(
           'SELECT likes FROM discussions WHERE id = $1',
           [postId]
@@ -193,10 +196,8 @@ exports.handler = async (event) => {
         let newLikes;
 
         if (currentLikes.includes(userId)) {
-          // Unlike - remove userId
           newLikes = currentLikes.filter(id => id !== userId);
         } else {
-          // Like - add userId
           newLikes = [...currentLikes, userId];
         }
 
