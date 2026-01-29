@@ -488,14 +488,13 @@ const Dashboard = () => {
             {loadingData && <div style={{gridColumn: '1/-1', textAlign: 'center', color: COLORS.gray500}}>Loading videos...</div>}
             
             {!loadingData && videos.length === 0 && (
-              <div style={{gridColumn: '1/-1', textAlign: 'center', color: COLORS.gray500', padding: '40px'}}>
+              <div style={{gridColumn: '1/-1', textAlign: 'center', color: COLORS.gray500, padding: '40px'}}>
                 No videos yet. {isAdmin && 'Click "Add Video" to add one!'}
               </div>
             )}
             
             {videos.map(v => {
               const videoId = getVideoId(v.url);
-              // FIXED: Removed space in thumbnail URL
               const thumbnailUrl = v.thumbnail || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
               
               return (
@@ -708,7 +707,6 @@ const Dashboard = () => {
               {/* VIDEO PLAYER */}
               {showModal === 'playVideo' && selectedVideo && (
                 <div style={{width: '100%', height: '500px'}}>
-                   {/* FIXED: Removed space in embed URL */}
                    <iframe 
                      width="100%" 
                      height="100%" 
