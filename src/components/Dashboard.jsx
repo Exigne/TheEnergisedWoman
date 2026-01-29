@@ -1,4 +1,4 @@
- import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, LogOut, Crown, Plus, Video, Upload, FileText, User, 
   Trash2, Hash, Send, MessageCircle, Heart, PlayCircle, Image as ImageIcon,
@@ -548,24 +548,6 @@ const Dashboard = () => {
 
   return (
     <div style={{minHeight: '100vh', background: COLORS.gray50, fontFamily: 'system-ui, sans-serif'}}>
-      <style>{`
-        .post-card {
-          transition: all 0.3s ease;
-        }
-        .post-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
-          border-color: ${COLORS.sage};
-        }
-        .resource-card {
-          transition: all 0.3s ease;
-        }
-        .resource-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
-        }
-      `}</style>
-      
       <header style={{background: COLORS.white, height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 40px', borderBottom: `1px solid ${COLORS.gray200}`, position: 'sticky', top: 0, zIndex: 100}}>
         <div style={{display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold', fontSize: '20px', color: COLORS.gray800}}>
           <Crown color={COLORS.sage} /> 
@@ -745,7 +727,7 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Community Tab - Now with nice card styling */}
+        {/* Community Tab with Card Styling */}
         {activeTab === 'community' && (
           <div style={{display: 'grid', gridTemplateColumns: '240px 1fr', gap: '40px'}}>
             <aside style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
@@ -776,12 +758,11 @@ const Dashboard = () => {
                   .map(post => (
                     <div 
                       key={post.id} 
-                      className="post-card"
                       style={{
                         background: COLORS.white, 
                         padding: '28px', 
                         borderRadius: '16px', 
-                        border: `1px solid ${COLORS.gray200}`, 
+                        border: `1px solid ${hoveredPost === post.id ? COLORS.sage : COLORS.gray200}`, 
                         cursor: 'pointer',
                         boxShadow: hoveredPost === post.id ? '0 12px 24px rgba(0, 0, 0, 0.1)' : '0 2px 8px rgba(0, 0, 0, 0.04)',
                         transform: hoveredPost === post.id ? 'translateY(-4px)' : 'none',
@@ -861,12 +842,9 @@ const Dashboard = () => {
                             gap: '6px', 
                             color: post.likes?.includes(user.id) ? COLORS.sage : COLORS.gray500, 
                             padding: '4px 8px',
-                            borderRadius: '6px',
-                            transition: 'all 0.2s'
+                            borderRadius: '6px'
                           }} 
                           onClick={(e) => { e.stopPropagation(); handleLikePost(post.id); }}
-                          onMouseEnter={(e) => e.target.style.background = 'rgba(0,0,0,0.03)'}
-                          onMouseLeave={(e) => e.target.style.background = 'transparent'}
                         >
                           <Heart 
                             size={16} 
@@ -885,7 +863,7 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Resources Tab - Grid Layout like Video Hub */}
+        {/* Resources Tab */}
         {activeTab === 'resources' && (
           <div style={{display: 'flex', flexDirection: 'column', gap: '25px'}}>
             <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '20px', alignItems: 'center'}}>
@@ -920,16 +898,24 @@ const Dashboard = () => {
                     .map(r => (
                       <div 
                         key={r.id} 
-                        className="resource-card"
                         style={{
                           background: COLORS.white, 
                           borderRadius: '16px', 
                           overflow: 'hidden', 
                           border: `1px solid ${COLORS.gray200}`, 
                           cursor: 'pointer',
-                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)'
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+                          transition: 'all 0.3s ease'
                         }}
                         onClick={() => {setSelectedResource(r); setShowModal('resourceDetail');}}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-4px)';
+                          e.currentTarget.style.boxShadow = '0 12px 24px rgba(0, 0, 0, 0.12)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.04)';
+                        }}
                       >
                         <div style={{
                           position: 'relative', 
@@ -992,7 +978,7 @@ const Dashboard = () => {
                 </div>
                 
                 {resources.filter(r => r.category === activeResourceCategory).length === 0 && (
-                  <div style={{textAlign: 'center', padding: '60px', color: COLORS.gray500, background: COLORS.white, borderRadius: '16px', border: `1px solid ${COLORS.gray200}'}}>
+                  <div style={{textAlign: 'center', padding: '60px', color: COLORS.gray500, background: COLORS.white, borderRadius: '16px', border: `1px solid ${COLORS.gray200}`}}>
                     <FileText size={48} color={COLORS.gray200} style={{marginBottom: '16px'}} />
                     <p>No resources in this category yet.</p>
                     {isAdmin && <p style={{fontSize: '14px', marginTop: '8px'}}>Add one!</p>}
@@ -1004,7 +990,7 @@ const Dashboard = () => {
         )}
       </main>
 
-      {/* Modals */}
+      {/* Post Modal */}
       {showModal === 'post' && (
         <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}} onClick={() => setShowModal(null)}>
           <div style={{background: COLORS.white, padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px'}} onClick={e => e.stopPropagation()}>
@@ -1042,10 +1028,11 @@ const Dashboard = () => {
         </div>
       )}
 
+      {/* Post Detail Modal */}
       {showModal === 'postDetail' && selectedPost && (
         <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px'}} onClick={() => {setShowModal(null); setSelectedPost(null);}}>
           <div style={{background: COLORS.white, borderRadius: '20px', width: '100%', maxWidth: '700px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden'}} onClick={e => e.stopPropagation()}>
-            <div style={{padding: '30px', borderBottom: `1px solid ${COLORS.gray200}'}}>
+            <div style={{padding: '30px', borderBottom: `1px solid ${COLORS.gray200}`}}>
               <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
                 <div style={{flex: 1}}>
                   <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px'}}>
@@ -1210,6 +1197,7 @@ const Dashboard = () => {
         </div>
       )}
 
+      {/* Profile Modal */}
       {showModal === 'profile' && (
         <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}} onClick={() => setShowModal(null)}>
           <div style={{background: COLORS.white, padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px'}} onClick={e => e.stopPropagation()}>
@@ -1292,6 +1280,7 @@ const Dashboard = () => {
         </div>
       )}
 
+      {/* Add Video Modal */}
       {showModal === 'addVideo' && (
         <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}} onClick={() => setShowModal(null)}>
           <div style={{background: COLORS.white, padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto'}} onClick={e => e.stopPropagation()}>
@@ -1367,6 +1356,7 @@ const Dashboard = () => {
         </div>
       )}
 
+      {/* Add Resource Modal */}
       {showModal === 'resource' && (
         <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}} onClick={() => setShowModal(null)}>
           <div style={{background: COLORS.white, padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto'}} onClick={e => e.stopPropagation()}>
