@@ -109,25 +109,77 @@ const Dashboard = () => {
     }
   };
 
-  const openVideoPopup = (url) => {
-    const videoId = getVideoId(url);
-    if (!videoId) {
-      window.open(url, '_blank');
-      return;
-    }
-    
-    const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&modestbranding=1&rel=0&showinfo=0&controls=1`;
-    const width = 800;
-    const height = 450;
-    const left = (window.screen.width - width) / 2;
-    const top = (window.screen.height - height) / 2;
-    
-    window.open(
-      embedUrl, 
-      'videoPlayer', 
-      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no,status=no,toolbar=no,menubar=no,location=no`
-    );
-  };
+// Add this popup function near your openVideoPopup function
+const openResourcePopup = (url) => {
+  const width = 900;
+  const height = 600;
+  const left = (window.screen.width - width) / 2;
+  const top = (window.screen.height - height) / 2;
+  
+  window.open(
+    url, 
+    'resourceWindow', 
+    `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes,toolbar=yes,menubar=yes,location=yes`
+  );
+};
+
+// UPDATED RESOURCES SECTION:
+{activeTab === 'resources' && (
+  <div style={{display: 'grid', gridTemplateColumns: '240px 1fr', gap: '40px'}}>
+    <aside style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
+      {RESOURCE_CATEGORIES.map(cat => (
+        <button 
+          key={cat} 
+          onClick={() => setActiveResourceCategory(cat)} 
+          style={activeResourceCategory === cat ? 
+            {textAlign: 'left', padding: '12px', background: 'rgba(179, 197, 151, 0.2)', border: 'none', borderRadius: '10px', color: COLORS.sage, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px'} : 
+            {textAlign: 'left', padding: '12px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '10px', color: COLORS.gray500, display: 'flex', alignItems: 'center', gap: '10px'}
+          }
+        >
+          <Hash size={14} /> {cat}
+        </button>
+      ))}
+    </aside>
+    <section>
+      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px'}}>
+        <h2 style={{color: COLORS.gray800}}>{activeResourceCategory} Resources</h2>
+        {isAdmin && (
+          <button style={{background: COLORS.sage, color: COLORS.white, border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'}} onClick={() => setShowModal('resource')}>
+            <Plus size={18}/> Add Resource
+          </button>
+        )}
+      </div>
+      <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+        {resources
+          .filter(r => r.category === activeResourceCategory)
+          .map(r => (
+            <div key={r.id} style={{background: COLORS.white, padding: '20px', borderRadius: '12px', border: `1px solid ${COLORS.gray200}`, display: 'flex', alignItems: 'center', gap: '15px'}}>
+              <FileText color={COLORS.sage} />
+              <div style={{flex: 1}}>
+                <h4 style={{margin: 0, color: COLORS.gray800}}>{r.title}</h4>
+              </div>
+              <div style={{display: 'flex', gap: '8px'}}>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); openResourcePopup(r.url); }} 
+                  style={{background: 'rgba(179, 197, 151, 0.2)', color: COLORS.sage, border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px'}}
+                >
+                  Open
+                </button>
+                {isAdmin && (
+                  <button 
+                    onClick={() => handleDelete(r.id, 'resources')} 
+                    style={{background: 'none', border: 'none', color: COLORS.gray400, cursor: 'pointer'}}
+                  >
+                    <Trash2 size={16}/>
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+      </div>
+    </section>
+  </div>
+)}
 
   // CLOUDINARY UPLOAD FUNCTION
   const uploadToCloudinary = async (file) => {
