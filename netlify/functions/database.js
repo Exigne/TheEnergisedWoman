@@ -101,7 +101,8 @@ exports.handler = async (event) => {
     // --- POST DATA ---
     if (event.httpMethod === 'POST') {
       if (type === 'discussion') {
-        const { title, content, category, userEmail } = data;
+        // UPDATED: Extract authorProfilePic from request
+        const { title, content, category, userEmail, authorProfilePic } = data;
         
         if (!title || !content || !category || !userEmail) {
           return { 
@@ -133,26 +134,29 @@ exports.handler = async (event) => {
           ? `${userData.first_name} ${userData.last_name}`.trim()
           : (userData.display_name || 'Anonymous');
         
-        // Insert with BOTH author_id and author, plus empty likes array
+        // UPDATED: Insert with author_profile_pic
         const res = await pool.query(
-          `INSERT INTO discussions (author_id, author, title, content, category, comments, likes, created_at) 
-           VALUES ($1, $2, $3, $4, $5, '[]'::jsonb, '[]'::jsonb, NOW()) RETURNING *`,
-          [authorId, authorName, title, content, category]
+          `INSERT INTO discussions (author_id, author, author_profile_pic, title, content, category, comments, likes, created_at) 
+           VALUES ($1, $2, $3, $4, $5, $6, '[]'::jsonb, '[]'::jsonb, NOW()) RETURNING *`,
+          [authorId, authorName, authorProfilePic || null, title, content, category]
         );
         return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
       }
 
       // Add comment to discussion
       if (type === 'addComment') {
-        const { postId, comment, author } = data;
+        // UPDATED: Extract authorProfilePic from request
+        const { postId, comment, author, authorProfilePic } = data;
         
         if (!postId || !comment || !author) {
           return { statusCode: 400, headers, body: JSON.stringify({ message: 'Missing required fields' }) };
         }
 
+        // UPDATED: Include authorProfilePic in comment object
         const newComment = {
           text: comment,
           author: author,
+          authorProfilePic: authorProfilePic || null,
           timestamp: new Date().toISOString()
         };
 
@@ -204,7 +208,7 @@ exports.handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
       }
       
-      // FIXED: Video upload with thumbnail support
+      // Video upload with thumbnail support
       if (type === 'video') {
         const { title, url, description, thumbnail } = data;
         if (!title || !url) {
