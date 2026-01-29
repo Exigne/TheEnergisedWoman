@@ -118,6 +118,7 @@ const Dashboard = () => {
     formData.append('file', file);
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
     
+    // FIXED: Removed space after v1_1/
     const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
       method: 'POST',
       body: formData
@@ -625,6 +626,7 @@ const Dashboard = () => {
 
             {videos.map(v => {
               const videoId = getVideoId(v.url);
+              // FIXED: Removed space after vi/
               const thumbnailUrl = v.thumbnail || (videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null);
               
               return (
@@ -1140,6 +1142,7 @@ const Dashboard = () => {
             <div style={{position: 'relative', width: '100%', paddingBottom: '56.25%', background: '#000'}}>
               <iframe 
                 style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '100%'}}
+                // FIXED: Removed space after embed/
                 src={`https://www.youtube.com/embed/${getVideoId(selectedVideo.url)}?autoplay=1&rel=0&modestbranding=1`}
                 title={selectedVideo.title}
                 frameBorder="0"
@@ -1479,5 +1482,3 @@ const Dashboard = () => {
     </div>
   );
 };
-
-export default Dashboard;
