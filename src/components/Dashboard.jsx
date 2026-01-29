@@ -5,7 +5,7 @@ import {
   Link2, BookOpen, FileText, Loader
 } from 'lucide-react';
 
-// CLOUDINARY CONFIG - Verify these are correct
+// CLOUDINARY CONFIG
 const CLOUDINARY_CLOUD_NAME = 'dyitrwe5h';
 const CLOUDINARY_UPLOAD_PRESET = 'wellness_profile_pics';
 
@@ -58,7 +58,7 @@ const Dashboard = () => {
   const [imageError, setImageError] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
-  const [uploadError, setUploadError] = useState(''); // NEW: Track upload errors
+  const [uploadError, setUploadError] = useState('');
 
   // Forms
   const [postForm, setPostForm] = useState({ title: '', content: '', category: 'General' });
@@ -97,7 +97,7 @@ const Dashboard = () => {
       console.log('Discussions loaded:', dData?.length || 0);
       setDiscussions(Array.isArray(dData) ? dData : []);
       
-      // Fetch videos - FIXED: Better error handling and data validation
+      // Fetch videos
       try {
         console.log('Fetching videos...');
         const vRes = await fetch('/.netlify/functions/database?type=videos');
@@ -110,14 +110,13 @@ const Dashboard = () => {
         const vData = await vRes.json();
         console.log('Videos raw data:', vData);
         
-        // Handle different response formats
         let videoArray = [];
         if (Array.isArray(vData)) {
           videoArray = vData;
         } else if (vData && Array.isArray(vData.data)) {
           videoArray = vData.data;
         } else if (vData && typeof vData === 'object') {
-          videoArray = [vData]; // Single object wrapped
+          videoArray = [vData];
         }
         
         console.log('Processed videos:', videoArray.length);
@@ -127,7 +126,7 @@ const Dashboard = () => {
         setVideos([]);
       }
       
-      // Fetch resources - FIXED: Better data handling
+      // Fetch resources
       try {
         const rRes = await fetch('/.netlify/functions/database?type=resources');
         if (!rRes.ok) throw new Error(`HTTP ${rRes.status}`);
@@ -153,8 +152,6 @@ const Dashboard = () => {
     }
   };
 
-  // --- UTILS ---
-
   const getVideoId = (url) => {
     if (!url || typeof url !== 'string') return null;
     try {
@@ -170,20 +167,17 @@ const Dashboard = () => {
     }
   };
 
-  // --- UPLOAD LOGIC - FIXED WITH BETTER ERROR HANDLING ---
   const uploadToCloudinary = async (file) => {
-    setUploadError(''); // Clear previous errors
+    setUploadError('');
     console.log('Starting upload to Cloudinary:', file.name, file.type, file.size);
     
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
     
-    // Determine resource type
     const isImage = file.type.startsWith('image/');
     const resourceType = isImage ? 'image' : 'raw';
     
-    // FIXED: Ensure no spaces in URL
     const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`;
     console.log('Upload URL:', uploadUrl);
     
@@ -191,7 +185,6 @@ const Dashboard = () => {
       const res = await fetch(uploadUrl, {
         method: 'POST',
         body: formData,
-        // Don't set Content-Type header - browser sets it automatically with boundary
       });
       
       console.log('Cloudinary response status:', res.status);
@@ -207,9 +200,8 @@ const Dashboard = () => {
       return data.secure_url;
     } catch (err) {
       console.error('Upload fetch error:', err);
-      // Provide more specific error messages
       if (err.message.includes('Failed to fetch')) {
-        throw new Error('Network error: Check your internet connection or CORS settings in Cloudinary');
+        throw new Error('Network error: Check your internet connection or CORS settings');
       }
       throw err;
     }
@@ -217,14 +209,8 @@ const Dashboard = () => {
 
   const handleFileUpload = async (event, formSetter, field) => {
     const file = event.target.files[0];
-    if (!file) {
-      console.log('No file selected');
-      return;
-    }
+    if (!file) return;
 
-    console.log('File selected:', file.name, file.type, file.size);
-
-    // Check size (limit to 10MB)
     if (file.size > 10 * 1024 * 1024) {
       alert('File must be smaller than 10MB');
       return;
@@ -251,15 +237,13 @@ const Dashboard = () => {
       }
       alert('File uploaded successfully!');
     } catch (err) {
-      console.error('Upload error in handleFileUpload:', err);
+      console.error('Upload error:', err);
       setUploadError(err.message);
       alert('Failed to upload file: ' + err.message);
     } finally {
       setUploadingFile(false);
     }
   };
-
-  // --- DATA HANDLERS ---
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -277,7 +261,9 @@ const Dashboard = () => {
       } else {
         alert(data.message || 'Authentication failed');
       }
-    } catch (err) { alert('Connection failed.'); }
+    } catch (err) { 
+      alert('Connection failed.'); 
+    }
   };
 
   const handleUpdateProfile = async () => {
@@ -297,8 +283,12 @@ const Dashboard = () => {
         setUser(updatedUser);
         localStorage.setItem('wellnessUser', JSON.stringify(updatedUser));
         setShowModal(null);
-      } else { alert('Failed to update'); }
-    } catch (err) { alert('Failed to update'); }
+      } else { 
+        alert('Failed to update'); 
+      }
+    } catch (err) { 
+      alert('Failed to update'); 
+    }
   };
 
   const handleCreatePost = async () => {
@@ -337,7 +327,9 @@ const Dashboard = () => {
         const newPost = await res.json();
         setDiscussions(prev => prev.map(p => p.id === optimisticPost.id ? newPost : p));
       }
-    } catch (err) { loadAllData(); }
+    } catch (err) { 
+      loadAllData(); 
+    }
   };
 
   const handleLikePost = async (postId) => {
@@ -445,7 +437,9 @@ const Dashboard = () => {
         if (type === 'resource') setResources(prev => prev.filter(r => r.id !== id));
         setShowModal(null);
       }
-    } catch (err) { alert('Failed to delete'); }
+    } catch (err) { 
+      alert('Failed to delete'); 
+    }
   };
 
   const handleOpenResource = (resource) => {
@@ -470,7 +464,6 @@ const Dashboard = () => {
     );
   };
 
-  // --- LOGIN SCREEN ---
   if (!user) {
     return (
       <div style={{height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: COLORS.gray50}}>
@@ -492,7 +485,6 @@ const Dashboard = () => {
     );
   }
 
-  // --- MAIN DASHBOARD ---
   return (
     <div style={{minHeight: '100vh', background: COLORS.gray50, fontFamily: 'system-ui, sans-serif'}}>
       <header style={{background: COLORS.white, height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 40px', borderBottom: `1px solid ${COLORS.gray200}`, position: 'sticky', top: 0, zIndex: 100}}>
@@ -520,7 +512,6 @@ const Dashboard = () => {
 
       <main style={{maxWidth: '1200px', margin: '0 auto', padding: '40px 20px'}}>
         
-        {/* VIDEOS - FIXED: More defensive rendering */}
         {activeTab === 'video' && (
           <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '25px'}}>
             <div style={{gridColumn: '1/-1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px'}}>
@@ -539,9 +530,8 @@ const Dashboard = () => {
             )}
             
             {Array.isArray(videos) && videos.map((v, index) => {
-              if (!v || !v.url) return null; // Skip invalid entries
+              if (!v || !v.url) return null;
               const videoId = getVideoId(v.url);
-              // FIXED: No space in URL
               const thumbnailUrl = v.thumbnail || (videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '');
               
               return (
@@ -573,7 +563,6 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* COMMUNITY */}
         {activeTab === 'community' && (
           <div style={{display: 'grid', gridTemplateColumns: '240px 1fr', gap: '40px'}}>
             <aside>
@@ -611,7 +600,7 @@ const Dashboard = () => {
                       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px'}}>
                         <span style={{
                           fontSize: '12px', 
-                          background: 'rgba(179, 197, 197, 151, 0.15)', 
+                          background: 'rgba(179, 197, 151, 0.15)', 
                           color: COLORS.sage, 
                           padding: '6px 14px', 
                           borderRadius: '20px', 
@@ -686,7 +675,6 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* RESOURCES - FIXED WITH ERROR DISPLAY */}
         {activeTab === 'resources' && (
            <div style={{display: 'grid', gridTemplateColumns: '200px 1fr', gap: '40px'}}>
              <aside>
@@ -766,7 +754,6 @@ const Dashboard = () => {
         )}
       </main>
 
-      {/* MODALS */}
       {showModal && (
         <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}} onClick={() => setShowModal(null)}>
           <div style={{
@@ -794,7 +781,6 @@ const Dashboard = () => {
             
             <div style={{padding: showModal === 'playVideo' ? '0' : '20px', overflowY: 'auto'}}>
               
-              {/* RESOURCE DETAIL MODAL */}
               {showModal === 'resourceDetail' && selectedResource && (
                 <div style={{padding: '20px'}}>
                   {selectedResource.thumbnail && (
@@ -866,7 +852,6 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {/* ADD RESOURCE - FIXED WITH ERROR DISPLAY */}
               {showModal === 'addResource' && (
                 <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
                    {uploadError && (
@@ -880,7 +865,6 @@ const Dashboard = () => {
                      {RESOURCE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                    </select>
                    
-                   {/* File Upload Section - FIXED */}
                    <div style={{border: `2px dashed ${uploadError ? COLORS.red : COLORS.gray200}`, padding: '25px', borderRadius: '12px', textAlign: 'center', backgroundColor: COLORS.gray50}}>
                      {resourceForm.url ? (
                        <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: COLORS.sage}}>
@@ -900,7 +884,7 @@ const Dashboard = () => {
                          <label htmlFor="res-file" style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', cursor: 'pointer'}}>
                            {uploadingFile ? (
                              <>
-                               <Loader size={32} className="spin" style={{animation: 'spin 1s linear infinite'}} />
+                               <Loader size={32} style={{animation: 'spin 1s linear infinite'}} />
                                <span style={{color: COLORS.gray500}}>Uploading to Cloudinary...</span>
                              </>
                            ) : (
@@ -933,7 +917,6 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {/* POST FORM */}
               {showModal === 'post' && (
                 <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
                    <input placeholder="Title" value={postForm.title} onChange={e => setPostForm({...postForm, title: e.target.value})} style={{padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`}} />
@@ -945,7 +928,6 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {/* VIDEO FORM */}
               {showModal === 'addVideo' && (
                 <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
                    <input placeholder="Title" value={videoForm.title} onChange={e => setVideoForm({...videoForm, title: e.target.value})} style={{padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`}} />
@@ -955,7 +937,6 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {/* POST DETAIL */}
               {showModal === 'postDetail' && selectedPost && (
                 <div>
                    <div style={{display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px'}}>
@@ -985,7 +966,6 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {/* VIDEO PLAYER - FIXED URL */}
               {showModal === 'playVideo' && selectedVideo && (
                 <div style={{width: '100%', height: '500px'}}>
                    <iframe 
@@ -1000,7 +980,6 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {/* PROFILE */}
               {showModal === 'profile' && (
                 <div style={{display: 'flex', flexDirection: 'column', gap: '20px', alignItems: 'center'}}>
                    <div style={{position: 'relative'}}>
