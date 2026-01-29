@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+ import React, { useState, useEffect } from 'react';
 import { 
   X, LogOut, Crown, Plus, Video, Upload, FileText, User, 
   Trash2, Hash, Send, MessageCircle, Heart, PlayCircle, Image as ImageIcon,
@@ -47,6 +47,7 @@ const Dashboard = () => {
   const [commentText, setCommentText] = useState('');
   const [imageError, setImageError] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [hoveredPost, setHoveredPost] = useState(null);
 
   // Forms
   const [postForm, setPostForm] = useState({ title: '', content: '', category: 'General' });
@@ -547,6 +548,24 @@ const Dashboard = () => {
 
   return (
     <div style={{minHeight: '100vh', background: COLORS.gray50, fontFamily: 'system-ui, sans-serif'}}>
+      <style>{`
+        .post-card {
+          transition: all 0.3s ease;
+        }
+        .post-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+          border-color: ${COLORS.sage};
+        }
+        .resource-card {
+          transition: all 0.3s ease;
+        }
+        .resource-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+        }
+      `}</style>
+      
       <header style={{background: COLORS.white, height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 40px', borderBottom: `1px solid ${COLORS.gray200}`, position: 'sticky', top: 0, zIndex: 100}}>
         <div style={{display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold', fontSize: '20px', color: COLORS.gray800}}>
           <Crown color={COLORS.sage} /> 
@@ -726,7 +745,7 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Community Tab */}
+        {/* Community Tab - Now with nice card styling */}
         {activeTab === 'community' && (
           <div style={{display: 'grid', gridTemplateColumns: '240px 1fr', gap: '40px'}}>
             <aside style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
@@ -750,61 +769,123 @@ const Dashboard = () => {
                   <Plus size={18}/> New Post
                 </button>
               </div>
-              {discussions
-                .filter(d => activeGroup === 'All Discussions' || d.category === activeGroup)
-                .map(post => (
-                  <div 
-                    key={post.id} 
-                    style={{background: COLORS.white, padding: '25px', borderRadius: '16px', border: `1px solid ${COLORS.gray200}`, marginBottom: '20px', cursor: 'pointer'}} 
-                    onClick={() => {setSelectedPost(post); setShowModal('postDetail');}}
-                  >
-                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
-                      <span style={{fontSize: '11px', background: 'rgba(179, 197, 151, 0.2)', color: COLORS.sage, padding: '4px 12px', borderRadius: '20px', fontWeight: 'bold'}}>{post.category}</span>
-                      {isAdmin && (
-                        <button 
-                          onClick={(e) => {e.stopPropagation(); handleDelete(post.id, 'discussion');}} 
-                          style={{background: 'none', border: 'none', color: COLORS.gray200, cursor: 'pointer'}}
-                        >
-                          <Trash2 size={14}/>
-                        </button>
-                      )}
-                    </div>
-                    
-                    <div style={{display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px'}}>
-                      {renderAvatar(post.author_profile_pic, 'small')}
-                      <div>
-                        <div style={{fontWeight: '600', color: COLORS.gray800, fontSize: '14px'}}>{post.author}</div>
-                        <div style={{fontSize: '12px', color: COLORS.gray400}}>
-                          {new Date(post.created_at).toLocaleDateString()}
+              
+              <div style={{display: 'flex', flexDirection: 'column', gap: '20px'}}>
+                {discussions
+                  .filter(d => activeGroup === 'All Discussions' || d.category === activeGroup)
+                  .map(post => (
+                    <div 
+                      key={post.id} 
+                      className="post-card"
+                      style={{
+                        background: COLORS.white, 
+                        padding: '28px', 
+                        borderRadius: '16px', 
+                        border: `1px solid ${COLORS.gray200}`, 
+                        cursor: 'pointer',
+                        boxShadow: hoveredPost === post.id ? '0 12px 24px rgba(0, 0, 0, 0.1)' : '0 2px 8px rgba(0, 0, 0, 0.04)',
+                        transform: hoveredPost === post.id ? 'translateY(-4px)' : 'none',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onMouseEnter={() => setHoveredPost(post.id)}
+                      onMouseLeave={() => setHoveredPost(null)}
+                      onClick={() => {setSelectedPost(post); setShowModal('postDetail');}}
+                    >
+                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px'}}>
+                        <span style={{
+                          fontSize: '12px', 
+                          background: 'rgba(179, 197, 151, 0.15)', 
+                          color: COLORS.sage, 
+                          padding: '6px 14px', 
+                          borderRadius: '20px', 
+                          fontWeight: 'bold',
+                          letterSpacing: '0.3px'
+                        }}>
+                          {post.category}
+                        </span>
+                        {isAdmin && (
+                          <button 
+                            onClick={(e) => {e.stopPropagation(); handleDelete(post.id, 'discussion');}} 
+                            style={{background: 'none', border: 'none', color: COLORS.gray200, cursor: 'pointer'}}
+                          >
+                            <Trash2 size={14}/>
+                          </button>
+                        )}
+                      </div>
+                      
+                      <div style={{display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px'}}>
+                        {renderAvatar(post.author_profile_pic, 'small')}
+                        <div>
+                          <div style={{fontWeight: '600', color: COLORS.gray800, fontSize: '15px'}}>{post.author}</div>
+                          <div style={{fontSize: '13px', color: COLORS.gray400, marginTop: '2px'}}>
+                            {new Date(post.created_at).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <h3 style={{color: COLORS.gray800, marginTop: 0}}>{post.title}</h3>
-                    <p style={{color: COLORS.gray500, fontSize: '14px', lineHeight: '1.5', marginTop: '8px'}}>{post.content}</p>
-                    
-                    <div style={{marginTop: '15px', display: 'flex', gap: '20px', fontSize: '13px', color: COLORS.gray400, alignItems: 'center'}}>
-                      <button 
-                        style={{background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: post.likes?.includes(user.id) ? COLORS.sage : COLORS.gray400, padding: 0}} 
-                        onClick={(e) => { e.stopPropagation(); handleLikePost(post.id); }}
-                      >
-                        <Heart 
-                          size={12} 
-                          fill={post.likes?.includes(user.id) ? COLORS.sage : "none"} 
-                        /> 
-                        {post.likes?.length || 0}
-                      </button>
-                      <span style={{display: 'flex', alignItems: 'center', gap: '6px'}}>
-                        <MessageCircle size={12}/> {post.comments?.length || 0}
-                      </span>
+                      <h3 style={{color: COLORS.gray800, margin: '0 0 12px 0', fontSize: '20px', fontWeight: 'bold', lineHeight: '1.3'}}>
+                        {post.title}
+                      </h3>
+                      
+                      <p style={{
+                        color: COLORS.gray600, 
+                        fontSize: '15px', 
+                        lineHeight: '1.6', 
+                        margin: '0 0 20px 0',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 3,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}>
+                        {post.content}
+                      </p>
+                      
+                      <div style={{
+                        marginTop: 'auto', 
+                        display: 'flex', 
+                        gap: '24px', 
+                        fontSize: '14px', 
+                        color: COLORS.gray500, 
+                        alignItems: 'center',
+                        paddingTop: '16px',
+                        borderTop: `1px solid ${COLORS.gray100}`
+                      }}>
+                        <button 
+                          style={{
+                            background: 'none', 
+                            border: 'none', 
+                            cursor: 'pointer', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '6px', 
+                            color: post.likes?.includes(user.id) ? COLORS.sage : COLORS.gray500, 
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            transition: 'all 0.2s'
+                          }} 
+                          onClick={(e) => { e.stopPropagation(); handleLikePost(post.id); }}
+                          onMouseEnter={(e) => e.target.style.background = 'rgba(0,0,0,0.03)'}
+                          onMouseLeave={(e) => e.target.style.background = 'transparent'}
+                        >
+                          <Heart 
+                            size={16} 
+                            fill={post.likes?.includes(user.id) ? COLORS.sage : "none"} 
+                          /> 
+                          {post.likes?.length || 0}
+                        </button>
+                        <span style={{display: 'flex', alignItems: 'center', gap: '6px'}}>
+                          <MessageCircle size={16}/> {post.comments?.length || 0} comments
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+              </div>
             </section>
           </div>
         )}
 
-        {/* Resources Tab */}
+        {/* Resources Tab - Grid Layout like Video Hub */}
         {activeTab === 'resources' && (
           <div style={{display: 'flex', flexDirection: 'column', gap: '25px'}}>
             <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '20px', alignItems: 'center'}}>
@@ -839,7 +920,15 @@ const Dashboard = () => {
                     .map(r => (
                       <div 
                         key={r.id} 
-                        style={{background: COLORS.white, borderRadius: '16px', overflow: 'hidden', border: `1px solid ${COLORS.gray200}`, cursor: 'pointer'}}
+                        className="resource-card"
+                        style={{
+                          background: COLORS.white, 
+                          borderRadius: '16px', 
+                          overflow: 'hidden', 
+                          border: `1px solid ${COLORS.gray200}`, 
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)'
+                        }}
                         onClick={() => {setSelectedResource(r); setShowModal('resourceDetail');}}
                       >
                         <div style={{
@@ -895,7 +984,7 @@ const Dashboard = () => {
                             )}
                           </div>
                           <p style={{color: COLORS.gray500, fontSize: '13px', margin: '0', display: 'flex', alignItems: 'center', gap: '6px'}}>
-                            <Link2 size={12} /> Click to open resource
+                            <Link2 size={12} /> Click to view details
                           </p>
                         </div>
                       </div>
@@ -903,7 +992,7 @@ const Dashboard = () => {
                 </div>
                 
                 {resources.filter(r => r.category === activeResourceCategory).length === 0 && (
-                  <div style={{textAlign: 'center', padding: '60px', color: COLORS.gray500, background: COLORS.white, borderRadius: '16px', border: `1px solid ${COLORS.gray200}`}}>
+                  <div style={{textAlign: 'center', padding: '60px', color: COLORS.gray500, background: COLORS.white, borderRadius: '16px', border: `1px solid ${COLORS.gray200}'}}>
                     <FileText size={48} color={COLORS.gray200} style={{marginBottom: '16px'}} />
                     <p>No resources in this category yet.</p>
                     {isAdmin && <p style={{fontSize: '14px', marginTop: '8px'}}>Add one!</p>}
@@ -956,7 +1045,7 @@ const Dashboard = () => {
       {showModal === 'postDetail' && selectedPost && (
         <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px'}} onClick={() => {setShowModal(null); setSelectedPost(null);}}>
           <div style={{background: COLORS.white, borderRadius: '20px', width: '100%', maxWidth: '700px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden'}} onClick={e => e.stopPropagation()}>
-            <div style={{padding: '30px', borderBottom: `1px solid ${COLORS.gray200}`}}>
+            <div style={{padding: '30px', borderBottom: `1px solid ${COLORS.gray200}'}}>
               <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
                 <div style={{flex: 1}}>
                   <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px'}}>
@@ -1041,9 +1130,10 @@ const Dashboard = () => {
         </div>
       )}
 
+      {/* Resource Detail Modal - In app, not new window */}
       {showModal === 'resourceDetail' && selectedResource && (
         <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px'}} onClick={() => {setShowModal(null); setSelectedResource(null);}}>
-          <div style={{background: COLORS.white, borderRadius: '20px', width: '100%', maxWidth: '800px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden'}} onClick={e => e.stopPropagation()}>
+          <div style={{background: COLORS.white, borderRadius: '20px', width: '100%', maxWidth: '800px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.25)'}} onClick={e => e.stopPropagation()}>
             {selectedResource.thumbnail && (
               <div style={{
                 width: '100%',
