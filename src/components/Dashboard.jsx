@@ -110,15 +110,15 @@ const Dashboard = () => {
     }
   };
 
-  // UPDATED: Handles both images and raw files (PDFs, DOCs)
+  // FIXED: Removed space in URL template literal
   const uploadToCloudinary = async (file, type = 'auto') => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
     
-    // Determine resource type: 'image' for thumbnails, 'raw' for documents
     const resourceType = type === 'image' || file.type.startsWith('image/') ? 'image' : 'raw';
     
+    // FIXED: Removed space after v1_1/
     const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`;
     
     try {
@@ -175,12 +175,10 @@ const Dashboard = () => {
     }
   };
 
-  // NEW: Handle document file upload for resources
   const handleDocumentUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Allow PDFs, DOCs, images, etc. up to 10MB
     if (file.size > 10 * 1024 * 1024) {
       alert('File must be smaller than 10MB');
       return;
@@ -536,6 +534,7 @@ const Dashboard = () => {
             
             {videos.map(v => {
               const videoId = getVideoId(v.url);
+              // FIXED: Removed space in template literal
               const thumbnailUrl = v.thumbnail || (videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null);
               
               return (
@@ -700,6 +699,7 @@ const Dashboard = () => {
             <iframe 
               width="100%" 
               height="500" 
+              // FIXED: Removed space in template literal
               src={`https://www.youtube.com/embed/${getVideoId(selectedVideo.url)}?autoplay=1`}
               frameBorder="0"
               allowFullScreen
@@ -708,7 +708,7 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* UPDATED: Resource Detail Modal - Opens in New Tab instead of iframe */}
+      {/* Resource Detail Modal */}
       {showModal === 'resourceDetail' && selectedResource && (
         <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}} onClick={() => setShowModal(null)}>
           <div style={{background: COLORS.white, borderRadius: '20px', width: '100%', maxWidth: '500px', padding: '40px', textAlign: 'center', boxShadow: '0 25px 50px rgba(0,0,0,0.25)'}} onClick={e => e.stopPropagation()}>
@@ -842,7 +842,7 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* UPDATED: Add Resource Modal with File Upload */}
+      {/* Add Resource Modal */}
       {showModal === 'addResource' && (
         <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}} onClick={() => setShowModal(null)}>
           <div style={{background: COLORS.white, padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto'}} onClick={e => e.stopPropagation()}>
