@@ -453,14 +453,36 @@ const Dashboard = () => {
   };
 
   const handleDelete = async (id, type) => {
-    if (window.confirm("Delete this?")) {
+    if (window.confirm("Are you sure you want to delete this?")) {
       try {
-        await fetch(`/.netlify/functions/database?id=${id}&type=${type}`, { 
+        const res = await fetch(`/.netlify/functions/database?id=${id}&type=${type}`, { 
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' }
         });
-        loadAllData();
-      } catch (err) { console.error('Delete error:', err); }
+        
+        if (res.ok) {
+          // Immediately update local state
+          if (type === 'discussion') {
+            setDiscussions(prev => prev.filter(d => d.id !== id));
+          } else if (type === 'video') {
+            setVideos(prev => prev.filter(v => v.id !== id));
+          } else if (type === 'resource') {
+            setResources(prev => prev.filter(r => r.id !== id));
+          }
+          
+          // Close modal if viewing deleted item
+          if (selectedPost?.id === id || selectedResource?.id === id) {
+            setShowModal(null);
+            setSelectedPost(null);
+            setSelectedResource(null);
+          }
+        } else {
+          alert('Failed to delete. Please try again.');
+        }
+      } catch (err) { 
+        console.error('Delete error:', err);
+        alert('Failed to delete. Please try again.');
+      }
     }
   };
 
@@ -962,7 +984,7 @@ const Dashboard = () => {
                             <h4 style={{margin: 0, flex: 1, fontSize: '16px', color: COLORS.gray800, fontWeight: 'bold'}}>{r.title}</h4>
                             {isAdmin && (
                               <button 
-                                onClick={(e) => {e.stopPropagation(); handleDelete(r.id, 'resources');}} 
+                                onClick={(e) => {e.stopPropagation(); handleDelete(r.id, 'resource');}} 
                                 style={{background: 'none', border: 'none', color: COLORS.gray400, cursor: 'pointer', padding: '4px'}}
                               >
                                 <Trash2 size={16}/>
