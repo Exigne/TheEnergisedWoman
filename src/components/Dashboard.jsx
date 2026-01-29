@@ -76,7 +76,6 @@ const Dashboard = () => {
         fetch('/.netlify/functions/database?type=video').then(res => res.json()),
         fetch('/.netlify/functions/database?type=resources').then(res => res.json())
       ]);
-      console.log("Videos loaded:", v);
       setDiscussions(Array.isArray(d) ? d : []);
       setVideos(Array.isArray(v) ? v : []);
       setResources(Array.isArray(r) ? r : []);
@@ -226,7 +225,7 @@ const Dashboard = () => {
           content: postForm.content,
           category: postForm.category,
           userEmail: user.email,
-          authorProfilePic: profileForm.profilePic // NEW: Send profile pic with post
+          authorProfilePic: profileForm.profilePic
         })
       });
       
@@ -243,6 +242,7 @@ const Dashboard = () => {
     }
   };
 
+  // FIXED: Immediate update for likes
   const handleLikePost = async (postId) => {
     if (!user?.id) return;
     try {
@@ -252,15 +252,18 @@ const Dashboard = () => {
         body: JSON.stringify({ postId, userId: user.id })
       });
       if (res.ok) {
+        const updatedPost = await res.json(); // Get fresh data from API
         await loadAllData();
+        
+        // If viewing this post in modal, update it immediately
         if (selectedPost && selectedPost.id === postId) {
-          const updated = discussions.find(d => d.id === postId);
-          if (updated) setSelectedPost(updated);
+          setSelectedPost(updatedPost);
         }
       }
     } catch (err) { console.error('Error liking:', err); }
   };
 
+  // FIXED: Immediate update for comments
   const handleAddComment = async () => {
     if (!commentText.trim() || !selectedPost) return;
     
@@ -276,15 +279,15 @@ const Dashboard = () => {
           postId: selectedPost.id,
           comment: commentText,
           author: authorName,
-          authorProfilePic: profileForm.profilePic // NEW: Send profile pic with comment
+          authorProfilePic: profileForm.profilePic
         })
       });
       
       if (res.ok) {
+        const updatedPost = await res.json(); // Get fresh post data immediately
+        setSelectedPost(updatedPost); // Update modal right away
         setCommentText('');
-        await loadAllData();
-        const updated = discussions.find(d => d.id === selectedPost.id);
-        if (updated) setSelectedPost(updated);
+        await loadAllData(); // Refresh background list
       }
     } catch (err) {
       console.error('Comment error:', err);
@@ -670,7 +673,7 @@ const Dashboard = () => {
                       )}
                     </div>
                     
-                    {/* NEW: Author info with avatar */}
+                    {/* Author info with avatar */}
                     <div style={{display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px'}}>
                       {renderAvatar(post.author_profile_pic, 'small')}
                       <div>
@@ -811,7 +814,7 @@ const Dashboard = () => {
                     <span style={{fontSize: '11px', background: 'rgba(179, 197, 151, 0.2)', color: COLORS.sage, padding: '4px 12px', borderRadius: '20px', fontWeight: 'bold'}}>{selectedPost.category}</span>
                   </div>
                   
-                  {/* NEW: Author with avatar in detail view */}
+                  {/* Author with avatar in detail view */}
                   <div style={{display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px'}}>
                     {renderAvatar(selectedPost.author_profile_pic, 'medium')}
                     <div>
@@ -871,7 +874,7 @@ const Dashboard = () => {
                 <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
                   {selectedPost.comments && selectedPost.comments.map((comment, idx) => (
                     <div key={idx} style={{background: COLORS.gray50, padding: '15px', borderRadius: '12px', display: 'flex', gap: '12px'}}>
-                      {/* NEW: Comment avatar */}
+                      {/* Comment avatar */}
                       {renderAvatar(comment.authorProfilePic, 'small')}
                       <div style={{flex: 1}}>
                         <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '8px', alignItems: 'center'}}>
