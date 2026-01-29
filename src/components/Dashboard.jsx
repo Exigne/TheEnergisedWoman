@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  X, LogOut, Crown, Plus, Video, Upload, User, 
+  X, LogOut, Crown, Plus, Video, Upload, FileText, User, 
   Trash2, Hash, Send, MessageCircle, Heart, PlayCircle, Image as ImageIcon,
-  Link2, BookOpen, FileText, Loader
+  ExternalLink, Link2
 } from 'lucide-react';
 
-// CLOUDINARY CONFIG - Verify these are correct
+// CLOUDINARY CONFIG
 const CLOUDINARY_CLOUD_NAME = 'dyitrwe5h';
 const CLOUDINARY_UPLOAD_PRESET = 'wellness_profile_pics';
 
@@ -27,7 +27,7 @@ const COLORS = {
 };
 
 const GROUPS = ['All Discussions', 'General', 'Mental Health', 'Self Care', 'Relationships', 'Career', 'Motherhood', 'Fitness', 'Nutrition'];
-const RESOURCE_CATEGORIES = ['General', 'Recipes', 'Book Club', 'Worksheets'];
+const RESOURCE_CATEGORIES = ['General', 'Recipes', 'Book Club'];
 
 const Dashboard = () => {
   const [user, setUser] = useState(null);
@@ -35,35 +35,25 @@ const Dashboard = () => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  
-  // Tabs
   const [activeTab, setActiveTab] = useState('community'); 
   const [activeGroup, setActiveGroup] = useState('All Discussions');
   const [activeResourceCategory, setActiveResourceCategory] = useState('General');
-  
-  // Data
+  const [showModal, setShowModal] = useState(null); 
   const [discussions, setDiscussions] = useState([]);
   const [videos, setVideos] = useState([]);
   const [resources, setResources] = useState([]);
-  
-  // Selection / Modals
-  const [showModal, setShowModal] = useState(null); 
   const [selectedPost, setSelectedPost] = useState(null);
-  const [selectedVideo, setSelectedVideo] = useState(null);
   const [selectedResource, setSelectedResource] = useState(null);
+  const [selectedVideo, setSelectedVideo] = useState(null);
   const [commentText, setCommentText] = useState('');
-  const [hoveredPost, setHoveredPost] = useState(null);
-  
-  // Loading States
   const [imageError, setImageError] = useState(false);
-  const [uploadingFile, setUploadingFile] = useState(false);
-  const [loadingData, setLoadingData] = useState(false);
-  const [uploadError, setUploadError] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [hoveredPost, setHoveredPost] = useState(null);
 
   // Forms
   const [postForm, setPostForm] = useState({ title: '', content: '', category: 'General' });
   const [videoForm, setVideoForm] = useState({ title: '', url: '', description: '', thumbnail: '' });
-  const [resourceForm, setResourceForm] = useState({ title: '', url: '', category: 'General', thumbnail: '', fileName: '' });
+  const [resourceForm, setResourceForm] = useState({ title: '', url: '', category: 'General', thumbnail: '' });
   const [profileForm, setProfileForm] = useState({ firstName: '', lastName: '', profilePic: '' });
 
   useEffect(() => {
@@ -78,6 +68,7 @@ const Dashboard = () => {
           lastName: userData.lastName || '',
           profilePic: userData.profilePic || ''
         });
+        setImageError(false);
         loadAllData();
       } catch (e) {
         console.error("Error parsing user data", e);
@@ -87,84 +78,93 @@ const Dashboard = () => {
   }, []);
 
   const loadAllData = async () => {
-    setLoadingData(true);
     try {
-      const dRes = await fetch('/.netlify/functions/database?type=discussions');
-      const dData = await dRes.json();
-      setDiscussions(Array.isArray(dData) ? dData : []);
-      
-      try {
-        const vRes = await fetch('/.netlify/functions/database?type=videos');
-        if (vRes.ok) {
-          const vData = await vRes.json();
-          setVideos(Array.isArray(vData) ? vData : vData.data || []);
-        }
-      } catch (vErr) { console.error('Videos error', vErr); }
-      
-      try {
-        const rRes = await fetch('/.netlify/functions/database?type=resources');
-        if (rRes.ok) {
-          const rData = await rRes.json();
-          setResources(Array.isArray(rData) ? rData : rData.data || []);
-        }
-      } catch (rErr) { console.error('Resources error', rErr); }
-      
-    } catch (err) { console.error("Error loading data", err); } 
-    finally { setLoadingData(false); }
+      const [d, v, r] = await Promise.all([
+        fetch('/.netlify/functions/database?type=discussions').then(res => res.json()),
+        fetch('/.netlify/functions/database?type=video').then(res => res.json()),
+        fetch('/.netlify/functions/database?type=resources').then(res => res.json())
+      ]);
+      setDiscussions(Array.isArray(d) ? d : []);
+      setVideos(Array.isArray(v) ? v : []);
+      setResources(Array.isArray(r) ? r : []);
+    } catch (err) { 
+      console.error("Error loading data", err); 
+    }
   };
 
   const getVideoId = (url) => {
-    if (!url || typeof url !== 'string') return null;
+    if (!url) return null;
     try {
-      url = url.trim();
-      if (url.includes('youtu.be/')) return url.split('youtu.be/')[1].split('?')[0];
-      if (url.includes('v=')) return url.split('v=')[1].split('&')[0];
-      if (url.includes('embed/')) return url.split('embed/')[1].split('?')[0];
-      if (url.includes('youtube.com/shorts/')) return url.split('shorts/')[1].split('?')[0];
+      if (url.includes('youtu.be/')) {
+        const id = url.split('youtu.be/')[1].split('?')[0].split('&')[0];
+        return id.length === 11 ? id : null;
+      }
+      if (url.includes('v=')) {
+        const id = url.split('v=')[1].split('&')[0].split('?')[0];
+        return id.length === 11 ? id : null;
+      }
+      if (url.includes('embed/')) {
+        const id = url.split('embed/')[1].split('?')[0].split('&')[0];
+        return id.length === 11 ? id : null;
+      }
       return null;
-    } catch (e) { return null; }
+    } catch (e) { 
+      return null; 
+    }
   };
 
   const uploadToCloudinary = async (file) => {
-    setUploadError('');
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-    const isImage = file.type.startsWith('image/');
-    const resourceType = isImage ? 'image' : 'raw';
-    const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`;
     
-    try {
-      const res = await fetch(uploadUrl, { method: 'POST', body: formData });
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || `Upload failed: HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      return data.secure_url;
-    } catch (err) { throw err; }
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!res.ok) {
+      throw new Error('Upload failed');
+    }
+    
+    const data = await res.json();
+    return data.secure_url;
   };
 
-  const handleFileUpload = async (event, formSetter, field) => {
+  const handleImageUpload = async (event, formSetter, field) => {
     const file = event.target.files[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) return alert('File must be smaller than 10MB');
 
-    setUploadingFile(true);
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Image must be smaller than 2MB');
+      return;
+    }
+
+    setUploadingImage(true);
     try {
-      const fileUrl = await uploadToCloudinary(file);
+      const imageUrl = await uploadToCloudinary(file);
+      
       if (field === 'profilePic') {
-        setProfileForm(prev => ({...prev, profilePic: fileUrl}));
+        setProfileForm(prev => ({...prev, profilePic: imageUrl}));
       } else if (field === 'thumbnail') {
-        if (formSetter === setVideoForm) setVideoForm(prev => ({...prev, thumbnail: fileUrl}));
-        if (formSetter === setResourceForm) setResourceForm(prev => ({...prev, thumbnail: fileUrl}));
-      } else if (field === 'resourceFile') {
-        setResourceForm(prev => ({ ...prev, url: fileUrl, fileName: file.name }));
+        if (formSetter === setVideoForm) {
+          setVideoForm(prev => ({...prev, thumbnail: imageUrl}));
+        } else if (formSetter === setResourceForm) {
+          setResourceForm(prev => ({...prev, thumbnail: imageUrl}));
+        }
       }
-      alert('File uploaded successfully!');
+      setImageError(false);
     } catch (err) {
-      alert('Failed to upload file: ' + err.message);
-    } finally { setUploadingFile(false); }
+      console.error('Upload error:', err);
+      alert('Failed to upload image. Please try again.');
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const handleAuth = async (e) => {
@@ -180,8 +180,12 @@ const Dashboard = () => {
       if (res.ok) {
         localStorage.setItem('wellnessUser', JSON.stringify(data));
         window.location.reload();
-      } else { alert(data.message || 'Authentication failed'); }
-    } catch (err) { alert('Connection failed.'); }
+      } else {
+        alert(data.message || 'Authentication failed');
+      }
+    } catch (err) { 
+      alert('Connection failed. Please try again.'); 
+    }
   };
 
   const handleUpdateProfile = async () => {
@@ -196,18 +200,55 @@ const Dashboard = () => {
           profilePic: profileForm.profilePic 
         })
       });
+      
       if (res.ok) {
-        const updatedUser = { ...user, ...profileForm };
+        const updatedUser = { 
+          ...user, 
+          firstName: profileForm.firstName,
+          lastName: profileForm.lastName,
+          profilePic: profileForm.profilePic 
+        };
         setUser(updatedUser);
         localStorage.setItem('wellnessUser', JSON.stringify(updatedUser));
+        setImageError(false);
         setShowModal(null);
+      } else {
+        alert('Failed to update profile');
       }
-    } catch (err) { alert('Failed to update'); }
+    } catch (err) {
+      alert('Failed to update profile');
+    }
   };
 
   const handleCreatePost = async () => {
-    if (!postForm.title.trim() || !postForm.content.trim()) return alert("Fill all fields");
-    const authorName = profileForm.firstName ? `${profileForm.firstName} ${profileForm.lastName}` : (user.displayName || 'Anonymous');
+    if (!postForm.title.trim() || !postForm.content.trim()) {
+      alert("Please fill in both title and content");
+      return;
+    }
+    
+    const authorName = profileForm.firstName 
+      ? `${profileForm.firstName} ${profileForm.lastName}`.trim() 
+      : (user?.displayName || user?.email?.split('@')[0] || 'Anonymous');
+    
+    const optimisticPost = {
+      id: 'temp-' + Date.now(),
+      title: postForm.title,
+      content: postForm.content,
+      category: postForm.category,
+      author: authorName,
+      author_profile_pic: profileForm.profilePic,
+      likes: [],
+      comments: [],
+      created_at: new Date().toISOString(),
+      _optimistic: true
+    };
+    
+    setDiscussions(prev => [optimisticPost, ...prev]);
+    setPostForm({ title: '', content: '', category: 'General' });
+    
+    if (showModal === 'post') {
+      setShowModal(null);
+    }
     
     try {
       const res = await fetch('/.netlify/functions/database?type=discussion', {
@@ -221,130 +262,292 @@ const Dashboard = () => {
           authorProfilePic: profileForm.profilePic
         })
       });
+      
       if (res.ok) {
-        loadAllData();
-        setShowModal(null);
-        setPostForm({ title: '', content: '', category: 'General' });
+        const newPost = await res.json();
+        setDiscussions(prev => prev.map(p => 
+          p.id === optimisticPost.id ? newPost : p
+        ));
+      } else {
+        throw new Error('Failed to create post');
       }
-    } catch (err) { loadAllData(); }
+    } catch (err) { 
+      alert('Failed to save post - it will disappear on refresh');
+      setDiscussions(prev => prev.filter(p => p.id !== optimisticPost.id));
+    }
   };
 
   const handleLikePost = async (postId) => {
     if (!user?.id) return;
-    fetch('/.netlify/functions/database?type=likePost', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ postId, userId: user.id })
-    }).then(() => loadAllData());
+    
+    const targetPost = selectedPost?.id === postId ? selectedPost : discussions.find(d => d.id === postId);
+    const isCurrentlyLiked = targetPost?.likes?.includes(user.id);
+    
+    const newLikes = isCurrentlyLiked 
+      ? (targetPost.likes || []).filter(id => id !== user.id)
+      : [...(targetPost.likes || []), user.id];
+    
+    if (selectedPost && selectedPost.id === postId) {
+      setSelectedPost({...selectedPost, likes: newLikes});
+    }
+    
+    setDiscussions(prev => prev.map(d => 
+      d.id === postId ? {...d, likes: newLikes} : d
+    ));
+    
+    try {
+      const res = await fetch('/.netlify/functions/database?type=likePost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId, userId: user.id })
+      });
+      
+      if (!res.ok) throw new Error('Failed to like');
+      
+      const updatedPost = await res.json();
+      if (selectedPost && selectedPost.id === postId) {
+        setSelectedPost(updatedPost);
+      }
+      setDiscussions(prev => prev.map(d => 
+        d.id === postId ? updatedPost : d
+      ));
+    } catch (err) { 
+      console.error('Like error:', err);
+      loadAllData();
+    }
   };
 
   const handleAddComment = async () => {
     if (!commentText.trim() || !selectedPost) return;
-    const authorName = profileForm.firstName ? `${profileForm.firstName} ${profileForm.lastName}` : 'Anonymous';
+    
+    const authorName = profileForm.firstName 
+      ? `${profileForm.firstName} ${profileForm.lastName}`.trim() 
+      : (user.displayName || user.email.split('@')[0]);
+    
+    const optimisticComment = {
+      text: commentText,
+      author: authorName,
+      authorProfilePic: profileForm.profilePic,
+      timestamp: new Date().toISOString(),
+      _optimistic: true
+    };
+    
+    const updatedPost = {
+      ...selectedPost,
+      comments: [...(selectedPost.comments || []), optimisticComment]
+    };
+    
+    setSelectedPost(updatedPost);
+    setDiscussions(prev => prev.map(d => 
+      d.id === selectedPost.id ? updatedPost : d
+    ));
+    
+    setCommentText('');
     
     try {
-      await fetch('/.netlify/functions/database?type=addComment', {
+      const res = await fetch('/.netlify/functions/database?type=addComment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          postId: selectedPost.id, 
-          comment: commentText, 
-          author: authorName, 
-          authorProfilePic: profileForm.profilePic 
+        body: JSON.stringify({
+          postId: selectedPost.id,
+          comment: commentText,
+          author: authorName,
+          authorProfilePic: profileForm.profilePic
         })
       });
-      setCommentText('');
-      loadAllData();
-      // Re-fetch post details to show new comment
-      const updatedRes = await fetch('/.netlify/functions/database?type=discussions');
-      const updatedData = await updatedRes.json();
-      const updatedPost = updatedData.find(d => d.id === selectedPost.id);
-      if (updatedPost) setSelectedPost(updatedPost);
-    } catch (e) {}
+      
+      if (res.ok) {
+        const serverPost = await res.json();
+        setSelectedPost(serverPost);
+        setDiscussions(prev => prev.map(d => 
+          d.id === selectedPost.id ? serverPost : d
+        ));
+      } else {
+        throw new Error('Failed to save');
+      }
+    } catch (err) {
+      console.error('Comment error:', err);
+      alert('Failed to save comment. It may disappear on refresh.');
+      setSelectedPost(prev => ({
+        ...prev,
+        comments: prev.comments.filter(c => !c._optimistic)
+      }));
+    }
   };
 
   const handleAddVideo = async () => {
-    if (!videoForm.title || !videoForm.url) return alert("Title and URL required");
+    if (!videoForm.title || !videoForm.url) {
+      alert("Title and URL required");
+      return;
+    }
+    
+    if (!getVideoId(videoForm.url)) {
+      alert("Invalid YouTube URL");
+      return;
+    }
+    
     try {
       const res = await fetch('/.netlify/functions/database?type=video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(videoForm)
+        body: JSON.stringify({
+          title: videoForm.title,
+          url: videoForm.url,
+          description: videoForm.description,
+          thumbnail: videoForm.thumbnail
+        })
       });
+      
       if (res.ok) {
         setVideoForm({ title: '', url: '', description: '', thumbnail: '' });
         setShowModal(null);
         loadAllData();
+      } else {
+        alert("Failed to add video");
       }
-    } catch (err) { alert("Failed to add video"); }
+    } catch (err) { 
+      alert("Failed to add video"); 
+    }
   };
 
   const handleAddResource = async () => {
-    if (!resourceForm.title || !resourceForm.url) return alert("Title and Document/URL required");
+    if (!resourceForm.title || !resourceForm.url) {
+      alert("Title and URL required");
+      return;
+    }
+    
     try {
       const res = await fetch('/.netlify/functions/database?type=resource', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(resourceForm)
+        body: JSON.stringify({
+          title: resourceForm.title,
+          url: resourceForm.url,
+          category: resourceForm.category,
+          thumbnail: resourceForm.thumbnail
+        })
       });
+      
       if (res.ok) {
-        setResourceForm({ title: '', url: '', category: 'General', thumbnail: '', fileName: '' });
+        setResourceForm({ title: '', url: '', category: 'General', thumbnail: '' });
         setShowModal(null);
         loadAllData();
+      } else {
+        alert("Failed to add resource");
       }
-    } catch (err) { alert("Failed to add resource"); }
+    } catch (err) { 
+      alert("Failed to add resource"); 
+    }
   };
 
   const handleDelete = async (id, type) => {
-    if (!window.confirm("Delete this item?")) return;
-    try {
-      const res = await fetch(`/.netlify/functions/database?id=${id}&type=${type}`, { method: 'DELETE' });
-      if (res.ok) loadAllData();
-    } catch (err) { alert('Failed to delete'); }
+    if (window.confirm("Are you sure you want to delete this?")) {
+      try {
+        const res = await fetch(`/.netlify/functions/database?id=${id}&type=${type}`, { 
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (res.ok) {
+          if (type === 'discussion') {
+            setDiscussions(prev => prev.filter(d => d.id !== id));
+          } else if (type === 'video') {
+            setVideos(prev => prev.filter(v => v.id !== id));
+          } else if (type === 'resource') {
+            setResources(prev => prev.filter(r => r.id !== id));
+          }
+          
+          if (selectedPost?.id === id || selectedResource?.id === id || selectedVideo?.id === id) {
+            setShowModal(null);
+            setSelectedPost(null);
+            setSelectedResource(null);
+            setSelectedVideo(null);
+          }
+        } else {
+          alert('Failed to delete. Please try again.');
+        }
+      } catch (err) { 
+        console.error('Delete error:', err);
+        alert('Failed to delete. Please try again.');
+      }
+    }
   };
 
   const renderAvatar = (src, size = 'small') => {
-    const sizePx = size === 'large' ? '80px' : size === 'medium' ? '40px' : '35px';
-    const iconSize = size === 'large' ? 40 : 20;
+    const isLarge = size === 'large';
+    const isMedium = size === 'medium';
+    const sizePx = isLarge ? '80px' : isMedium ? '40px' : '35px';
+    const iconSize = isLarge ? 40 : isMedium ? 20 : 18;
+    
+    const baseStyle = {
+      width: sizePx,
+      height: sizePx,
+      borderRadius: '50%',
+      background: COLORS.gray100,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+      cursor: 'pointer',
+      border: `2px solid ${src ? COLORS.sage : COLORS.gray200}`,
+      flexShrink: 0
+    };
+    
+    const isValidSrc = src && (src.startsWith('http') || src.startsWith('data:image'));
+    
+    if (!isValidSrc || imageError) {
+      return (
+        <div style={baseStyle}>
+          <User size={iconSize} color={COLORS.gray500} />
+        </div>
+      );
+    }
+    
     return (
-      <div style={{
-        width: sizePx, height: sizePx, borderRadius: '50%', background: COLORS.gray100, 
-        display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', 
-        border: `2px solid ${src ? COLORS.sage : COLORS.gray200}`, flexShrink: 0
-      }}>
-        {src ? (
-          <img src={src} alt="P" style={{width: '100%', height: '100%', objectFit: 'cover'}} />
-        ) : <User size={iconSize} color={COLORS.gray500} />}
+      <div style={baseStyle}>
+        <img 
+          src={src} 
+          alt="Profile" 
+          style={{width: '100%', height: '100%', objectFit: 'cover'}}
+          onError={() => setImageError(true)}
+        />
       </div>
     );
   };
 
-  const Modal = ({ title, children, onClose }) => (
-    <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px'}}>
-      <div style={{background: COLORS.white, borderRadius: '20px', width: '100%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto', position: 'relative'}}>
-        <div style={{padding: '25px', borderBottom: `1px solid ${COLORS.gray100}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: 'white', zIndex: 10}}>
-          <h3 style={{margin: 0, color: COLORS.gray800}}>{title}</h3>
-          <button onClick={onClose} style={{background: 'none', border: 'none', cursor: 'pointer', color: COLORS.gray400}}><X /></button>
-        </div>
-        <div style={{padding: '25px'}}>{children}</div>
-      </div>
-    </div>
-  );
-
   if (!user) {
     return (
       <div style={{height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: COLORS.gray50}}>
-        <div style={{background: COLORS.white, padding: '40px', borderRadius: '20px', width: '100%', maxWidth: '400px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)'}}>
+        <div style={{background: COLORS.white, padding: '40px', borderRadius: '20px', width: '100%', maxWidth: '400px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)'}}>
           <div style={{textAlign: 'center', marginBottom: '20px'}}>
             <Crown size={40} color={COLORS.sage} />
-            <h2 style={{color: COLORS.gray800}}>The Energised Woman Collective</h2>
+            <h2 style={{color: COLORS.gray800}}>The Energised Woman Collective Login</h2>
           </div>
           <form onSubmit={handleAuth}>
-            <input style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} type="email" placeholder="Email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} required />
-            <input style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} type="password" placeholder="Password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} required />
-            <button type="submit" style={{width: '100%', background: COLORS.sage, color: COLORS.white, border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer'}}>{isRegistering ? 'Register' : 'Login'}</button>
+            <input 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px', fontSize: '14px'}} 
+              type="email" 
+              placeholder="Email" 
+              value={loginEmail} 
+              onChange={e => setLoginEmail(e.target.value)} 
+              required
+            />
+            <input 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px', fontSize: '14px'}} 
+              type="password" 
+              placeholder="Password" 
+              value={loginPassword} 
+              onChange={e => setLoginPassword(e.target.value)} 
+              required
+            />
+            <button type="submit" style={{background: COLORS.sage, color: COLORS.white, border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', width: '100%', fontSize: '16px'}}>
+              {isRegistering ? 'Register' : 'Login'}
+            </button>
           </form>
-          <button style={{width: '100%', marginTop: '15px', background: 'none', border: 'none', color: COLORS.gray500, cursor: 'pointer'}} onClick={() => setIsRegistering(!isRegistering)}>
+          <button 
+            style={{background: 'none', border: 'none', color: COLORS.gray500, cursor: 'pointer', width: '100%', marginTop: '10px'}} 
+            onClick={() => setIsRegistering(!isRegistering)}
+          >
             {isRegistering ? 'Already a member? Login' : 'Need an account? Register'}
           </button>
         </div>
@@ -356,60 +559,196 @@ const Dashboard = () => {
     <div style={{minHeight: '100vh', background: COLORS.gray50, fontFamily: 'system-ui, sans-serif'}}>
       <header style={{background: COLORS.white, height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 40px', borderBottom: `1px solid ${COLORS.gray200}`, position: 'sticky', top: 0, zIndex: 100}}>
         <div style={{display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold', fontSize: '20px', color: COLORS.gray800}}>
-          <Crown color={COLORS.sage} /> <span>The Energised Woman</span>
+          <Crown color={COLORS.sage} /> 
+          <span>The Energised Woman Collective</span>
         </div>
         <nav style={{display: 'flex', gap: '8px', background: COLORS.gray100, padding: '5px', borderRadius: '12px'}}>
-          {['community', 'video', 'resources'].map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} style={{
-              padding: '8px 20px', border: 'none', borderRadius: '8px', cursor: 'pointer',
-              background: activeTab === tab ? COLORS.white : 'transparent',
-              color: activeTab === tab ? COLORS.sage : COLORS.gray500,
-              fontWeight: activeTab === tab ? 'bold' : 'normal'
-            }}>
-              {tab.charAt(0).toUpperCase() + tab.slice(1)} {tab === 'video' && 'Hub'}
-            </button>
-          ))}
+          <button 
+            onClick={() => setActiveTab('community')} 
+            style={activeTab === 'community' ? 
+              {padding: '8px 20px', border: 'none', background: COLORS.white, color: COLORS.sage, borderRadius: '8px', fontWeight: 'bold', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', cursor: 'pointer'} : 
+              {padding: '8px 20px', border: 'none', background: COLORS.transparent, cursor: 'pointer', borderRadius: '8px', color: COLORS.gray500}
+            }
+          >
+            Community
+          </button>
+          <button 
+            onClick={() => setActiveTab('video')} 
+            style={activeTab === 'video' ? 
+              {padding: '8px 20px', border: 'none', background: COLORS.white, color: COLORS.sage, borderRadius: '8px', fontWeight: 'bold', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', cursor: 'pointer'} : 
+              {padding: '8px 20px', border: 'none', background: COLORS.transparent, cursor: 'pointer', borderRadius: '8px', color: COLORS.gray500}
+            }
+          >
+            Video Hub
+          </button>
+          <button 
+            onClick={() => setActiveTab('resources')} 
+            style={activeTab === 'resources' ? 
+              {padding: '8px 20px', border: 'none', background: COLORS.white, color: COLORS.sage, borderRadius: '8px', fontWeight: 'bold', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', cursor: 'pointer'} : 
+              {padding: '8px 20px', border: 'none', background: COLORS.transparent, cursor: 'pointer', borderRadius: '8px', color: COLORS.gray500}
+            }
+          >
+            Resources
+          </button>
         </nav>
         <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
-          <div onClick={() => setShowModal('profile')} style={{cursor: 'pointer'}}>{renderAvatar(profileForm.profilePic)}</div>
-          <button onClick={() => {localStorage.clear(); window.location.reload();}} style={{background: 'none', border: 'none', cursor: 'pointer', color: COLORS.gray400}}><LogOut size={20}/></button>
+          <div onClick={() => setShowModal('profile')} style={{cursor: 'pointer'}}>
+            {renderAvatar(profileForm.profilePic, 'small')}
+          </div>
+          <button 
+            onClick={() => {localStorage.clear(); window.location.reload();}} 
+            style={{background: 'none', border: 'none', cursor: 'pointer', color: COLORS.gray400}}
+          >
+            <LogOut size={20}/>
+          </button>
         </div>
       </header>
 
       <main style={{maxWidth: '1200px', margin: '0 auto', padding: '40px 20px'}}>
-        {/* VIDEOS */}
+        {/* Video Hub Tab */}
         {activeTab === 'video' && (
           <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '25px'}}>
-            <div style={{gridColumn: '1/-1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px'}}>
+            <div style={{gridColumn: '1/-1', display: 'flex', justifyContent: 'space-between', marginBottom: '20px', alignItems: 'center'}}>
                <h2 style={{color: COLORS.gray800}}>Video Hub</h2>
-               {isAdmin && <button style={{background: COLORS.sage, color: COLORS.white, padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', border: 'none', display: 'flex', gap: '8px'}} onClick={() => setShowModal('addVideo')}><Upload size={18}/> Add Video</button>}
+               {isAdmin && (
+                 <button style={{background: COLORS.sage, color: COLORS.white, border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'}} onClick={() => setShowModal('addVideo')}>
+                   <Upload size={18}/> Add Video
+                 </button>
+               )}
             </div>
-            {videos.map(v => (
-              <div key={v.id} style={{background: COLORS.white, borderRadius: '16px', overflow: 'hidden', border: `1px solid ${COLORS.gray200}`}} onClick={() => {setSelectedVideo(v); setShowModal('playVideo');}}>
-                <div style={{height: '200px', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative'}}>
-                  <img src={v.thumbnail || `https://img.youtube.com/vi/${getVideoId(v.url)}/hqdefault.jpg`} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
-                  <PlayCircle size={48} color="white" style={{position: 'absolute'}} />
-                </div>
-                <div style={{padding: '15px'}}>
-                  <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                    <h4 style={{margin: 0}}>{v.title}</h4>
-                    {isAdmin && <Trash2 size={16} color={COLORS.gray400} onClick={(e) => {e.stopPropagation(); handleDelete(v.id, 'video');}} />}
+            
+            {videos.length === 0 && (
+              <div style={{gridColumn: '1/-1', textAlign: 'center', padding: '40px', color: COLORS.gray500}}>
+                No videos yet. {isAdmin && "Add one!"}
+              </div>
+            )}
+
+            {videos.map(v => {
+              const videoId = getVideoId(v.url);
+              const thumbnailUrl = v.thumbnail || (videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null);
+              
+              return (
+                <div key={v.id} style={{background: COLORS.white, borderRadius: '16px', overflow: 'hidden', border: `1px solid ${COLORS.gray200}`}}>
+                  <div 
+                    style={{
+                      position: 'relative', 
+                      width: '100%',
+                      height: '200px',
+                      background: '#000', 
+                      cursor: 'pointer', 
+                      overflow: 'hidden'
+                    }}
+                    onClick={() => {setSelectedVideo(v); setShowModal('videoDetail');}}
+                  >
+                    {thumbnailUrl ? (
+                      <>
+                        <img 
+                          src={thumbnailUrl}
+                          alt={v.title}
+                          style={{
+                            width: '100%', 
+                            height: '100%', 
+                            objectFit: 'cover',
+                            display: 'block'
+                          }}
+                          onError={(e) => {
+                            if (v.thumbnail && videoId) {
+                              e.target.src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+                            } else {
+                              e.target.style.display = 'none';
+                              e.target.parentElement.querySelector('.fallback-placeholder').style.display = 'flex';
+                            }
+                          }}
+                        />
+                        <div className="fallback-placeholder" style={{
+                          display: 'none',
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          background: `linear-gradient(135deg, ${COLORS.sage} 0%, ${COLORS.mauve} 100%)`,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexDirection: 'column'
+                        }}>
+                          <Video size={48} color="white" />
+                          <span style={{color: 'white', marginTop: '10px', fontSize: '14px'}}>Click to Play</span>
+                        </div>
+                        
+                        <div style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: 'rgba(0,0,0,0.1)'
+                        }}>
+                          <div style={{
+                            background: 'rgba(162, 189, 145, 0.95)',
+                            borderRadius: '50%',
+                            width: '70px',
+                            height: '70px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
+                          }}>
+                            <PlayCircle size={40} color="white" fill="white" />
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        background: COLORS.gray100
+                      }}>
+                        <Video size={48} color={COLORS.gray200} />
+                        <p style={{color: COLORS.gray500, marginTop: '10px', fontSize: '14px'}}>Invalid URL</p>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{padding: '15px'}}>
+                     <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+                      <h4 style={{margin: 0, flex: 1, fontSize: '16px', color: COLORS.gray800}}>{v.title}</h4>
+                      {isAdmin && (
+                        <button 
+                          onClick={(e) => {e.stopPropagation(); handleDelete(v.id, 'video');}} 
+                          style={{background: 'none', border: 'none', color: COLORS.gray400, cursor: 'pointer', padding: '4px'}}
+                        >
+                          <Trash2 size={16}/>
+                        </button>
+                      )}
+                     </div>
+                     <p style={{color: COLORS.gray500, fontSize: '14px', lineHeight: '1.5', marginTop: '8px'}}>{v.description}</p>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
-        {/* COMMUNITY */}
+        {/* Community Tab with Card Styling */}
         {activeTab === 'community' && (
           <div style={{display: 'grid', gridTemplateColumns: '240px 1fr', gap: '40px'}}>
-            <aside>
+            <aside style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
               {GROUPS.map(g => (
-                <button key={g} onClick={() => setActiveGroup(g)} style={{
-                  width: '100%', textAlign: 'left', padding: '12px', marginBottom: '5px', borderRadius: '10px', border: 'none', cursor: 'pointer',
-                  background: activeGroup === g ? 'rgba(179, 197, 151, 0.2)' : 'transparent', color: activeGroup === g ? COLORS.sage : COLORS.gray500, fontWeight: activeGroup === g ? 'bold' : 'normal', display: 'flex', alignItems: 'center', gap: '10px'
-                }}>
+                <button 
+                  key={g} 
+                  onClick={() => setActiveGroup(g)} 
+                  style={activeGroup === g ? 
+                    {textAlign: 'left', padding: '12px', background: 'rgba(179, 197, 151, 0.2)', border: 'none', borderRadius: '10px', color: COLORS.sage, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer'} : 
+                    {textAlign: 'left', padding: '12px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '10px', color: COLORS.gray500, display: 'flex', alignItems: 'center', gap: '10px'}
+                  }
+                >
                   <Hash size={14} /> {g}
                 </button>
               ))}
@@ -417,30 +756,114 @@ const Dashboard = () => {
             <section>
               <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px'}}>
                 <h2 style={{color: COLORS.gray800}}>{activeGroup}</h2>
-                <button style={{background: COLORS.sage, color: COLORS.white, border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'}} onClick={() => setShowModal('post')}><Plus size={18}/> New Post</button>
+                <button style={{background: COLORS.sage, color: COLORS.white, border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'}} onClick={() => setShowModal('post')}>
+                  <Plus size={18}/> New Post
+                </button>
               </div>
+              
               <div style={{display: 'flex', flexDirection: 'column', gap: '20px'}}>
-                {discussions.filter(d => activeGroup === 'All Discussions' || d.category === activeGroup).map(post => (
-                    <div key={post.id} 
-                      style={{background: COLORS.white, padding: '28px', borderRadius: '16px', border: `1px solid ${COLORS.gray200}`, cursor: 'pointer'}}
+                {discussions
+                  .filter(d => activeGroup === 'All Discussions' || d.category === activeGroup)
+                  .map(post => (
+                    <div 
+                      key={post.id} 
+                      style={{
+                        background: COLORS.white, 
+                        padding: '28px', 
+                        borderRadius: '16px', 
+                        border: `1px solid ${hoveredPost === post.id ? COLORS.sage : COLORS.gray200}`, 
+                        cursor: 'pointer',
+                        boxShadow: hoveredPost === post.id ? '0 12px 24px rgba(0, 0, 0, 0.1)' : '0 2px 8px rgba(0, 0, 0, 0.04)',
+                        transform: hoveredPost === post.id ? 'translateY(-4px)' : 'none',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onMouseEnter={() => setHoveredPost(post.id)}
+                      onMouseLeave={() => setHoveredPost(null)}
                       onClick={() => {setSelectedPost(post); setShowModal('postDetail');}}
                     >
-                      <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '16px'}}>
-                        <span style={{fontSize: '12px', background: 'rgba(179, 197, 151, 0.15)', color: COLORS.sage, padding: '6px 14px', borderRadius: '20px', fontWeight: 'bold'}}>{post.category}</span>
-                        {isAdmin && <Trash2 size={14} color={COLORS.gray200} onClick={(e) => {e.stopPropagation(); handleDelete(post.id, 'discussion');}} />}
+                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px'}}>
+                        <span style={{
+                          fontSize: '12px', 
+                          background: 'rgba(179, 197, 151, 0.15)', 
+                          color: COLORS.sage, 
+                          padding: '6px 14px', 
+                          borderRadius: '20px', 
+                          fontWeight: 'bold',
+                          letterSpacing: '0.3px'
+                        }}>
+                          {post.category}
+                        </span>
+                        {isAdmin && (
+                          <button 
+                            onClick={(e) => {e.stopPropagation(); handleDelete(post.id, 'discussion');}} 
+                            style={{background: 'none', border: 'none', color: COLORS.gray200, cursor: 'pointer'}}
+                          >
+                            <Trash2 size={14}/>
+                          </button>
+                        )}
                       </div>
+                      
                       <div style={{display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px'}}>
-                        {renderAvatar(post.author_profile_pic || post.authorProfilePic, 'medium')}
+                        {renderAvatar(post.author_profile_pic, 'small')}
                         <div>
-                          <span style={{fontWeight: '600', color: COLORS.gray800}}>{post.author}</span>
-                          <span style={{fontSize: '13px', color: COLORS.gray400, marginLeft: '10px'}}>{new Date(post.created_at).toLocaleDateString()}</span>
+                          <div style={{fontWeight: '600', color: COLORS.gray800, fontSize: '15px'}}>{post.author}</div>
+                          <div style={{fontSize: '13px', color: COLORS.gray400, marginTop: '2px'}}>
+                            {new Date(post.created_at).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+                          </div>
                         </div>
                       </div>
-                      <h3 style={{margin: '0 0 12px 0'}}>{post.title}</h3>
-                      <p style={{color: COLORS.gray600, lineHeight: '1.6'}}>{post.content.substring(0, 200)}...</p>
-                      <div style={{display: 'flex', gap: '24px', paddingTop: '16px', borderTop: `1px solid ${COLORS.gray100}`}}>
-                        <div style={{display: 'flex', alignItems: 'center', gap: '6px', color: COLORS.gray500}}><Heart size={18} /> {(post.likes || []).length}</div>
-                        <div style={{display: 'flex', alignItems: 'center', gap: '6px', color: COLORS.gray500}}><MessageCircle size={18} /> {(post.comments || []).length}</div>
+
+                      <h3 style={{color: COLORS.gray800, margin: '0 0 12px 0', fontSize: '20px', fontWeight: 'bold', lineHeight: '1.3'}}>
+                        {post.title}
+                      </h3>
+                      
+                      <p style={{
+                        color: COLORS.gray600, 
+                        fontSize: '15px', 
+                        lineHeight: '1.6', 
+                        margin: '0 0 20px 0',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 3,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}>
+                        {post.content}
+                      </p>
+                      
+                      <div style={{
+                        marginTop: 'auto', 
+                        display: 'flex', 
+                        gap: '24px', 
+                        fontSize: '14px', 
+                        color: COLORS.gray500, 
+                        alignItems: 'center',
+                        paddingTop: '16px',
+                        borderTop: `1px solid ${COLORS.gray100}`
+                      }}>
+                        <button 
+                          style={{
+                            background: 'none', 
+                            border: 'none', 
+                            cursor: 'pointer', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '6px', 
+                            color: post.likes?.includes(user.id) ? COLORS.sage : COLORS.gray500, 
+                            padding: '4px 8px',
+                            borderRadius: '6px'
+                          }} 
+                          onClick={(e) => { e.stopPropagation(); handleLikePost(post.id); }}
+                        >
+                          <Heart 
+                            size={16} 
+                            fill={post.likes?.includes(user.id) ? COLORS.sage : "none"} 
+                          /> 
+                          {post.likes?.length || 0}
+                        </button>
+                        <span style={{display: 'flex', alignItems: 'center', gap: '6px'}}>
+                          <MessageCircle size={16}/> {post.comments?.length || 0} comments
+                        </span>
                       </div>
                     </div>
                   ))}
@@ -449,131 +872,608 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* RESOURCES */}
+        {/* Resources Tab */}
         {activeTab === 'resources' && (
-           <div style={{display: 'grid', gridTemplateColumns: '200px 1fr', gap: '40px'}}>
-             <aside>
-               {RESOURCE_CATEGORIES.map(c => (
-                 <button key={c} onClick={() => setActiveResourceCategory(c)} style={{
-                     width: '100%', textAlign: 'left', padding: '12px', marginBottom: '5px', borderRadius: '10px', border: 'none', cursor: 'pointer',
-                     background: activeResourceCategory === c ? COLORS.sageLight : 'transparent', color: activeResourceCategory === c ? COLORS.white : COLORS.gray500, fontWeight: activeResourceCategory === c ? 'bold' : 'normal'
-                   }}>{c}</button>
-               ))}
-               {isAdmin && <button style={{marginTop: '20px', width: '100%', padding: '12px', background: COLORS.sage, color: COLORS.white, border: 'none', borderRadius: '10px', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px'}} onClick={() => setShowModal('addResource')}><Plus size={16}/> Add Resource</button>}
-             </aside>
-             <section style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '20px'}}>
-               {resources.filter(r => activeResourceCategory === 'General' || r.category === activeResourceCategory).map(res => (
-                 <div key={res.id} style={{background: COLORS.white, borderRadius: '15px', padding: '15px', border: `1px solid ${COLORS.gray200}`, cursor: 'pointer'}} onClick={() => window.open(res.url, '_blank')}>
-                    <div style={{height: '140px', background: COLORS.gray50, borderRadius: '10px', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden'}}>
-                      {res.thumbnail ? <img src={res.thumbnail} style={{width: '100%', height: '100%', objectFit: 'cover'}} /> : <FileText size={40} color={COLORS.sage} />}
-                    </div>
-                    <h4 style={{margin: '0 0 5px 0'}}>{res.title}</h4>
-                    <span style={{fontSize: '12px', color: COLORS.gray400}}>{res.category}</span>
-                    {isAdmin && <button onClick={(e) => {e.stopPropagation(); handleDelete(res.id, 'resource');}} style={{float: 'right', border: 'none', background: 'none'}}><Trash2 size={14}/></button>}
-                 </div>
-               ))}
-             </section>
-           </div>
+          <div style={{display: 'flex', flexDirection: 'column', gap: '25px'}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '20px', alignItems: 'center'}}>
+               <h2 style={{color: COLORS.gray800}}>{activeResourceCategory} Resources</h2>
+               {isAdmin && (
+                 <button style={{background: COLORS.sage, color: COLORS.white, border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'}} onClick={() => setShowModal('resource')}>
+                   <Plus size={18}/> Add Resource
+                 </button>
+               )}
+            </div>
+
+            <div style={{display: 'grid', gridTemplateColumns: '240px 1fr', gap: '40px'}}>
+              <aside style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
+                {RESOURCE_CATEGORIES.map(cat => (
+                  <button 
+                    key={cat} 
+                    onClick={() => setActiveResourceCategory(cat)} 
+                    style={activeResourceCategory === cat ? 
+                      {textAlign: 'left', padding: '12px', background: 'rgba(179, 197, 151, 0.2)', border: 'none', borderRadius: '10px', color: COLORS.sage, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer'} : 
+                      {textAlign: 'left', padding: '12px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '10px', color: COLORS.gray500, display: 'flex', alignItems: 'center', gap: '10px'}
+                    }
+                  >
+                    <Hash size={14} /> {cat}
+                  </button>
+                ))}
+              </aside>
+              
+              <section>
+                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '25px'}}>
+                  {resources
+                    .filter(r => r.category === activeResourceCategory)
+                    .map(r => (
+                      <div 
+                        key={r.id} 
+                        style={{
+                          background: COLORS.white, 
+                          borderRadius: '16px', 
+                          overflow: 'hidden', 
+                          border: `1px solid ${COLORS.gray200}`, 
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+                          transition: 'all 0.3s ease'
+                        }}
+                        onClick={() => {setSelectedResource(r); setShowModal('resourceDetail');}}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-4px)';
+                          e.currentTarget.style.boxShadow = '0 12px 24px rgba(0, 0, 0, 0.12)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.04)';
+                        }}
+                      >
+                        <div style={{
+                          position: 'relative', 
+                          width: '100%',
+                          height: '180px',
+                          background: r.thumbnail ? '#000' : `linear-gradient(135deg, ${COLORS.sageLight} 0%, ${COLORS.mauve} 100%)`, 
+                          overflow: 'hidden'
+                        }}>
+                          {r.thumbnail ? (
+                            <img 
+                              src={r.thumbnail}
+                              alt={r.title}
+                              style={{width: '100%', height: '100%', objectFit: 'cover'}}
+                            />
+                          ) : (
+                            <div style={{
+                              width: '100%', 
+                              height: '100%', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center',
+                              flexDirection: 'column'
+                            }}>
+                              <FileText size={48} color="white" />
+                            </div>
+                          )}
+                          <div style={{
+                            position: 'absolute',
+                            top: '10px',
+                            right: '10px',
+                            background: 'rgba(255,255,255,0.9)',
+                            padding: '4px 12px',
+                            borderRadius: '20px',
+                            fontSize: '11px',
+                            fontWeight: 'bold',
+                            color: COLORS.sage,
+                            textTransform: 'uppercase'
+                          }}>
+                            {r.category}
+                          </div>
+                        </div>
+                        <div style={{padding: '20px'}}>
+                          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px'}}>
+                            <h4 style={{margin: 0, flex: 1, fontSize: '16px', color: COLORS.gray800, fontWeight: 'bold'}}>{r.title}</h4>
+                            {isAdmin && (
+                              <button 
+                                onClick={(e) => {e.stopPropagation(); handleDelete(r.id, 'resource');}} 
+                                style={{background: 'none', border: 'none', color: COLORS.gray400, cursor: 'pointer', padding: '4px'}}
+                              >
+                                <Trash2 size={16}/>
+                              </button>
+                            )}
+                          </div>
+                          <p style={{color: COLORS.gray500, fontSize: '13px', margin: '0', display: 'flex', alignItems: 'center', gap: '6px'}}>
+                            <Link2 size={12} /> Click to view
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+                
+                {resources.filter(r => r.category === activeResourceCategory).length === 0 && (
+                  <div style={{textAlign: 'center', padding: '60px', color: COLORS.gray500, background: COLORS.white, borderRadius: '16px', border: `1px solid ${COLORS.gray200}`}}>
+                    <FileText size={48} color={COLORS.gray200} style={{marginBottom: '16px'}} />
+                    <p>No resources in this category yet.</p>
+                    {isAdmin && <p style={{fontSize: '14px', marginTop: '8px'}}>Add one!</p>}
+                  </div>
+                )}
+              </section>
+            </div>
+          </div>
         )}
       </main>
 
-      {/* MODALS */}
-      {showModal === 'profile' && (
-        <Modal title="My Profile" onClose={() => setShowModal(null)}>
-          <div style={{textAlign: 'center', marginBottom: '20px'}}>
-            <div style={{position: 'relative', display: 'inline-block'}}>
-              {renderAvatar(profileForm.profilePic, 'large')}
-              <label style={{position: 'absolute', bottom: 0, right: 0, background: COLORS.sage, color: 'white', padding: '5px', borderRadius: '50%', cursor: 'pointer'}}>
-                <ImageIcon size={16} />
-                <input type="file" style={{display: 'none'}} onChange={(e) => handleFileUpload(e, null, 'profilePic')} accept="image/*" />
-              </label>
-            </div>
-          </div>
-          <input style={{width: '100%', padding: '12px', marginBottom: '15px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`}} placeholder="First Name" value={profileForm.firstName} onChange={e => setProfileForm({...profileForm, firstName: e.target.value})} />
-          <input style={{width: '100%', padding: '12px', marginBottom: '20px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`}} placeholder="Last Name" value={profileForm.lastName} onChange={e => setProfileForm({...profileForm, lastName: e.target.value})} />
-          <button onClick={handleUpdateProfile} style={{width: '100%', padding: '14px', background: COLORS.sage, color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold'}}>Save Changes</button>
-        </Modal>
-      )}
-
+      {/* Post Modal */}
       {showModal === 'post' && (
-        <Modal title="Create New Post" onClose={() => setShowModal(null)}>
-          <select style={{width: '100%', padding: '12px', marginBottom: '15px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`}} value={postForm.category} onChange={e => setPostForm({...postForm, category: e.target.value})}>
-            {GROUPS.filter(g => g !== 'All Discussions').map(g => <option key={g} value={g}>{g}</option>)}
-          </select>
-          <input style={{width: '100%', padding: '12px', marginBottom: '15px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`}} placeholder="Title" value={postForm.title} onChange={e => setPostForm({...postForm, title: e.target.value})} />
-          <textarea style={{width: '100%', padding: '12px', marginBottom: '20px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, height: '150px'}} placeholder="What's on your mind?" value={postForm.content} onChange={e => setPostForm({...postForm, content: e.target.value})} />
-          <button onClick={handleCreatePost} style={{width: '100%', padding: '14px', background: COLORS.sage, color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold'}}>Post Community</button>
-        </Modal>
+        <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}} onClick={() => setShowModal(null)}>
+          <div style={{background: COLORS.white, padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px'}} onClick={e => e.stopPropagation()}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px'}}>
+              <h3 style={{color: COLORS.gray800}}>New Discussion</h3>
+              <button onClick={() => setShowModal(null)} style={{background: 'none', border: 'none', cursor: 'pointer', color: COLORS.gray400}}>
+                <X size={24}/>
+              </button>
+            </div>
+            <select 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} 
+              value={postForm.category} 
+              onChange={e => setPostForm({...postForm, category: e.target.value})}
+            >
+              {GROUPS.filter(g => g !== 'All Discussions').map(g => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+            <input 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} 
+              placeholder="Title" 
+              value={postForm.title}
+              onChange={e => setPostForm({...postForm, title: e.target.value})} 
+            />
+            <textarea 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px', height: '100px'}} 
+              placeholder="Content" 
+              value={postForm.content}
+              onChange={e => setPostForm({...postForm, content: e.target.value})} 
+            />
+            <button style={{background: COLORS.sage, color: COLORS.white, border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', width: '100%'}} onClick={handleCreatePost}>
+              Post Now
+            </button>
+          </div>
+        </div>
       )}
 
+      {/* Post Detail Modal */}
       {showModal === 'postDetail' && selectedPost && (
-        <Modal title={selectedPost.title} onClose={() => setShowModal(null)}>
-          <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px'}}>
-            {renderAvatar(selectedPost.author_profile_pic || selectedPost.authorProfilePic)}
-            <div>
-              <div style={{fontWeight: 'bold'}}>{selectedPost.author}</div>
-              <div style={{fontSize: '12px', color: COLORS.gray400}}>{new Date(selectedPost.created_at).toLocaleString()}</div>
+        <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px'}} onClick={() => {setShowModal(null); setSelectedPost(null);}}>
+          <div style={{background: COLORS.white, borderRadius: '20px', width: '100%', maxWidth: '700px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden'}} onClick={e => e.stopPropagation()}>
+            <div style={{padding: '30px', borderBottom: `1px solid ${COLORS.gray200}`}}>
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+                <div style={{flex: 1}}>
+                  <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px'}}>
+                    <span style={{fontSize: '11px', background: 'rgba(179, 197, 151, 0.2)', color: COLORS.sage, padding: '4px 12px', borderRadius: '20px', fontWeight: 'bold'}}>{selectedPost.category}</span>
+                  </div>
+                  
+                  <div style={{display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px'}}>
+                    {renderAvatar(selectedPost.author_profile_pic, 'medium')}
+                    <div>
+                      <h2 style={{margin: 0, color: COLORS.gray800, fontSize: '20px'}}>{selectedPost.title}</h2>
+                      <div style={{fontSize: '13px', color: COLORS.gray400, display: 'flex', alignItems: 'center', gap: '6px'}}>
+                        {selectedPost.author} • {new Date(selectedPost.created_at).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+                <button onClick={() => {setShowModal(null); setSelectedPost(null);}} style={{background: 'none', border: 'none', cursor: 'pointer', color: COLORS.gray400}}>
+                  <X size={24}/>
+                </button>
+              </div>
             </div>
-          </div>
-          <p style={{lineHeight: '1.6', whiteSpace: 'pre-wrap'}}>{selectedPost.content}</p>
-          <div style={{display: 'flex', gap: '15px', borderTop: `1px solid ${COLORS.gray100}`, paddingTop: '20px', marginTop: '20px'}}>
-             <button onClick={() => handleLikePost(selectedPost.id)} style={{background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', color: (selectedPost.likes || []).includes(user.id) ? COLORS.red : COLORS.gray500}}>
-               <Heart size={20} fill={(selectedPost.likes || []).includes(user.id) ? COLORS.red : 'none'} /> {(selectedPost.likes || []).length}
-             </button>
-          </div>
-          <div style={{marginTop: '30px'}}>
-            <h4 style={{marginBottom: '15px'}}>Comments</h4>
-            {(selectedPost.comments || []).map((c, i) => (
-              <div key={i} style={{display: 'flex', gap: '10px', marginBottom: '15px', background: COLORS.gray50, padding: '12px', borderRadius: '10px'}}>
-                {renderAvatar(c.authorProfilePic)}
-                <div>
-                  <div style={{fontWeight: 'bold', fontSize: '13px'}}>{c.author}</div>
-                  <div style={{fontSize: '14px'}}>{c.text}</div>
+            
+            <div style={{padding: '30px', overflowY: 'auto', flex: 1}}>
+              <p style={{fontSize: '16px', lineHeight: '1.6', color: COLORS.gray600}}>
+                {selectedPost.content}
+              </p>
+              
+              <div style={{marginTop: '30px', paddingTop: '20px', borderTop: `1px solid ${COLORS.gray200}`}}>
+                <button 
+                  onClick={() => handleLikePost(selectedPost.id)} 
+                  style={selectedPost.likes?.includes(user.id) ? 
+                    {background: 'rgba(179, 197, 151, 0.2)', border: `1px solid ${COLORS.sage}`, padding: '10px 20px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: COLORS.sage} : 
+                    {background: COLORS.white, border: `1px solid ${COLORS.gray200}`, padding: '10px 20px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: COLORS.gray500}
+                  }
+                >
+                  <Heart 
+                    size={18} 
+                    fill={selectedPost.likes?.includes(user.id) ? COLORS.sage : "none"} 
+                  /> 
+                  {selectedPost.likes?.length || 0} likes
+                </button>
+              </div>
+
+              <div style={{marginTop: '30px'}}>
+                <h3 style={{marginBottom: '20px', color: COLORS.gray800}}>
+                  Comments ({selectedPost.comments?.length || 0})
+                </h3>
+                
+                <div style={{display: 'flex', gap: '10px', marginBottom: '30px'}}>
+                  {renderAvatar(profileForm.profilePic, 'small')}
+                  <textarea 
+                    style={{flex: 1, padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, minHeight: '80px'}}
+                    placeholder="Write a comment..."
+                    value={commentText}
+                    onChange={e => setCommentText(e.target.value)}
+                  />
+                  <button style={{background: COLORS.sage, color: COLORS.white, border: 'none', padding: '12px 20px', borderRadius: '10px', cursor: 'pointer', alignSelf: 'flex-end'}} onClick={handleAddComment}>
+                    <Send size={18}/>
+                  </button>
+                </div>
+
+                <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
+                  {selectedPost.comments && selectedPost.comments.map((comment, idx) => (
+                    <div key={idx} style={{background: COLORS.gray50, padding: '15px', borderRadius: '12px', display: 'flex', gap: '12px', opacity: comment._optimistic ? 0.7 : 1}}>
+                      {renderAvatar(comment.authorProfilePic, 'small')}
+                      <div style={{flex: 1}}>
+                        <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '8px', alignItems: 'center'}}>
+                          <span style={{fontWeight: 'bold', color: COLORS.gray800, fontSize: '14px'}}>{comment.author}</span>
+                          <span style={{fontSize: '12px', color: COLORS.gray400}}>
+                            {new Date(comment.timestamp).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p style={{color: COLORS.gray600, fontSize: '14px', lineHeight: '1.5', margin: 0}}>{comment.text}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
-            <div style={{display: 'flex', gap: '10px', marginTop: '20px'}}>
-              <input style={{flex: 1, padding: '10px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`}} placeholder="Add a comment..." value={commentText} onChange={e => setCommentText(e.target.value)} />
-              <button onClick={handleAddComment} style={{background: COLORS.sage, color: 'white', border: 'none', borderRadius: '10px', padding: '0 15px'}}><Send size={18}/></button>
             </div>
           </div>
-        </Modal>
+        </div>
       )}
 
-      {showModal === 'playVideo' && selectedVideo && (
-        <Modal title={selectedVideo.title} onClose={() => setShowModal(null)}>
-          <iframe width="100%" height="315" src={`https://www.youtube.com/embed/${getVideoId(selectedVideo.url)}`} frameBorder="0" allowFullScreen style={{borderRadius: '12px'}}></iframe>
-          <p style={{marginTop: '20px', color: COLORS.gray600}}>{selectedVideo.description}</p>
-        </Modal>
-      )}
-
-      {showModal === 'addVideo' && (
-        <Modal title="Add Hub Video" onClose={() => setShowModal(null)}>
-          <input style={{width: '100%', padding: '12px', marginBottom: '15px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`}} placeholder="Video Title" value={videoForm.title} onChange={e => setVideoForm({...videoForm, title: e.target.value})} />
-          <input style={{width: '100%', padding: '12px', marginBottom: '15px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`}} placeholder="YouTube URL" value={videoForm.url} onChange={e => setVideoForm({...videoForm, url: e.target.value})} />
-          <textarea style={{width: '100%', padding: '12px', marginBottom: '20px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, height: '100px'}} placeholder="Description" value={videoForm.description} onChange={e => setVideoForm({...videoForm, description: e.target.value})} />
-          <button onClick={handleAddVideo} style={{width: '100%', padding: '14px', background: COLORS.sage, color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold'}}>Add to Hub</button>
-        </Modal>
-      )}
-
-      {showModal === 'addResource' && (
-        <Modal title="Upload Resource" onClose={() => setShowModal(null)}>
-          <input style={{width: '100%', padding: '12px', marginBottom: '15px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`}} placeholder="Resource Title" value={resourceForm.title} onChange={e => setResourceForm({...resourceForm, title: e.target.value})} />
-          <select style={{width: '100%', padding: '12px', marginBottom: '15px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`}} value={resourceForm.category} onChange={e => setResourceForm({...resourceForm, category: e.target.value})}>
-            {RESOURCE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <div style={{marginBottom: '20px'}}>
-            <label style={{display: 'block', marginBottom: '10px', fontWeight: 'bold'}}>File/Document</label>
-            <input type="file" onChange={(e) => handleFileUpload(e, setResourceForm, 'resourceFile')} style={{width: '100%'}} />
+      {/* Video Detail Modal */}
+      {showModal === 'videoDetail' && selectedVideo && (
+        <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px'}} onClick={() => {setShowModal(null); setSelectedVideo(null);}}>
+          <div style={{background: COLORS.white, borderRadius: '20px', width: '100%', maxWidth: '900px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.25)'}} onClick={e => e.stopPropagation()}>
+            <div style={{padding: '20px', borderBottom: `1px solid ${COLORS.gray200}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+              <h3 style={{margin: 0, color: COLORS.gray800}}>{selectedVideo.title}</h3>
+              <button onClick={() => {setShowModal(null); setSelectedVideo(null);}} style={{background: 'none', border: 'none', cursor: 'pointer', color: COLORS.gray400}}>
+                <X size={24}/>
+              </button>
+            </div>
+            
+            <div style={{position: 'relative', width: '100%', paddingBottom: '56.25%', background: '#000'}}>
+              <iframe 
+                style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '100%'}}
+                src={`https://www.youtube.com/embed/${getVideoId(selectedVideo.url)}?autoplay=1&rel=0&modestbranding=1`}
+                title={selectedVideo.title}
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+            
+            {selectedVideo.description && (
+              <div style={{padding: '20px'}}>
+                <p style={{color: COLORS.gray600, lineHeight: '1.6', margin: 0}}>{selectedVideo.description}</p>
+              </div>
+            )}
           </div>
-          <button onClick={handleAddResource} style={{width: '100%', padding: '14px', background: COLORS.sage, color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold'}}>Publish Resource</button>
-        </Modal>
+        </div>
       )}
 
-      {uploadingFile && (
-        <div style={{position: 'fixed', bottom: '20px', right: '20px', background: COLORS.white, padding: '15px 25px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 2000}}>
-          <Loader className="animate-spin" color={COLORS.sage} />
-          <span>Uploading file...</span>
+      {/* Resource Detail Modal - In app with iframe */}
+      {showModal === 'resourceDetail' && selectedResource && (
+        <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px'}} onClick={() => {setShowModal(null); setSelectedResource(null);}}>
+          <div style={{background: COLORS.white, borderRadius: '20px', width: '100%', maxWidth: '900px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.25)'}} onClick={e => e.stopPropagation()}>
+            {selectedResource.thumbnail && (
+              <div style={{
+                width: '100%',
+                height: '200px',
+                background: '#000',
+                position: 'relative'
+              }}>
+                <img 
+                  src={selectedResource.thumbnail} 
+                  alt={selectedResource.title}
+                  style={{width: '100%', height: '100%', objectFit: 'cover'}}
+                />
+                <div style={{
+                  position: 'absolute',
+                  top: '20px',
+                  left: '20px',
+                  background: 'rgba(255,255,255,0.95)',
+                  padding: '6px 16px',
+                  borderRadius: '20px',
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  color: COLORS.sage,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  {selectedResource.category}
+                </div>
+              </div>
+            )}
+            
+            <div style={{padding: '30px', borderBottom: `1px solid ${COLORS.gray200}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+              <div style={{flex: 1}}>
+                <h2 style={{margin: '0 0 8px 0', color: COLORS.gray800, fontSize: '24px', fontWeight: 'bold'}}>{selectedResource.title}</h2>
+                <p style={{margin: 0, color: COLORS.gray500, fontSize: '14px'}}>External Resource • {selectedResource.category}</p>
+              </div>
+              <button onClick={() => {setShowModal(null); setSelectedResource(null);}} style={{background: 'none', border: 'none', cursor: 'pointer', color: COLORS.gray400, padding: '8px'}}>
+                <X size={28}/>
+              </button>
+            </div>
+
+            <div style={{flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden'}}>
+              <div style={{flex: 1, overflow: 'hidden', background: COLORS.white}}>
+                <iframe 
+                  src={selectedResource.url}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    border: 'none',
+                    display: 'block'
+                  }}
+                  title={selectedResource.title}
+                />
+              </div>
+              
+              <div style={{padding: '20px', borderTop: `1px solid ${COLORS.gray200}`, background: COLORS.gray50, display: 'flex', justifyContent: 'center', gap: '10px', alignItems: 'center'}}>
+                <button 
+                  onClick={() => window.open(selectedResource.url, '_blank')}
+                  style={{
+                    background: COLORS.sage, 
+                    color: COLORS.white, 
+                    border: 'none', 
+                    padding: '12px 24px', 
+                    borderRadius: '12px', 
+                    fontWeight: 'bold', 
+                    cursor: 'pointer', 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    gap: '10px',
+                    fontSize: '14px'
+                  }}
+                >
+                  <ExternalLink size={18} />
+                  Open in New Tab
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Profile Modal */}
+      {showModal === 'profile' && (
+        <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}} onClick={() => setShowModal(null)}>
+          <div style={{background: COLORS.white, padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px'}} onClick={e => e.stopPropagation()}>
+            <div style={{textAlign: 'center', marginBottom: '20px'}}>
+              {renderAvatar(profileForm.profilePic, 'large')}
+              <p style={{fontSize: '12px', color: COLORS.gray500, marginTop: '10px'}}>
+                Preview
+              </p>
+            </div>
+            
+            <input 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} 
+              placeholder="First Name" 
+              value={profileForm.firstName} 
+              onChange={e => setProfileForm({...profileForm, firstName: e.target.value})} 
+            />
+            <input 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} 
+              placeholder="Last Name" 
+              value={profileForm.lastName} 
+              onChange={e => setProfileForm({...profileForm, lastName: e.target.value})} 
+            />
+            
+            <div style={{marginBottom: '15px'}}>
+              <label style={{fontSize: '14px', color: COLORS.gray500, marginBottom: '5px', display: 'block'}}>
+                Upload Profile Picture
+              </label>
+              <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+                <label style={{display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 15px', background: COLORS.gray100, border: `2px dashed ${COLORS.gray200}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', color: COLORS.gray500}}>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={(e) => handleImageUpload(e, setProfileForm, 'profilePic')}
+                    style={{display: 'none'}}
+                  />
+                  <ImageIcon size={18} />
+                  {uploadingImage ? 'Processing...' : 'Choose File'}
+                </label>
+                {profileForm.profilePic && (
+                  <button 
+                    onClick={() => {
+                      setProfileForm({...profileForm, profilePic: ''});
+                      setImageError(false);
+                    }}
+                    style={{background: 'none', border: 'none', color: COLORS.red, cursor: 'pointer', fontSize: '13px'}}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              <p style={{fontSize: '11px', color: COLORS.gray400, marginTop: '5px'}}>
+                Max 2MB. Stores in database.
+              </p>
+            </div>
+
+            <div style={{display: 'flex', alignItems: 'center', marginBottom: '15px'}}>
+              <div style={{flex: 1, height: '1px', background: COLORS.gray200}} />
+              <span style={{padding: '0 10px', color: COLORS.gray400, fontSize: '12px'}}>OR</span>
+              <div style={{flex: 1, height: '1px', background: COLORS.gray200}} />
+            </div>
+
+            <input 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} 
+              placeholder="Paste Image URL" 
+              value={profileForm.profilePic && profileForm.profilePic.startsWith('data:') ? '' : profileForm.profilePic}
+              onChange={e => {
+                setProfileForm({...profileForm, profilePic: e.target.value});
+                setImageError(false);
+              }} 
+            />
+            {imageError && (
+              <p style={{color: COLORS.red, fontSize: '12px', marginBottom: '10px'}}>
+                Failed to load image
+              </p>
+            )}
+            <button style={{background: COLORS.sage, color: COLORS.white, border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', width: '100%'}} onClick={handleUpdateProfile}>
+              Save Profile
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Add Video Modal */}
+      {showModal === 'addVideo' && (
+        <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}} onClick={() => setShowModal(null)}>
+          <div style={{background: COLORS.white, padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto'}} onClick={e => e.stopPropagation()}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px'}}>
+              <h3 style={{color: COLORS.gray800}}>Add Video</h3>
+              <button onClick={() => setShowModal(null)} style={{background: 'none', border: 'none', cursor: 'pointer', color: COLORS.gray400}}>
+                <X size={24}/>
+              </button>
+            </div>
+            <input 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} 
+              placeholder="Title" 
+              value={videoForm.title}
+              onChange={e => setVideoForm({...videoForm, title: e.target.value})} 
+            />
+            <input 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} 
+              placeholder="YouTube URL" 
+              value={videoForm.url}
+              onChange={e => setVideoForm({...videoForm, url: e.target.value})} 
+            />
+            <textarea 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} 
+              placeholder="Description" 
+              value={videoForm.description}
+              onChange={e => setVideoForm({...videoForm, description: e.target.value})} 
+            />
+            
+            <div style={{marginBottom: '20px'}}>
+              <label style={{fontSize: '14px', color: COLORS.gray500, marginBottom: '8px', display: 'block', fontWeight: '500'}}>
+                Thumbnail Image
+              </label>
+              <div style={{display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px'}}>
+                <label style={{display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 15px', background: COLORS.gray100, border: `2px dashed ${COLORS.gray200}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', color: COLORS.gray500, flex: 1}}>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={(e) => handleImageUpload(e, setVideoForm, 'thumbnail')}
+                    style={{display: 'none'}}
+                  />
+                  <Upload size={18} />
+                  {videoForm.thumbnail ? 'Change Thumbnail' : 'Upload Thumbnail'}
+                </label>
+                {videoForm.thumbnail && (
+                  <button 
+                    onClick={() => setVideoForm({...videoForm, thumbnail: ''})}
+                    style={{background: 'none', border: 'none', color: COLORS.red, cursor: 'pointer', fontSize: '13px', padding: '8px'}}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              
+              {videoForm.thumbnail && (
+                <div style={{marginTop: '10px', marginBottom: '10px'}}>
+                  <img 
+                    src={videoForm.thumbnail} 
+                    alt="Thumbnail preview" 
+                    style={{width: '100%', height: '120px', objectFit: 'cover', borderRadius: '8px', border: `1px solid ${COLORS.gray200}`}} 
+                  />
+                </div>
+              )}
+              
+              <p style={{fontSize: '12px', color: COLORS.gray400, margin: 0}}>
+                Optional: Upload a custom thumbnail (Max 2MB). If left empty, YouTube thumbnail will be used.
+              </p>
+            </div>
+
+            <button style={{background: COLORS.sage, color: COLORS.white, border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', width: '100%'}} onClick={handleAddVideo}>
+              Add to Hub
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Add Resource Modal */}
+      {showModal === 'resource' && (
+        <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}} onClick={() => setShowModal(null)}>
+          <div style={{background: COLORS.white, padding: '30px', borderRadius: '20px', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto'}} onClick={e => e.stopPropagation()}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px'}}>
+              <h3 style={{color: COLORS.gray800}}>Add Resource</h3>
+              <button onClick={() => setShowModal(null)} style={{background: 'none', border: 'none', cursor: 'pointer', color: COLORS.gray400}}>
+                <X size={24}/>
+              </button>
+            </div>
+            <input 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} 
+              placeholder="Title" 
+              value={resourceForm.title}
+              onChange={e => setResourceForm({...resourceForm, title: e.target.value})} 
+            />
+            <input 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} 
+              placeholder="URL" 
+              value={resourceForm.url}
+              onChange={e => setResourceForm({...resourceForm, url: e.target.value})} 
+            />
+            <select 
+              style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`, marginBottom: '15px'}} 
+              value={resourceForm.category}
+              onChange={e => setResourceForm({...resourceForm, category: e.target.value})}
+            >
+              {RESOURCE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            
+            <div style={{marginBottom: '20px'}}>
+              <label style={{fontSize: '14px', color: COLORS.gray500, marginBottom: '8px', display: 'block', fontWeight: '500'}}>
+                Thumbnail Image
+              </label>
+              <div style={{display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px'}}>
+                <label style={{display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 15px', background: COLORS.gray100, border: `2px dashed ${COLORS.gray200}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', color: COLORS.gray500, flex: 1}}>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={(e) => handleImageUpload(e, setResourceForm, 'thumbnail')}
+                    style={{display: 'none'}}
+                  />
+                  <Upload size={18} />
+                  {resourceForm.thumbnail ? 'Change Thumbnail' : 'Upload Thumbnail'}
+                </label>
+                {resourceForm.thumbnail && (
+                  <button 
+                    onClick={() => setResourceForm({...resourceForm, thumbnail: ''})}
+                    style={{background: 'none', border: 'none', color: COLORS.red, cursor: 'pointer', fontSize: '13px', padding: '8px'}}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              
+              {resourceForm.thumbnail && (
+                <div style={{marginTop: '10px', marginBottom: '10px'}}>
+                  <img 
+                    src={resourceForm.thumbnail} 
+                    alt="Thumbnail preview" 
+                    style={{width: '100%', height: '120px', objectFit: 'cover', borderRadius: '8px', border: `1px solid ${COLORS.gray200}`}} 
+                  />
+                </div>
+              )}
+              
+              <p style={{fontSize: '12px', color: COLORS.gray400, margin: 0}}>
+                Optional: Upload a thumbnail image (Max 2MB). If left empty, a default icon will be shown.
+              </p>
+            </div>
+
+            <button style={{background: COLORS.sage, color: COLORS.white, border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', width: '100%'}} onClick={handleAddResource}>
+              Save Resource
+            </button>
+          </div>
         </div>
       )}
     </div>
