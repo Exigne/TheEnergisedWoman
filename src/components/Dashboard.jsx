@@ -113,16 +113,51 @@ const Dashboard = () => {
   };
 
   const openVideoPopup = (url) => {
+    const videoId = getVideoId(url);
+    if (!videoId) {
+      alert('Invalid video URL');
+      return;
+    }
+    
+    // Create embed URL with minimal controls
+    const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`;
+    
     const width = 900;
     const height = 600;
     const left = (window.screen.width - width) / 2;
     const top = (window.screen.height - height) / 2;
     
-    window.open(
-      url, 
+    const popupWindow = window.open(
+      '', 
       'videoWindow', 
-      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no,status=no,menubar=no,toolbar=no,location=no`
     );
+    
+    if (popupWindow) {
+      popupWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Video Player</title>
+          <style>
+            body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+            iframe { border: none; }
+          </style>
+        </head>
+        <body>
+          <iframe 
+            width="100%" 
+            height="100%" 
+            src="${embedUrl}" 
+            frameborder="0" 
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+            allowfullscreen
+          ></iframe>
+        </body>
+        </html>
+      `);
+      popupWindow.document.close();
+    }
   };
 
   const uploadToCloudinary = async (file) => {
@@ -1184,28 +1219,38 @@ const Dashboard = () => {
                 </button>
               </div>
 
-              <div style={{background: COLORS.gray50, padding: '30px', borderRadius: '16px', border: `1px solid ${COLORS.gray200}`, marginBottom: '30px'}}>
-                <p style={{color: COLORS.gray600, fontSize: '15px', lineHeight: '1.6', margin: '0 0 20px 0'}}>
-                  You are about to visit an external resource. This will open in a new browser tab.
-                </p>
+              <div style={{background: COLORS.white, border: `1px solid ${COLORS.gray200}`, borderRadius: '16px', overflow: 'hidden', marginBottom: '30px'}}>
+                <iframe 
+                  src={selectedResource.url}
+                  style={{
+                    width: '100%',
+                    height: '500px',
+                    border: 'none',
+                    display: 'block'
+                  }}
+                  title={selectedResource.title}
+                />
+              </div>
+              
+              <div style={{textAlign: 'center'}}>
                 <button 
                   onClick={() => window.open(selectedResource.url, '_blank')}
                   style={{
                     background: COLORS.sage, 
                     color: COLORS.white, 
                     border: 'none', 
-                    padding: '16px 32px', 
+                    padding: '12px 24px', 
                     borderRadius: '12px', 
                     fontWeight: 'bold', 
                     cursor: 'pointer', 
                     display: 'inline-flex', 
                     alignItems: 'center', 
                     gap: '10px',
-                    fontSize: '16px'
+                    fontSize: '14px'
                   }}
                 >
-                  <ExternalLink size={20} />
-                  Open Resource
+                  <ExternalLink size={18} />
+                  Open in New Tab
                 </button>
               </div>
 
