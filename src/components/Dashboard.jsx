@@ -4,7 +4,7 @@ import {
   Trash2, Hash, Send, MessageCircle, Heart, PlayCircle, Image as ImageIcon
 } from 'lucide-react';
 
-// NEW COLOR PALETTE
+// COLOR PALETTE
 const COLORS = {
   transparent: 'rgba(0, 0, 0, 0)',
   sageLight: 'rgb(179, 197, 151)',
@@ -210,12 +210,41 @@ const Dashboard = () => {
     }
   };
 
+  // OPTIMISTIC: Create new post - shows instantly
   const handleCreatePost = async () => {
     if (!postForm.title.trim() || !postForm.content.trim()) {
       alert("Please fill in both title and content");
       return;
     }
     
+    const authorName = profileForm.firstName 
+      ? `${profileForm.firstName} ${profileForm.lastName}`.trim() 
+      : (user?.displayName || user?.email?.split('@')[0] || 'Anonymous');
+    
+    // Optimistic post - shows immediately
+    const optimisticPost = {
+      id: 'temp-' + Date.now(),
+      title: postForm.title,
+      content: postForm.content,
+      category: postForm.category,
+      author: authorName,
+      author_profile_pic: profileForm.profilePic,
+      likes: [],
+      comments: [],
+      created_at: new Date().toISOString(),
+      _optimistic: true
+    };
+    
+    // Add to top of list immediately (instant feedback)
+    setDiscussions(prev => [optimisticPost, ...prev]);
+    setPostForm({ title: '', content: '', category: 'General' });
+    
+    // If creating from modal, close it
+    if (showModal === 'post') {
+      setShowModal(null);
+    }
+    
+    // Background API sync
     try {
       const res = await fetch('/.netlify/functions/database?type=discussion', {
         method: 'POST',
@@ -230,40 +259,70 @@ const Dashboard = () => {
       });
       
       if (res.ok) {
-        setPostForm({ title: '', content: '', category: 'General' });
-        setShowModal(null);
-        await loadAllData();
+        const newPost = await res.json();
+        // Replace optimistic with real post (preserves ID)
+        setDiscussions(prev => prev.map(p => 
+          p.id === optimisticPost.id ? newPost : p
+        ));
       } else {
-        const error = await res.json();
-        alert(error.message || "Failed to create post");
+        throw new Error('Failed to create post');
       }
     } catch (err) { 
-      alert('Failed to create post'); 
+      alert('Failed to save post - it will disappear on refresh');
+      // Remove optimistic post on error
+      setDiscussions(prev => prev.filter(p => p.id !== optimisticPost.id));
     }
   };
 
-  // FIXED: Immediate update for likes
+  // OPTIMISTIC: Like post - shows instantly
   const handleLikePost = async (postId) => {
     if (!user?.id) return;
+    
+    // Get current state
+    const targetPost = selectedPost?.id === postId ? selectedPost : discussions.find(d => d.id === postId);
+    const isCurrentlyLiked = targetPost?.likes?.includes(user.id);
+    
+    // Optimistic update - calculate new likes immediately
+    const newLikes = isCurrentlyLiked 
+      ? (targetPost.likes || []).filter(id => id !== user.id)
+      : [...(targetPost.likes || []), user.id];
+    
+    // Update selectedPost if viewing it
+    if (selectedPost && selectedPost.id === postId) {
+      setSelectedPost({...selectedPost, likes: newLikes});
+    }
+    
+    // Update discussions list
+    setDiscussions(prev => prev.map(d => 
+      d.id === postId ? {...d, likes: newLikes} : d
+    ));
+    
+    // Background API sync (silent)
     try {
       const res = await fetch('/.netlify/functions/database?type=likePost', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ postId, userId: user.id })
       });
-      if (res.ok) {
-        const updatedPost = await res.json(); // Get fresh data from API
-        await loadAllData();
-        
-        // If viewing this post in modal, update it immediately
-        if (selectedPost && selectedPost.id === postId) {
-          setSelectedPost(updatedPost);
-        }
+      
+      if (!res.ok) throw new Error('Failed to like');
+      
+      // Optional: sync with server response to ensure consistency
+      const updatedPost = await res.json();
+      if (selectedPost && selectedPost.id === postId) {
+        setSelectedPost(updatedPost);
       }
-    } catch (err) { console.error('Error liking:', err); }
+      setDiscussions(prev => prev.map(d => 
+        d.id === postId ? updatedPost : d
+      ));
+    } catch (err) { 
+      console.error('Like error:', err);
+      // Revert on error
+      loadAllData();
+    }
   };
 
-  // FIXED: Immediate update for comments
+  // OPTIMISTIC: Add comment - shows instantly
   const handleAddComment = async () => {
     if (!commentText.trim() || !selectedPost) return;
     
@@ -271,6 +330,30 @@ const Dashboard = () => {
       ? `${profileForm.firstName} ${profileForm.lastName}`.trim() 
       : (user.displayName || user.email.split('@')[0]);
     
+    // Create optimistic comment
+    const optimisticComment = {
+      text: commentText,
+      author: authorName,
+      authorProfilePic: profileForm.profilePic,
+      timestamp: new Date().toISOString(),
+      _optimistic: true // Flag for styling if needed
+    };
+    
+    // Update selected post immediately (instant feedback)
+    const updatedPost = {
+      ...selectedPost,
+      comments: [...(selectedPost.comments || []), optimisticComment]
+    };
+    
+    setSelectedPost(updatedPost);
+    setDiscussions(prev => prev.map(d => 
+      d.id === selectedPost.id ? updatedPost : d
+    ));
+    
+    // Clear input immediately
+    setCommentText('');
+    
+    // Background API sync
     try {
       const res = await fetch('/.netlify/functions/database?type=addComment', {
         method: 'POST',
@@ -284,13 +367,22 @@ const Dashboard = () => {
       });
       
       if (res.ok) {
-        const updatedPost = await res.json(); // Get fresh post data immediately
-        setSelectedPost(updatedPost); // Update modal right away
-        setCommentText('');
-        await loadAllData(); // Refresh background list
+        const serverPost = await res.json();
+        setSelectedPost(serverPost);
+        setDiscussions(prev => prev.map(d => 
+          d.id === selectedPost.id ? serverPost : d
+        ));
+      } else {
+        throw new Error('Failed to save');
       }
     } catch (err) {
       console.error('Comment error:', err);
+      alert('Failed to save comment. It may disappear on refresh.');
+      // Remove optimistic comment on error
+      setSelectedPost(prev => ({
+        ...prev,
+        comments: prev.comments.filter(c => !c._optimistic)
+      }));
     }
   };
 
@@ -301,7 +393,7 @@ const Dashboard = () => {
     }
     
     if (!getVideoId(videoForm.url)) {
-      alert("Invalid YouTube URL. Must be youtube.com/watch?v=XXX or youtu.be/XXX");
+      alert("Invalid YouTube URL");
       return;
     }
     
@@ -629,7 +721,7 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Community Tab with Avatars */}
+        {/* Community Tab */}
         {activeTab === 'community' && (
           <div style={{display: 'grid', gridTemplateColumns: '240px 1fr', gap: '40px'}}>
             <aside style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
@@ -673,7 +765,6 @@ const Dashboard = () => {
                       )}
                     </div>
                     
-                    {/* Author info with avatar */}
                     <div style={{display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px'}}>
                       {renderAvatar(post.author_profile_pic, 'small')}
                       <div>
@@ -814,7 +905,6 @@ const Dashboard = () => {
                     <span style={{fontSize: '11px', background: 'rgba(179, 197, 151, 0.2)', color: COLORS.sage, padding: '4px 12px', borderRadius: '20px', fontWeight: 'bold'}}>{selectedPost.category}</span>
                   </div>
                   
-                  {/* Author with avatar in detail view */}
                   <div style={{display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px'}}>
                     {renderAvatar(selectedPost.author_profile_pic, 'medium')}
                     <div>
@@ -873,8 +963,7 @@ const Dashboard = () => {
 
                 <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
                   {selectedPost.comments && selectedPost.comments.map((comment, idx) => (
-                    <div key={idx} style={{background: COLORS.gray50, padding: '15px', borderRadius: '12px', display: 'flex', gap: '12px'}}>
-                      {/* Comment avatar */}
+                    <div key={idx} style={{background: COLORS.gray50, padding: '15px', borderRadius: '12px', display: 'flex', gap: '12px', opacity: comment._optimistic ? 0.7 : 1}}>
                       {renderAvatar(comment.authorProfilePic, 'small')}
                       <div style={{flex: 1}}>
                         <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '8px', alignItems: 'center'}}>
@@ -917,7 +1006,6 @@ const Dashboard = () => {
               onChange={e => setProfileForm({...profileForm, lastName: e.target.value})} 
             />
             
-            {/* File Upload */}
             <div style={{marginBottom: '15px'}}>
               <label style={{fontSize: '14px', color: COLORS.gray500, marginBottom: '5px', display: 'block'}}>
                 Upload Profile Picture
@@ -1005,7 +1093,6 @@ const Dashboard = () => {
               onChange={e => setVideoForm({...videoForm, description: e.target.value})} 
             />
             
-            {/* Thumbnail Upload Section */}
             <div style={{marginBottom: '20px'}}>
               <label style={{fontSize: '14px', color: COLORS.gray500, marginBottom: '8px', display: 'block', fontWeight: '500'}}>
                 Thumbnail Image
@@ -1031,7 +1118,6 @@ const Dashboard = () => {
                 )}
               </div>
               
-              {/* Preview */}
               {videoForm.thumbnail && (
                 <div style={{marginTop: '10px', marginBottom: '10px'}}>
                   <img 
