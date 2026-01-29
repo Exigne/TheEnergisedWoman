@@ -85,7 +85,6 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'GET') {
       let query = '';
       if (type === 'discussions') {
-        // OPTIMIZED: Limit to 20 most recent for speed
         query = 'SELECT id, author, author_profile_pic, title, content, category, likes, comments, created_at FROM discussions ORDER BY created_at DESC LIMIT 20';
       } else if (type === 'video') {
         query = 'SELECT id, title, url, description, thumbnail, comments, created_at FROM videos ORDER BY created_at DESC';
@@ -127,8 +126,10 @@ exports.handler = async (event) => {
         
         const userData = userResult.rows[0];
         const authorId = userData.id;
+        
+        // FIXED: Use snake_case column names (last_name not lastName)
         const authorName = (userData.first_name && userData.last_name)
-          ? `${userData.first_name} ${userData.lastName}`.trim()
+          ? `${userData.first_name} ${userData.last_name}`.trim()
           : (userData.display_name || 'Anonymous');
         
         const res = await pool.query(
