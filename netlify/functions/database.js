@@ -87,12 +87,12 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'GET') {
       let query = '';
       if (type === 'discussions') {
-        // FIXED: Re-include author_profile_pic (now it's just a small URL, not base64)
         query = 'SELECT id, author, author_profile_pic, title, content, category, likes, comments, created_at FROM discussions ORDER BY created_at DESC LIMIT 20';
       } else if (type === 'video') {
         query = 'SELECT id, title, url, description, thumbnail, comments, created_at FROM videos ORDER BY created_at DESC';
       } else if (type === 'resources') {
-        query = 'SELECT id, title, url, category, created_at FROM resources ORDER BY created_at DESC';
+        // UPDATED: Added thumbnail to SELECT
+        query = 'SELECT id, title, url, category, thumbnail, created_at FROM resources ORDER BY created_at DESC';
       } else {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid type' }) };
       }
@@ -141,7 +141,6 @@ exports.handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
       }
 
-      // Add comment to discussion
       if (type === 'addComment') {
         const { postId, comment, author, authorProfilePic } = data;
         
@@ -167,7 +166,6 @@ exports.handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
       }
 
-      // Like/unlike a post - OPTIMIZED single query
       if (type === 'likePost') {
         const { postId, userId } = data;
         
@@ -193,7 +191,6 @@ exports.handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
       }
       
-      // Video upload with thumbnail support
       if (type === 'video') {
         const { title, url, description, thumbnail } = data;
         if (!title || !url) {
@@ -207,15 +204,16 @@ exports.handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
       }
       
+      // UPDATED: Added thumbnail support
       if (type === 'resource') {
-        const { title, url, category } = data;
+        const { title, url, category, thumbnail } = data;
         if (!title || !url) {
           return { statusCode: 400, headers, body: JSON.stringify({ message: 'Title and URL required' }) };
         }
         const res = await pool.query(
-          `INSERT INTO resources (title, url, category, created_at) 
-           VALUES ($1, $2, $3, NOW()) RETURNING *`,
-          [title, url, category || 'General']
+          `INSERT INTO resources (title, url, category, thumbnail, created_at) 
+           VALUES ($1, $2, $3, $4, NOW()) RETURNING *`,
+          [title, url, category || 'General', thumbnail || null]
         );
         return { statusCode: 200, headers, body: JSON.stringify(res.rows[0]) };
       }
