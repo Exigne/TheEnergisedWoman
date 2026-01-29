@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, LogOut, Crown, Plus, Video, Upload, FileText, User, 
-  Trash2, Hash, Send, MessageCircle, Heart, PlayCircle, Image as ImageIcon
+  Trash2, Hash, Send, MessageCircle, Heart, PlayCircle, Image as ImageIcon,
+  ExternalLink
 } from 'lucide-react';
 
 // CLOUDINARY CONFIG
@@ -42,6 +43,7 @@ const Dashboard = () => {
   const [videos, setVideos] = useState([]);
   const [resources, setResources] = useState([]);
   const [selectedPost, setSelectedPost] = useState(null);
+  const [selectedResource, setSelectedResource] = useState(null);
   const [commentText, setCommentText] = useState('');
   const [imageError, setImageError] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -62,7 +64,7 @@ const Dashboard = () => {
         setProfileForm({
           firstName: userData.firstName || '',
           lastName: userData.lastName || '',
-          profilePick: userData.profilePic || ''
+          profilePic: userData.profilePic || ''
         });
         setImageError(false);
         loadAllData();
@@ -109,77 +111,18 @@ const Dashboard = () => {
     }
   };
 
-// Add this popup function near your openVideoPopup function
-const openResourcePopup = (url) => {
-  const width = 900;
-  const height = 600;
-  const left = (window.screen.width - width) / 2;
-  const top = (window.screen.height - height) / 2;
-  
-  window.open(
-    url, 
-    'resourceWindow', 
-    `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes,toolbar=yes,menubar=yes,location=yes`
-  );
-};
-
-// UPDATED RESOURCES SECTION:
-{activeTab === 'resources' && (
-  <div style={{display: 'grid', gridTemplateColumns: '240px 1fr', gap: '40px'}}>
-    <aside style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
-      {RESOURCE_CATEGORIES.map(cat => (
-        <button 
-          key={cat} 
-          onClick={() => setActiveResourceCategory(cat)} 
-          style={activeResourceCategory === cat ? 
-            {textAlign: 'left', padding: '12px', background: 'rgba(179, 197, 151, 0.2)', border: 'none', borderRadius: '10px', color: COLORS.sage, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px'} : 
-            {textAlign: 'left', padding: '12px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '10px', color: COLORS.gray500, display: 'flex', alignItems: 'center', gap: '10px'}
-          }
-        >
-          <Hash size={14} /> {cat}
-        </button>
-      ))}
-    </aside>
-    <section>
-      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px'}}>
-        <h2 style={{color: COLORS.gray800}}>{activeResourceCategory} Resources</h2>
-        {isAdmin && (
-          <button style={{background: COLORS.sage, color: COLORS.white, border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'}} onClick={() => setShowModal('resource')}>
-            <Plus size={18}/> Add Resource
-          </button>
-        )}
-      </div>
-      <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
-        {resources
-          .filter(r => r.category === activeResourceCategory)
-          .map(r => (
-            <div key={r.id} style={{background: COLORS.white, padding: '20px', borderRadius: '12px', border: `1px solid ${COLORS.gray200}`, display: 'flex', alignItems: 'center', gap: '15px'}}>
-              <FileText color={COLORS.sage} />
-              <div style={{flex: 1}}>
-                <h4 style={{margin: 0, color: COLORS.gray800}}>{r.title}</h4>
-              </div>
-              <div style={{display: 'flex', gap: '8px'}}>
-                <button 
-                  onClick={(e) => { e.stopPropagation(); openResourcePopup(r.url); }} 
-                  style={{background: 'rgba(179, 197, 151, 0.2)', color: COLORS.sage, border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px'}}
-                >
-                  Open
-                </button>
-                {isAdmin && (
-                  <button 
-                    onClick={() => handleDelete(r.id, 'resources')} 
-                    style={{background: 'none', border: 'none', color: COLORS.gray400, cursor: 'pointer'}}
-                  >
-                    <Trash2 size={16}/>
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-      </div>
-    </section>
-  </div>
-)}
+  const openVideoPopup = (url) => {
+    const width = 900;
+    const height = 600;
+    const left = (window.screen.width - width) / 2;
+    const top = (window.screen.height - height) / 2;
+    
+    window.open(
+      url, 
+      'videoWindow', 
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
+    );
+  };
 
   // CLOUDINARY UPLOAD FUNCTION
   const uploadToCloudinary = async (file) => {
@@ -857,6 +800,7 @@ const openResourcePopup = (url) => {
           </div>
         )}
 
+        {/* Resources Tab */}
         {activeTab === 'resources' && (
           <div style={{display: 'grid', gridTemplateColumns: '240px 1fr', gap: '40px'}}>
             <aside style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
@@ -886,22 +830,21 @@ const openResourcePopup = (url) => {
                 {resources
                   .filter(r => r.category === activeResourceCategory)
                   .map(r => (
-                    <div key={r.id} style={{background: COLORS.white, padding: '20px', borderRadius: '12px', border: `1px solid ${COLORS.gray200}`, display: 'flex', alignItems: 'center', gap: '15px'}}>
-                      <FileText color={COLORS.sage} />
+                    <div 
+                      key={r.id} 
+                      style={{background: COLORS.white, padding: '20px', borderRadius: '12px', border: `1px solid ${COLORS.gray200}`, display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', transition: 'all 0.2s', ':hover': {boxShadow: '0 2px 8px rgba(0,0,0,0.05)'}}} 
+                      onClick={() => {setSelectedResource(r); setShowModal('resourceDetail');}}
+                    >
+                      <FileText color={COLORS.sage} size={24} />
                       <div style={{flex: 1}}>
-                        <h4 style={{margin: 0, color: COLORS.gray800}}>{r.title}</h4>
+                        <h4 style={{margin: 0, color: COLORS.gray800, fontSize: '16px'}}>{r.title}</h4>
+                        <p style={{margin: '4px 0 0 0', color: COLORS.gray400, fontSize: '13px'}}>Click to view details</p>
                       </div>
-                      <div style={{display: 'flex', gap: '8px'}}>
-                        <button 
-                          onClick={() => window.open(r.url, '_blank')} 
-                          style={{background: 'rgba(179, 197, 151, 0.2)', color: COLORS.sage, border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px'}}
-                        >
-                          Open
-                        </button>
+                      <div style={{display: 'flex', gap: '8px'}} onClick={e => e.stopPropagation()}>
                         {isAdmin && (
                           <button 
                             onClick={() => handleDelete(r.id, 'resources')} 
-                            style={{background: 'none', border: 'none', color: COLORS.gray400, cursor: 'pointer'}}
+                            style={{background: 'none', border: 'none', color: COLORS.gray400, cursor: 'pointer', padding: '8px'}}
                           >
                             <Trash2 size={16}/>
                           </button>
@@ -1035,6 +978,80 @@ const openResourcePopup = (url) => {
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resource Detail Modal - Larger than post detail */}
+      {showModal === 'resourceDetail' && selectedResource && (
+        <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px'}} onClick={() => {setShowModal(null); setSelectedResource(null);}}>
+          <div style={{background: COLORS.white, borderRadius: '20px', width: '100%', maxWidth: '900px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.3)'}} onClick={e => e.stopPropagation()}>
+            <div style={{padding: '40px 40px 20px', borderBottom: `1px solid ${COLORS.gray200}', background: 'linear-gradient(135deg, rgba(179, 197, 151, 0.1) 0%, rgba(255,255,255,0) 100%)`}}>
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+                <div style={{display: 'flex', alignItems: 'center', gap: '20px'}}>
+                  <div style={{background: 'rgba(179, 197, 151, 0.2)', borderRadius: '16px', padding: '20px'}}>
+                    <FileText size={40} color={COLORS.sage} />
+                  </div>
+                  <div>
+                    <span style={{fontSize: '12px', background: 'rgba(179, 197, 151, 0.2)', color: COLORS.sage, padding: '4px 12px', borderRadius: '20px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px'}}>{selectedResource.category}</span>
+                    <h2 style={{margin: '10px 0 0 0', color: COLORS.gray800, fontSize: '28px', fontWeight: 'bold'}}>{selectedResource.title}</h2>
+                  </div>
+                </div>
+                <button onClick={() => {setShowModal(null); setSelectedResource(null);}} style={{background: 'none', border: 'none', cursor: 'pointer', color: COLORS.gray400, padding: '8px'}}>
+                  <X size={28}/>
+                </button>
+              </div>
+            </div>
+            
+            <div style={{padding: '40px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '30px'}}>
+              <div style={{background: COLORS.gray50, padding: '30px', borderRadius: '16px', border: `1px solid ${COLORS.gray200}`}}>
+                <h3 style={{margin: '0 0 15px 0', color: COLORS.gray800, fontSize: '18px'}}>Resource Link</h3>
+                <p style={{color: COLORS.gray500, fontSize: '14px', marginBottom: '20px', lineHeight: '1.6'}}>
+                  Click the button below to open this resource in a new tab. Make sure to check the source for the most up-to-date information.
+                </p>
+                <button 
+                  onClick={() => window.open(selectedResource.url, '_blank')}
+                  style={{
+                    background: COLORS.sage, 
+                    color: COLORS.white, 
+                    border: 'none', 
+                    padding: '16px 32px', 
+                    borderRadius: '12px', 
+                    fontWeight: 'bold', 
+                    cursor: 'pointer', 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    gap: '10px',
+                    fontSize: '16px',
+                    boxShadow: '0 4px 12px rgba(162, 189, 145, 0.4)',
+                    transition: 'transform 0.2s'
+                  }}
+                  onMouseEnter={e => e.target.style.transform = 'translateY(-2px)'}
+                  onMouseLeave={e => e.target.style.transform = 'translateY(0)'}
+                >
+                  <ExternalLink size={20} />
+                  Open Resource
+                </button>
+              </div>
+
+              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px'}}>
+                <div style={{padding: '20px', background: COLORS.gray50, borderRadius: '12px'}}>
+                  <h4 style={{margin: '0 0 10px 0', color: COLORS.gray600, fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px'}}>Category</h4>
+                  <p style={{margin: 0, color: COLORS.gray800, fontSize: '16px', fontWeight: '600'}}>{selectedResource.category}</p>
+                </div>
+                <div style={{padding: '20px', background: COLORS.gray50, borderRadius: '12px'}}>
+                  <h4 style={{margin: '0 0 10px 0', color: COLORS.gray600, fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px'}}>Added</h4>
+                  <p style={{margin: 0, color: COLORS.gray800, fontSize: '16px', fontWeight: '600'}}>{new Date(selectedResource.created_at || Date.now()).toLocaleDateString()}</p>
+                </div>
+              </div>
+
+              <div style={{borderTop: `1px solid ${COLORS.gray200}`, paddingTop: '30px', marginTop: 'auto'}}>
+                <p style={{color: COLORS.gray400, fontSize: '13px', textAlign: 'center', margin: 0}}>
+                  Resources are shared by the community for educational purposes. 
+                  Always verify information with official sources.
+                </p>
               </div>
             </div>
           </div>
