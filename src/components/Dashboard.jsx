@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  X, LogOut, Crown, Plus, Video, Upload, FileText, User, 
+  X, LogOut, Crown, Plus, Video, Upload, User, 
   Trash2, Hash, Send, MessageCircle, Heart, PlayCircle, Image as ImageIcon,
-  ExternalLink, Link2, BookOpen
+  Link2, BookOpen
 } from 'lucide-react';
 
 // CLOUDINARY CONFIG
@@ -43,7 +43,7 @@ const Dashboard = () => {
   const [videos, setVideos] = useState([]);
   const [resources, setResources] = useState([]);
   const [selectedPost, setSelectedPost] = useState(null);
-  const [selectedResource, setSelectedResource] = useState(null);
+  const [selectedVideo, setSelectedVideo] = useState(null); // Added for video modal
   const [commentText, setCommentText] = useState('');
   const [imageError, setImageError] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -78,9 +78,10 @@ const Dashboard = () => {
 
   const loadAllData = async () => {
     try {
+      // Changed 'video' to 'videos' to ensure list fetching works correctly
       const [d, v, r] = await Promise.all([
         fetch('/.netlify/functions/database?type=discussions').then(res => res.json()),
-        fetch('/.netlify/functions/database?type=video').then(res => res.json()),
+        fetch('/.netlify/functions/database?type=videos').then(res => res.json()), 
         fetch('/.netlify/functions/database?type=resources').then(res => res.json())
       ]);
       setDiscussions(Array.isArray(d) ? d : []);
@@ -112,55 +113,15 @@ const Dashboard = () => {
     }
   };
 
-  // --- FIX 1: UPDATED VIDEO POPUP LOGIC ---
-  const openVideoPopup = (url) => {
-    const videoId = getVideoId(url);
-    if (!videoId) {
-      alert('Invalid video URL');
-      return;
-    }
-    
-    // Create embed URL with minimal controls
-    const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`;
-    
-    // 16:9 Aspect Ratio dimensions
-    const width = 1024;
-    const height = 576;
-    const left = (window.screen.width - width) / 2;
-    const top = (window.screen.height - height) / 2;
-    
-    const popupWindow = window.open(
-      '', 
-      'videoWindow', 
-      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no,status=no,menubar=no,toolbar=no,location=no`
-    );
-    
-    if (popupWindow) {
-      popupWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Video Player</title>
-          <style>
-            body { margin: 0; padding: 0; background: #000; overflow: hidden; width: 100%; height: 100%; }
-            .video-container { position: relative; width: 100%; height: 100%; }
-            iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; }
-          </style>
-        </head>
-        <body>
-          <div class="video-container">
-            <iframe 
-              src="${embedUrl}" 
-              frameborder="0" 
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-              allowfullscreen
-            ></iframe>
-          </div>
-        </body>
-        </html>
-      `);
-      popupWindow.document.close();
-    }
+  const handleOpenVideo = (video) => {
+    setSelectedVideo(video);
+    setShowModal('playVideo');
+  };
+
+  // Direct open for resources to avoid blocked iframe issues
+  const handleOpenResource = (url) => {
+    if (!url) return;
+    window.open(url, '_blank');
   };
 
   const uploadToCloudinary = async (file) => {
@@ -499,7 +460,6 @@ const Dashboard = () => {
         });
         
         if (res.ok) {
-          // Immediately update local state
           if (type === 'discussion') {
             setDiscussions(prev => prev.filter(d => d.id !== id));
           } else if (type === 'video') {
@@ -508,11 +468,10 @@ const Dashboard = () => {
             setResources(prev => prev.filter(r => r.id !== id));
           }
           
-          // Close modal if viewing deleted item
-          if (selectedPost?.id === id || selectedResource?.id === id) {
+          if (selectedPost?.id === id || selectedVideo?.id === id) {
             setShowModal(null);
             setSelectedPost(null);
-            setSelectedResource(null);
+            setSelectedVideo(null);
           }
         } else {
           alert('Failed to delete. Please try again.');
@@ -689,7 +648,7 @@ const Dashboard = () => {
                       cursor: 'pointer', 
                       overflow: 'hidden'
                     }}
-                    onClick={() => openVideoPopup(v.url)}
+                    onClick={() => handleOpenVideo(v)}
                   >
                     {thumbnailUrl ? (
                       <>
@@ -703,12 +662,9 @@ const Dashboard = () => {
                             display: 'block'
                           }}
                           onError={(e) => {
-                            if (v.thumbnail && videoId) {
-                              e.target.src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-                            } else {
-                              e.target.style.display = 'none';
-                              e.target.parentElement.querySelector('.fallback-placeholder').style.display = 'flex';
-                            }
+                             // Fallback if the generated thumbnail fails
+                             e.target.style.display = 'none';
+                             e.target.parentElement.querySelector('.fallback-placeholder').style.display = 'flex';
                           }}
                         />
                         <div className="fallback-placeholder" style={{
@@ -915,7 +871,7 @@ const Dashboard = () => {
                  .map(r => (
                    <div 
                      key={r.id} 
-                     onClick={() => {setSelectedResource(r); setShowModal('resourceDetail');}}
+                     onClick={() => handleOpenResource(r.url)}
                      style={{background: COLORS.white, borderRadius: '16px', overflow: 'hidden', border: `1px solid ${COLORS.gray200}`, cursor: 'pointer', transition: 'transform 0.2s', ':hover': {transform: 'translateY(-4px)'}}}
                    >
                      <div style={{height: '140px', background: COLORS.gray100, position: 'relative'}}>
@@ -934,7 +890,7 @@ const Dashboard = () => {
                        <h4 style={{margin: '0 0 8px 0', color: COLORS.gray800}}>{r.title}</h4>
                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px'}}>
                          <span style={{fontSize: '12px', color: COLORS.sage, display: 'flex', alignItems: 'center', gap: '4px'}}>
-                           <Link2 size={12}/> View Resource
+                           <Link2 size={12}/> Open Resource
                          </span>
                          {isAdmin && (
                            <button onClick={(e) => {e.stopPropagation(); handleDelete(r.id, 'resource');}} style={{border: 'none', background: 'none', color: COLORS.gray400, cursor: 'pointer'}}>
@@ -952,23 +908,33 @@ const Dashboard = () => {
 
       {/* MODALS */}
       {showModal && (
-        <div style={{position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}}>
-          <div style={{background: COLORS.white, width: '90%', maxWidth: '600px', borderRadius: '20px', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column'}}>
-            <div style={{padding: '20px', borderBottom: `1px solid ${COLORS.gray200}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-              <h3 style={{margin: 0}}>
+        <div style={{position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}}>
+          <div style={{
+            background: showModal === 'playVideo' ? '#000' : COLORS.white, 
+            width: showModal === 'playVideo' ? '90%' : '90%', 
+            maxWidth: showModal === 'playVideo' ? '900px' : '600px', 
+            borderRadius: '20px', 
+            maxHeight: '90vh', 
+            overflow: 'hidden', 
+            display: 'flex', 
+            flexDirection: 'column',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+          }}>
+            <div style={{padding: '20px', borderBottom: showModal === 'playVideo' ? 'none' : `1px solid ${COLORS.gray200}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+              <h3 style={{margin: 0, color: showModal === 'playVideo' ? '#fff' : COLORS.gray800}}>
                 {showModal === 'post' && 'New Discussion'}
                 {showModal === 'addVideo' && 'Add Video'}
                 {showModal === 'addResource' && 'Add Resource'}
                 {showModal === 'profile' && 'Edit Profile'}
                 {showModal === 'postDetail' && 'Discussion'}
-                {showModal === 'resourceDetail' && 'Resource'}
+                {showModal === 'playVideo' && ''}
               </h3>
-              <button onClick={() => {setShowModal(null); setSelectedPost(null); setSelectedResource(null);}} style={{background: 'none', border: 'none', cursor: 'pointer'}}>
-                <X size={24} color={COLORS.gray500} />
+              <button onClick={() => {setShowModal(null); setSelectedPost(null); setSelectedVideo(null);}} style={{background: 'none', border: 'none', cursor: 'pointer'}}>
+                <X size={24} color={showModal === 'playVideo' ? '#fff' : COLORS.gray500} />
               </button>
             </div>
             
-            <div style={{padding: '20px', overflowY: 'auto'}}>
+            <div style={{padding: showModal === 'playVideo' ? '0' : '20px', overflowY: 'auto'}}>
               {/* NEW POST FORM */}
               {showModal === 'post' && (
                 <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
@@ -1075,35 +1041,18 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {/* --- FIX 2: RESOURCE DETAIL MODAL (No Iframe) --- */}
-              {showModal === 'resourceDetail' && selectedResource && (
-                <div style={{textAlign: 'center', padding: '20px 0'}}>
-                   <h2 style={{marginBottom: '10px'}}>{selectedResource.title}</h2>
-                   <div style={{background: COLORS.gray50, padding: '40px', borderRadius: '16px', border: `2px dashed ${COLORS.gray200}`, margin: '20px 0'}}>
-                      <ExternalLink size={48} color={COLORS.sage} style={{marginBottom: '15px'}}/>
-                      <h3 style={{color: COLORS.gray600, margin: '0 0 10px 0'}}>Open Resource</h3>
-                      <p style={{color: COLORS.gray500, marginBottom: '25px'}}>
-                        This content opens in a new secure window to ensure the best viewing experience.
-                      </p>
-                      <a 
-                        href={selectedResource.url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        style={{
-                          display: 'inline-block',
-                          background: COLORS.sage, 
-                          color: COLORS.white, 
-                          padding: '12px 30px', 
-                          borderRadius: '12px', 
-                          textDecoration: 'none', 
-                          fontWeight: 'bold',
-                          boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                        }}
-                      >
-                        Open Resource Now
-                      </a>
-                   </div>
-                   <p style={{color: COLORS.gray400, fontSize: '12px', wordBreak: 'break-all'}}>{selectedResource.url}</p>
+              {/* VIDEO PLAYER MODAL */}
+              {showModal === 'playVideo' && selectedVideo && (
+                <div style={{width: '100%', height: '500px'}}>
+                   <iframe 
+                      width="100%" 
+                      height="100%" 
+                      src={`https://www.youtube.com/embed/${getVideoId(selectedVideo.url)}?autoplay=1`}
+                      title={selectedVideo.title} 
+                      frameBorder="0" 
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                      allowFullScreen
+                   ></iframe>
                 </div>
               )}
 
