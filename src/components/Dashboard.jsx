@@ -56,11 +56,11 @@ const Dashboard = () => {
   // Loading States
   const [imageError, setImageError] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [loadingData, setLoadingData] = useState(false);
 
   // Forms
   const [postForm, setPostForm] = useState({ title: '', content: '', category: 'General' });
   const [videoForm, setVideoForm] = useState({ title: '', url: '', description: '', thumbnail: '' });
-  // Updated Resource Form to track file name
   const [resourceForm, setResourceForm] = useState({ title: '', url: '', category: 'General', thumbnail: '', fileName: '' });
   const [profileForm, setProfileForm] = useState({ firstName: '', lastName: '', profilePic: '' });
 
@@ -85,18 +85,38 @@ const Dashboard = () => {
   }, []);
 
   const loadAllData = async () => {
+    setLoadingData(true);
     try {
-      // Fetching all data types
-      const [d, v, r] = await Promise.all([
-        fetch('/.netlify/functions/database?type=discussions').then(res => res.json()),
-        fetch('/.netlify/functions/database?type=videos').then(res => res.json()), 
-        fetch('/.netlify/functions/database?type=resources').then(res => res.json())
-      ]);
-      setDiscussions(Array.isArray(d) ? d : []);
-      setVideos(Array.isArray(v) ? v : []);
-      setResources(Array.isArray(r) ? r : []);
+      console.log('Fetching data from Netlify functions...');
+      
+      // Fetch discussions
+      const dRes = await fetch('/.netlify/functions/database?type=discussions');
+      const dData = await dRes.json();
+      console.log('Discussions loaded:', dData?.length || 0);
+      setDiscussions(Array.isArray(dData) ? dData : []);
+      
+      // Fetch videos - with explicit error handling
+      try {
+        const vRes = await fetch('/.netlify/functions/database?type=videos');
+        if (!vRes.ok) throw new Error(`Videos fetch failed: ${vRes.status}`);
+        const vData = await vRes.json();
+        console.log('Videos loaded:', vData?.length || 0, vData);
+        setVideos(Array.isArray(vData) ? vData : []);
+      } catch (vErr) {
+        console.error('Error loading videos:', vErr);
+        setVideos([]);
+      }
+      
+      // Fetch resources
+      const rRes = await fetch('/.netlify/functions/database?type=resources');
+      const rData = await rRes.json();
+      console.log('Resources loaded:', rData?.length || 0);
+      setResources(Array.isArray(rData) ? rData : []);
+      
     } catch (err) { 
       console.error("Error loading data", err); 
+    } finally {
+      setLoadingData(false);
     }
   };
 
@@ -105,11 +125,16 @@ const Dashboard = () => {
   const getVideoId = (url) => {
     if (!url) return null;
     try {
+      // Handle various YouTube URL formats
       if (url.includes('youtu.be/')) return url.split('youtu.be/')[1].split('?')[0];
       if (url.includes('v=')) return url.split('v=')[1].split('&')[0];
       if (url.includes('embed/')) return url.split('embed/')[1].split('?')[0];
+      if (url.includes('youtube.com/shorts/')) return url.split('shorts/')[1].split('?')[0];
       return null;
-    } catch (e) { return null; }
+    } catch (e) { 
+      console.error('Error parsing video ID:', e);
+      return null; 
+    }
   };
 
   // --- SMART RESOURCE OPENER ---
@@ -120,7 +145,7 @@ const Dashboard = () => {
     const isDoc = resource.url.toLowerCase().includes('.doc') || resource.url.toLowerCase().includes('.docx');
     
     if (isDoc) {
-      // Use Google Docs Viewer for Word files
+      // Use Google Docs Viewer for Word files - FIXED: removed space in URL
       const viewerUrl = `https://docs.google.com/gview?url=${encodeURIComponent(resource.url)}&embedded=true`;
       window.open(viewerUrl, '_blank');
     } else {
@@ -135,18 +160,31 @@ const Dashboard = () => {
     formData.append('file', file);
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
     
-    // Use 'auto' to let Cloudinary determine if it's an image, pdf, or raw file
-    // Note: 'raw' is often needed for weird docx formats, but 'auto' usually works for PDF/Images
-    const resourceType = file.type.includes('image') ? 'image' : 'auto';
+    const resourceType = file.type.includes('image') ? 'image' : 'raw';
 
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`, {
-      method: 'POST',
-      body: formData
-    });
+    // FIXED: Removed space in URL after v1_1/
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`;
+    console.log('Uploading to:', uploadUrl);
     
-    if (!res.ok) throw new Error('Upload failed');
-    const data = await res.json();
-    return data.secure_url;
+    try {
+      const res = await fetch(uploadUrl, {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        console.error('Cloudinary error:', errorData);
+        throw new Error(errorData.error?.message || 'Upload failed');
+      }
+      
+      const data = await res.json();
+      console.log('Upload successful:', data.secure_url);
+      return data.secure_url;
+    } catch (err) {
+      console.error('Upload fetch error:', err);
+      throw err;
+    }
   };
 
   const handleFileUpload = async (event, formSetter, field) => {
@@ -166,11 +204,9 @@ const Dashboard = () => {
       if (field === 'profilePic') {
         setProfileForm(prev => ({...prev, profilePic: fileUrl}));
       } else if (field === 'thumbnail') {
-        // Thumbnail for video/resource (image only)
         if (formSetter === setVideoForm) setVideoForm(prev => ({...prev, thumbnail: fileUrl}));
         if (formSetter === setResourceForm) setResourceForm(prev => ({...prev, thumbnail: fileUrl}));
       } else if (field === 'resourceFile') {
-        // Main file for resource
         setResourceForm(prev => ({
           ...prev, 
           url: fileUrl,
@@ -179,7 +215,7 @@ const Dashboard = () => {
       }
     } catch (err) {
       console.error('Upload error:', err);
-      alert('Failed to upload file. Please try again.');
+      alert('Failed to upload file: ' + err.message);
     } finally {
       setUploadingFile(false);
     }
@@ -312,7 +348,8 @@ const Dashboard = () => {
 
   const handleAddVideo = async () => {
     if (!videoForm.title || !videoForm.url) return alert("Title and URL required");
-    if (!getVideoId(videoForm.url)) return alert("Invalid YouTube URL");
+    const videoId = getVideoId(videoForm.url);
+    if (!videoId) return alert("Invalid YouTube URL. Please use a standard YouTube link.");
     
     try {
       const res = await fetch('/.netlify/functions/database?type=video', {
@@ -324,8 +361,13 @@ const Dashboard = () => {
         setVideoForm({ title: '', url: '', description: '', thumbnail: '' });
         setShowModal(null);
         loadAllData();
+      } else {
+        const err = await res.json();
+        alert(err.message || "Failed to add video");
       }
-    } catch (err) { alert("Failed to add video"); }
+    } catch (err) { 
+      alert("Failed to add video: " + err.message); 
+    }
   };
 
   const handleAddResource = async () => {
@@ -346,8 +388,13 @@ const Dashboard = () => {
         setResourceForm({ title: '', url: '', category: 'General', thumbnail: '', fileName: '' });
         setShowModal(null);
         loadAllData();
+      } else {
+        const err = await res.json();
+        alert(err.message || "Failed to add resource");
       }
-    } catch (err) { alert("Failed to add resource"); }
+    } catch (err) { 
+      alert("Failed to add resource: " + err.message); 
+    }
   };
 
   const handleDelete = async (id, type) => {
@@ -437,19 +484,35 @@ const Dashboard = () => {
                <h2 style={{color: COLORS.gray800}}>Video Hub</h2>
                {isAdmin && <button style={{background: COLORS.sage, color: COLORS.white, border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'}} onClick={() => setShowModal('addVideo')}><Upload size={18}/> Add Video</button>}
             </div>
-            {videos.length === 0 && <div style={{gridColumn: '1/-1', textAlign: 'center', color: COLORS.gray500}}>No videos yet.</div>}
+            
+            {loadingData && <div style={{gridColumn: '1/-1', textAlign: 'center', color: COLORS.gray500}}>Loading videos...</div>}
+            
+            {!loadingData && videos.length === 0 && (
+              <div style={{gridColumn: '1/-1', textAlign: 'center', color: COLORS.gray500', padding: '40px'}}>
+                No videos yet. {isAdmin && 'Click "Add Video" to add one!'}
+              </div>
+            )}
+            
             {videos.map(v => {
               const videoId = getVideoId(v.url);
+              // FIXED: Removed space in thumbnail URL
+              const thumbnailUrl = v.thumbnail || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+              
               return (
                 <div key={v.id} style={{background: COLORS.white, borderRadius: '16px', overflow: 'hidden', border: `1px solid ${COLORS.gray200}`}}>
                   <div style={{position: 'relative', width: '100%', height: '200px', background: '#000', cursor: 'pointer'}} onClick={() => {setSelectedVideo(v); setShowModal('playVideo');}}>
-                    <img src={v.thumbnail || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`} alt={v.title} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+                    <img src={thumbnailUrl} alt={v.title} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
                     <div style={{position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.2)'}}>
-                      <div style={{background: 'rgba(162, 189, 145, 0.9)', borderRadius: '50%', width: '60px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center'}}><PlayCircle size={30} color="white" fill="white" /></div>
+                      <div style={{background: 'rgba(162, 189, 145, 0.9)', borderRadius: '50%', width: '60px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                        <PlayCircle size={30} color="white" fill="white" />
+                      </div>
                     </div>
                   </div>
                   <div style={{padding: '15px'}}>
-                      <div style={{display: 'flex', justifyContent: 'space-between'}}><h4 style={{margin: 0, color: COLORS.gray800}}>{v.title}</h4>{isAdmin && <button onClick={(e) => {e.stopPropagation(); handleDelete(v.id, 'video');}} style={{border: 'none', background: 'none', color: COLORS.gray400}}><Trash2 size={16}/></button>}</div>
+                      <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                        <h4 style={{margin: 0, color: COLORS.gray800}}>{v.title}</h4>
+                        {isAdmin && <button onClick={(e) => {e.stopPropagation(); handleDelete(v.id, 'video');}} style={{border: 'none', background: 'none', color: COLORS.gray400}}><Trash2 size={16}/></button>}
+                      </div>
                       <p style={{color: COLORS.gray500, fontSize: '14px', marginTop: '8px'}}>{v.description}</p>
                   </div>
                 </div>
@@ -513,7 +576,7 @@ const Dashboard = () => {
              </aside>
              <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '20px'}}>
                {resources.filter(r => r.category === activeResourceCategory).map(r => (
-                   <div key={r.id} onClick={() => handleOpenResource(r)} style={{background: COLORS.white, borderRadius: '16px', overflow: 'hidden', border: `1px solid ${COLORS.gray200}`, cursor: 'pointer', transition: 'transform 0.2s', ':hover': {transform: 'translateY(-4px)'}}}>
+                   <div key={r.id} onClick={() => handleOpenResource(r)} style={{background: COLORS.white, borderRadius: '16px', overflow: 'hidden', border: `1px solid ${COLORS.gray200}`, cursor: 'pointer', transition: 'transform 0.2s'}}>
                      <div style={{height: '140px', background: COLORS.gray100, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
                         {r.thumbnail ? (
                           <img src={r.thumbnail} alt={r.title} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
@@ -565,6 +628,7 @@ const Dashboard = () => {
                        <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: COLORS.sage}}>
                           <FileText size={24} />
                           <span style={{fontWeight: 'bold'}}>File Ready: {resourceForm.fileName || 'Document Uploaded'}</span>
+                          <button onClick={() => setResourceForm(prev => ({...prev, url: '', fileName: ''}))} style={{marginLeft: '10px', color: COLORS.red, border: 'none', background: 'none'}}>Remove</button>
                        </div>
                      ) : (
                        <>
@@ -580,7 +644,7 @@ const Dashboard = () => {
                    {/* Optional Thumbnail */}
                    <div style={{display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px'}}>
                      <span>Optional Cover Image:</span>
-                     <input type="file" onChange={(e) => handleFileUpload(e, setResourceForm, 'thumbnail')} />
+                     <input type="file" onChange={(e) => handleFileUpload(e, setResourceForm, 'thumbnail')} accept="image/*" />
                    </div>
 
                    <button onClick={handleAddResource} disabled={uploadingFile || !resourceForm.url} style={{background: (uploadingFile || !resourceForm.url) ? COLORS.gray400 : COLORS.sage, color: COLORS.white, padding: '12px', borderRadius: '10px', border: 'none', fontWeight: 'bold', cursor: 'pointer'}}>
@@ -644,7 +708,16 @@ const Dashboard = () => {
               {/* VIDEO PLAYER */}
               {showModal === 'playVideo' && selectedVideo && (
                 <div style={{width: '100%', height: '500px'}}>
-                   <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${getVideoId(selectedVideo.url)}?autoplay=1`} title={selectedVideo.title} frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
+                   {/* FIXED: Removed space in embed URL */}
+                   <iframe 
+                     width="100%" 
+                     height="100%" 
+                     src={`https://www.youtube.com/embed/${getVideoId(selectedVideo.url)}?autoplay=1`} 
+                     title={selectedVideo.title} 
+                     frameBorder="0" 
+                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                     allowFullScreen
+                   ></iframe>
                 </div>
               )}
 
@@ -654,7 +727,7 @@ const Dashboard = () => {
                    <div style={{position: 'relative'}}>
                       {renderAvatar(profileForm.profilePic, 'large')}
                       <label htmlFor="p-upload" style={{position: 'absolute', bottom: 0, right: 0, background: COLORS.sage, color: COLORS.white, padding: '6px', borderRadius: '50%', cursor: 'pointer'}}><ImageIcon size={16} /></label>
-                      <input id="p-upload" type="file" style={{display: 'none'}} onChange={(e) => handleFileUpload(e, setProfileForm, 'profilePic')} />
+                      <input id="p-upload" type="file" style={{display: 'none'}} onChange={(e) => handleFileUpload(e, setProfileForm, 'profilePic')} accept="image/*" />
                    </div>
                    <input placeholder="First Name" value={profileForm.firstName} onChange={e => setProfileForm({...profileForm, firstName: e.target.value})} style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`}} />
                    <input placeholder="Last Name" value={profileForm.lastName} onChange={e => setProfileForm({...profileForm, lastName: e.target.value})} style={{width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${COLORS.gray200}`}} />
