@@ -110,15 +110,12 @@ const Dashboard = () => {
     }
   };
 
-  // FIXED: Removed space in URL template literal
   const uploadToCloudinary = async (file, type = 'auto') => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
     
     const resourceType = type === 'image' || file.type.startsWith('image/') ? 'image' : 'raw';
-    
-    // FIXED: Removed space after v1_1/
     const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`;
     
     try {
@@ -534,7 +531,6 @@ const Dashboard = () => {
             
             {videos.map(v => {
               const videoId = getVideoId(v.url);
-              // FIXED: Removed space in template literal
               const thumbnailUrl = v.thumbnail || (videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null);
               
               return (
@@ -699,7 +695,6 @@ const Dashboard = () => {
             <iframe 
               width="100%" 
               height="500" 
-              // FIXED: Removed space in template literal
               src={`https://www.youtube.com/embed/${getVideoId(selectedVideo.url)}?autoplay=1`}
               frameBorder="0"
               allowFullScreen
@@ -926,7 +921,7 @@ const Dashboard = () => {
                         <div style={{color: COLORS.gray500, fontWeight: '500', marginBottom: '4px'}}>
                           Click to upload file
                         </div>
-                        <div style={{fontSize: '12px', color: COLORS.gray400'}}>
+                        <div style={{fontSize: '12px', color: COLORS.gray400}}>
                           PDF, Word, or Image (Max 10MB)
                         </div>
                       </>
